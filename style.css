@@ -143,7 +143,11 @@ textarea{resize:vertical}
 
 /* ---------- photo row ---------- */
 .fotorow{display:flex;align-items:center;gap:10px}
-.thumb{width:46px;height:46px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line)}
+.thumb{width:46px;height:46px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
+
+/* ---------- lightbox ---------- */
+#lightbox{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center}
+#lightbox img{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px}
 .thumbdel{
   width:40px;height:40px;border-radius:50%;border:0;
   background:var(--warn);color:#fff;font-size:1.3rem;font-weight:700;

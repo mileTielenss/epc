@@ -421,6 +421,20 @@ $('#fotoinput').addEventListener('change', () => {
   r.readAsDataURL(f);
 });
 
+/* ---------- lightbox: tik op een miniatuur om te vergroten ---------- */
+
+document.addEventListener('click', e => {
+  const img = e.target.closest('img.thumb');
+  if (img && img.src) {
+    $('#lightbox img').src = img.src;
+    $('#lightbox').hidden = false;
+  }
+});
+$('#lightbox').addEventListener('click', () => {
+  $('#lightbox').hidden = true;
+  $('#lightbox img').src = '';
+});
+
 /* ============================== tabs ============================== */
 
 $('#tabbar').addEventListener('click', e => {
@@ -877,10 +891,138 @@ function buildPrint() {
   $('#printview').innerHTML = html;
 }
 
-/* ---------- JSON export / import ---------- */
+/* ---------- mini-zip (opslaan zonder compressie; foto's zijn al JPEG) ---------- */
 
-function downloadJson(naam, data) {
-  const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+const CRC_TABEL = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(data) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) c = CRC_TABEL[(c ^ data[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function maakZip(bestanden) {
+  const enc = new TextEncoder();
+  const delen = [], centraal = [];
+  let offset = 0;
+  for (const f of bestanden) {
+    const naam = enc.encode(f.naam);
+    const crc = crc32(f.data);
+    const lok = new DataView(new ArrayBuffer(30));
+    lok.setUint32(0, 0x04034b50, true);
+    lok.setUint16(4, 20, true);
+    lok.setUint16(6, 0x0800, true); /* utf-8 bestandsnamen */
+    lok.setUint32(14, crc, true);
+    lok.setUint32(18, f.data.length, true);
+    lok.setUint32(22, f.data.length, true);
+    lok.setUint16(26, naam.length, true);
+    delen.push(new Uint8Array(lok.buffer), naam, f.data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true);
+    cd.setUint16(4, 20, true);
+    cd.setUint16(6, 20, true);
+    cd.setUint16(8, 0x0800, true);
+    cd.setUint32(16, crc, true);
+    cd.setUint32(20, f.data.length, true);
+    cd.setUint32(24, f.data.length, true);
+    cd.setUint16(28, naam.length, true);
+    cd.setUint32(42, offset, true);
+    centraal.push(new Uint8Array(cd.buffer), naam);
+    offset += 30 + naam.length + f.data.length;
+  }
+  let cdLen = 0;
+  centraal.forEach(d => { cdLen += d.length; });
+  const eind = new DataView(new ArrayBuffer(22));
+  eind.setUint32(0, 0x06054b50, true);
+  eind.setUint16(8, bestanden.length, true);
+  eind.setUint16(10, bestanden.length, true);
+  eind.setUint32(12, cdLen, true);
+  eind.setUint32(16, offset, true);
+  return new Blob([...delen, ...centraal, new Uint8Array(eind.buffer)], { type: 'application/zip' });
+}
+
+/* leest ook zips die elders opnieuw ingepakt zijn (deflate) */
+async function leesZip(buffer) {
+  const b = new Uint8Array(buffer), dv = new DataView(buffer);
+  let e = b.length - 22;
+  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('geen zip');
+  const n = dv.getUint16(e + 10, true);
+  let p = dv.getUint32(e + 16, true);
+  const uit = new Map(), dec = new TextDecoder();
+  for (let i = 0; i < n; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('zip beschadigd');
+    const methode = dv.getUint16(p + 10, true);
+    const csize = dv.getUint32(p + 20, true);
+    const nlen = dv.getUint16(p + 28, true);
+    const xlen = dv.getUint16(p + 30, true);
+    const clen = dv.getUint16(p + 32, true);
+    const lofs = dv.getUint32(p + 42, true);
+    const naam = dec.decode(b.subarray(p + 46, p + 46 + nlen));
+    const dstart = lofs + 30 + dv.getUint16(lofs + 26, true) + dv.getUint16(lofs + 28, true);
+    let data = b.slice(dstart, dstart + csize);
+    if (methode === 8) {
+      data = new Uint8Array(await new Response(
+        new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+      ).arrayBuffer());
+    } else if (methode !== 0) {
+      throw new Error('zip-methode niet ondersteund');
+    }
+    if (!naam.endsWith('/')) uit.set(naam, data);
+    p += 46 + nlen + xlen + clen;
+  }
+  return uit;
+}
+
+function dataUrlNaarBytes(u) {
+  const bin = atob(u.slice(u.indexOf(',') + 1));
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+function bytesNaarDataUrl(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return 'data:image/jpeg;base64,' + btoa(bin);
+}
+
+/* ---------- backup-zip: leesbare woningen.json + fotos/ als echte jpg's ---------- */
+
+function woningFotoVelden(w) {
+  const velden = [];
+  (w.ramen || []).forEach(r => { if (r.foto) velden.push({ obj: r, naam: `raam-${r.nr}` }); });
+  ((w.energie || {}).opwekkers || []).forEach(o => { if (o.foto) velden.push({ obj: o, naam: `opwekker-${o.nr}` }); });
+  return velden;
+}
+
+function maakBackupZip(alle) {
+  const bestanden = [];
+  const kopie = JSON.parse(JSON.stringify(alle));
+  kopie.forEach(w => {
+    const map = `fotos/${slug(w.algemeen.adres) || 'woning'}-${w.id}`;
+    woningFotoVelden(w).forEach(v => {
+      if (String(v.obj.foto).startsWith('data:')) {
+        const pad = `${map}/${v.naam}.jpg`;
+        bestanden.push({ naam: pad, data: dataUrlNaarBytes(v.obj.foto) });
+        v.obj.foto = pad;
+      }
+    });
+  });
+  const json = JSON.stringify(alleWoningenBundel(kopie), null, 1);
+  bestanden.unshift({ naam: 'woningen.json', data: new TextEncoder().encode(json) });
+  return maakZip(bestanden);
+}
+
+/* ---------- export / import ---------- */
+
+function downloadBlob(naam, blob) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = naam;
@@ -910,24 +1052,24 @@ async function toonExportStatus() {
 $('#btn-exportalles').addEventListener('click', async () => {
   const alle = await dbAlleWoningen();
   if (!alle.length) { toast('Nog geen woningen'); return; }
-  downloadJson(`epc-alle-woningen-${vandaag()}.json`, alleWoningenBundel(alle));
+  downloadBlob(`epc-backup-${vandaag()}.zip`, maakBackupZip(alle));
   await stempelExport();
   toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} geëxporteerd`);
 });
 
-/* iOS: deel de bundel naar de Files-app via het deelmenu */
+/* iOS: deel de backup-zip naar de Files-app via het deelmenu */
 $('#btn-deelalles').addEventListener('click', async () => {
   const alle = await dbAlleWoningen();
   if (!alle.length) { toast('Nog geen woningen'); return; }
-  const naam = `epc-alle-woningen-${vandaag()}.json`;
-  const file = new File([JSON.stringify(alleWoningenBundel(alle), null, 1)], naam, { type: 'application/json' });
+  const naam = `epc-backup-${vandaag()}.zip`;
+  const file = new File([maakBackupZip(alle)], naam, { type: 'application/zip' });
   try {
     await navigator.share({ files: [file], title: naam });
     await stempelExport();
-    toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} gedeeld`);
+    toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} bewaard`);
   } catch (e) {
     if (e.name !== 'AbortError') {
-      downloadJson(naam, alleWoningenBundel(alle));
+      downloadBlob(naam, file);
       await stempelExport();
     }
   }
@@ -954,11 +1096,28 @@ async function importeerData(p) {
   return n;
 }
 
+/* backup-zip: woningen.json lezen en fotopaden terug omzetten naar de foto's zelf */
+async function importeerZip(f) {
+  const inhoud = await leesZip(await f.arrayBuffer());
+  const jsonNaam = [...inhoud.keys()].find(x => x.toLowerCase().endsWith('.json'));
+  if (!jsonNaam) throw new Error('geen json in zip');
+  const p = JSON.parse(new TextDecoder().decode(inhoud.get(jsonNaam)));
+  const lijst = Array.isArray(p.woningen) ? p.woningen : (p.algemeen ? [p] : []);
+  lijst.forEach(w => woningFotoVelden(w).forEach(v => {
+    if (typeof v.obj.foto === 'string' && !v.obj.foto.startsWith('data:')) {
+      const data = inhoud.get(v.obj.foto);
+      v.obj.foto = data ? bytesNaarDataUrl(data) : null;
+    }
+  }));
+  return importeerData(p);
+}
+
 async function importeerBestanden(files) {
   let n = 0, fout = 0;
   for (const f of files) {
     try {
-      n += await importeerData(JSON.parse(await f.text()));
+      if (f.name.toLowerCase().endsWith('.zip')) n += await importeerZip(f);
+      else n += await importeerData(JSON.parse(await f.text()));
     } catch (e) { fout++; }
   }
   await renderLijst();
@@ -980,9 +1139,9 @@ $('#btn-importmap').addEventListener('click', async () => {
     const dir = await window.showDirectoryPicker();
     const files = [];
     for await (const h of dir.values()) {
-      if (h.kind === 'file' && h.name.toLowerCase().endsWith('.json')) files.push(await h.getFile());
+      if (h.kind === 'file' && /\.(json|zip)$/i.test(h.name)) files.push(await h.getFile());
     }
-    if (!files.length) { toast('Geen JSON-bestanden in deze map'); return; }
+    if (!files.length) { toast('Geen JSON- of zip-bestanden in deze map'); return; }
     await importeerBestanden(files);
   } catch (e) {
     if (e.name !== 'AbortError') toast('Map importeren mislukt');

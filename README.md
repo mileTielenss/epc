@@ -27,9 +27,9 @@ Elke woning is een eigen record in IndexedDB, elke 3 seconden en bij het verlate
 Manieren om data uit de app te halen:
 
 1. **Backupmap (desktop Chrome/Edge)**: kies één keer een map via "Kies backupmap" op het startscherm. Daarna schrijft elke save automatisch `epc-<adres>-<id>.json` per woning naar die map. Gaat de app ooit stuk, dan staan de bestanden er nog.
-2. **Exporteer alle woningen / Bewaar alles in Bestanden**: één JSON-bestand met alles. Op iPhone via het deelmenu naar de Files-app; doe dit regelmatig, want iOS laat de browser niet stil naar bestanden schrijven. Het startscherm toont de laatste exportdatum.
+2. **Exporteer alle woningen / Bewaar alles in Bestanden**: één zip met een leesbare `woningen.json` en een `fotos/`-map met echte jpg's per woning. Op iPhone via het deelmenu naar de Files-app; doe dit regelmatig, want iOS laat de browser niet stil naar bestanden schrijven. Het startscherm toont de laatste exportdatum.
 
-Importeren kan per bestand (meerdere tegelijk) of met "Importeer map" (desktop); beide formaten (één woning of alles-bestand) worden herkend. Bestaande woningen met dezelfde id worden overschreven.
+Importeren kan per bestand (meerdere tegelijk, zip of json) of met "Importeer map" (desktop); ook oude formaten (één woning of alles-json) worden herkend. Bestaande woningen met dezelfde id worden overschreven. De zip mag uitgepakt en opnieuw ingepakt zijn (deflate wordt gelezen), zolang `woningen.json` en de fotopaden kloppen.
 
 ## Iconen opnieuw genereren
 
