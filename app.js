@@ -665,16 +665,17 @@ const OPWEK_NAMEN = { gas: 'Gas', stookolie: 'Stookolie', airco: 'Airco', andere
 const FUNCTIE_NAMEN = { radiatoren: 'radiatoren', vloer: 'vloerverwarming', sww: 'warm water' };
 
 function leegDraftOpwek() {
-  return { type: 'gas', functie: [], foto: null };
+  return { type: 'gas', functie: [], foto: null, fotoKraan: null };
 }
 let draftOpwek = leegDraftOpwek();
 
-chipsInit('#chips-opwekfunctie', vals => { draftOpwek.functie = vals; });
+chipsInit('#chips-opwekfunctie', vals => { draftOpwek.functie = vals; toonOpwekVelden(); });
 
 segInit('#seg-opwektype', v => { draftOpwek.type = v; toonOpwekVelden(); });
 
 function toonOpwekVelden() {
   $('#opw-kamer').hidden = draftOpwek.type !== 'airco';
+  $('#opw-kraanfoto-rij').hidden = !draftOpwek.functie.includes('radiatoren');
 }
 
 function updateM3Live() {
@@ -697,7 +698,19 @@ function updateOpwekThumb() {
   const t = $('#opwekfoto-thumb'), d = $('#btn-opwekfoto-del');
   t.hidden = d.hidden = !draftOpwek.foto;
   if (draftOpwek.foto) t.src = draftOpwek.foto;
+  const tk = $('#kraanfoto-thumb'), dk = $('#btn-kraanfoto-del');
+  tk.hidden = dk.hidden = !draftOpwek.fotoKraan;
+  if (draftOpwek.fotoKraan) tk.src = draftOpwek.fotoKraan;
 }
+
+$('#btn-kraanfoto').addEventListener('click', () => neemFoto(data => {
+  draftOpwek.fotoKraan = data;
+  updateOpwekThumb();
+}));
+$('#btn-kraanfoto-del').addEventListener('click', () => {
+  draftOpwek.fotoKraan = null;
+  updateOpwekThumb();
+});
 
 function syncOpwekForm() {
   segSet('#seg-opwektype', draftOpwek.type);
@@ -720,9 +733,11 @@ $('#btn-opwek-voegtoe').addEventListener('click', () => {
     functie: [...draftOpwek.functie],
     beschrijving: $('#opw-beschrijving').value.trim(),
     foto: draftOpwek.foto,
+    fotoKraan: draftOpwek.functie.includes('radiatoren') ? draftOpwek.fotoKraan : null,
     kamer
   });
   draftOpwek.foto = null;
+  draftOpwek.fotoKraan = null;
   updateOpwekThumb();
   $('#opw-beschrijving').value = '';
   $('#kamer-b').value = '';
@@ -752,6 +767,7 @@ function renderOpwekkers() {
          ${det.length ? `<div class="r3">${esc(det.join(' · '))}</div>` : ''}
        </div>` +
       (o.foto ? `<img class="thumb" src="${o.foto}" alt="kenplaat #${o.nr}">` : '') +
+      (o.fotoKraan ? `<img class="thumb" src="${o.fotoKraan}" alt="radiatorkranen #${o.nr}">` : '') +
       `<button type="button" class="del" data-nr="${o.nr}">×</button>`;
     ul.appendChild(li);
   });
@@ -901,6 +917,7 @@ function buildPrint() {
   });
   S.energie.opwekkers.forEach(o => {
     if (o.foto) fotos.push({ src: o.foto, cap: `#${o.nr} ${OPWEK_NAMEN[o.type] || o.type}, kenplaat` });
+    if (o.fotoKraan) fotos.push({ src: o.fotoKraan, cap: `#${o.nr} ${OPWEK_NAMEN[o.type] || o.type}, radiatorkranen` });
   });
   if (fotos.length) {
     html += '<h2>Foto’s</h2><div class="fotos">' +
@@ -1017,9 +1034,12 @@ function bytesNaarDataUrl(bytes) {
 
 function woningFotoVelden(w) {
   const velden = [];
-  if ((w.algemeen || {}).foto) velden.push({ obj: w.algemeen, naam: 'hoofdfoto' });
-  (w.ramen || []).forEach(r => { if (r.foto) velden.push({ obj: r, naam: `raam-${r.nr}` }); });
-  ((w.energie || {}).opwekkers || []).forEach(o => { if (o.foto) velden.push({ obj: o, naam: `opwekker-${o.nr}` }); });
+  if ((w.algemeen || {}).foto) velden.push({ obj: w.algemeen, key: 'foto', naam: 'hoofdfoto' });
+  (w.ramen || []).forEach(r => { if (r.foto) velden.push({ obj: r, key: 'foto', naam: `raam-${r.nr}` }); });
+  ((w.energie || {}).opwekkers || []).forEach(o => {
+    if (o.foto) velden.push({ obj: o, key: 'foto', naam: `opwekker-${o.nr}` });
+    if (o.fotoKraan) velden.push({ obj: o, key: 'fotoKraan', naam: `opwekker-${o.nr}-radiatorkranen` });
+  });
   return velden;
 }
 
@@ -1029,10 +1049,10 @@ function maakBackupZip(alle) {
   kopie.forEach(w => {
     const map = `fotos/${slug(w.algemeen.adres) || 'woning'}-${w.id}`;
     woningFotoVelden(w).forEach(v => {
-      if (String(v.obj.foto).startsWith('data:')) {
+      if (String(v.obj[v.key]).startsWith('data:')) {
         const pad = `${map}/${v.naam}.jpg`;
-        bestanden.push({ naam: pad, data: dataUrlNaarBytes(v.obj.foto) });
-        v.obj.foto = pad;
+        bestanden.push({ naam: pad, data: dataUrlNaarBytes(v.obj[v.key]) });
+        v.obj[v.key] = pad;
       }
     });
   });
@@ -1125,9 +1145,9 @@ async function importeerZip(f) {
   const p = JSON.parse(new TextDecoder().decode(inhoud.get(jsonNaam)));
   const lijst = Array.isArray(p.woningen) ? p.woningen : (p.algemeen ? [p] : []);
   lijst.forEach(w => woningFotoVelden(w).forEach(v => {
-    if (typeof v.obj.foto === 'string' && !v.obj.foto.startsWith('data:')) {
-      const data = inhoud.get(v.obj.foto);
-      v.obj.foto = data ? bytesNaarDataUrl(data) : null;
+    if (typeof v.obj[v.key] === 'string' && !v.obj[v.key].startsWith('data:')) {
+      const data = inhoud.get(v.obj[v.key]);
+      v.obj[v.key] = data ? bytesNaarDataUrl(data) : null;
     }
   }));
   return importeerData(p);
@@ -1239,7 +1259,22 @@ function syncAlles() {
   await renderLijst();
   toonLijst();
 
+  /* nieuwe versie: check bij elke start en bij terugkeer naar de app, en herlaad automatisch */
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline install vereist https of localhost */ });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(reg => {
+        reg.update();
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
+      })
+      .catch(() => { /* offline install vereist https of localhost */ });
+
+    const hadController = !!navigator.serviceWorker.controller;
+    let herladen = false;
+    navigator.serviceWorker.addEventListener('controllerchange', async () => {
+      if (!hadController || herladen) return; /* eerste installatie: niet herladen */
+      herladen = true;
+      if (S && dirty) await bewaar();
+      location.reload();
+    });
   }
 })();
