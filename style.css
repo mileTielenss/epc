@@ -131,6 +131,10 @@ textarea{resize:vertical}
 #kompas text.sel{fill:#fff}
 #kompashuis rect,#kompashuis polygon{fill:#8a949d;pointer-events:none}
 
+/* ---------- input + knop rij ---------- */
+.invulrij{display:flex;align-items:center;gap:8px}
+.invulrij input{flex:1;min-width:0;width:auto}
+
 /* ---------- dimensions row ---------- */
 .dims{display:flex;align-items:center;gap:8px}
 .dims input{flex:1;min-width:0;text-align:center;font-size:1.25rem}

@@ -18,6 +18,11 @@ function num(s) {
   return isFinite(v) && v > 0 ? v : 0;
 }
 function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
+/* meters (intern model) tonen als cm, zonder onnodige decimalen */
+function fmtCm(m) {
+  const c = Math.round(m * 1000) / 10;
+  return (Number.isInteger(c) ? String(c) : c.toFixed(1)).replace('.', ',');
+}
 function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
@@ -84,33 +89,52 @@ function leegWoning() {
     algemeen: { adres: '', datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
     ramen: [],
     energie: {
-      opwek: [],
-      ketel: { cond: '', merk: '', jaar: '', foto: null },
-      wp: { type: '' },
-      airco: [],
+      opwekkers: [],
       emissie: [],
       sww: '',
       pv: '',
       kwp: ''
     },
     ventilatie: { systeem: '', ruimtes: [] },
-    teller: 0
+    teller: 0,
+    tellerOpwek: 0
   };
 }
 
 /* ondiepe merge zodat oudere records nieuwe velden krijgen */
 function normaliseer(p) {
   const basis = leegWoning();
+  const pe = p.energie || {};
   const w = {
     ...basis, ...p,
     algemeen: { ...basis.algemeen, ...(p.algemeen || {}) },
-    energie: {
-      ...basis.energie, ...(p.energie || {}),
-      ketel: { ...basis.energie.ketel, ...((p.energie || {}).ketel || {}) },
-      wp: { ...basis.energie.wp, ...((p.energie || {}).wp || {}) }
-    },
+    energie: { ...basis.energie, ...pe },
     ventilatie: { ...basis.ventilatie, ...(p.ventilatie || {}) }
   };
+  if (!Array.isArray(w.energie.opwekkers)) w.energie.opwekkers = [];
+
+  /* migratie: oud energiemodel (opwek-chips + ketel/wp/airco-panelen) naar opwekkerslijst */
+  if (!w.energie.opwekkers.length && Array.isArray(pe.opwek) && pe.opwek.length) {
+    pe.opwek.forEach(t => {
+      const o = { nr: w.energie.opwekkers.length + 1, type: t, functie: ['verwarming'], cond: '', wptype: '', merk: '', jaar: '', foto: null };
+      if ((t === 'gasketel' || t === 'stookolie') && pe.ketel) {
+        o.cond = pe.ketel.cond || '';
+        o.merk = pe.ketel.merk || '';
+        o.jaar = pe.ketel.jaar || '';
+        o.foto = pe.ketel.foto || null;
+        if (pe.sww === 'cv-ketel') o.functie.push('sww');
+      }
+      if (t === 'warmtepomp' && pe.wp) o.wptype = pe.wp.type || '';
+      if (t === 'airco' && Array.isArray(pe.airco) && pe.airco.length) o.merk = pe.airco.map(u => u.ruimte).join(', ');
+      w.energie.opwekkers.push(o);
+    });
+  }
+  delete w.energie.opwek;
+  delete w.energie.ketel;
+  delete w.energie.wp;
+  delete w.energie.airco;
+  w.tellerOpwek = Math.max(w.tellerOpwek || 0, ...w.energie.opwekkers.map(o => o.nr || 0), 0);
+
   if (!w.id) w.id = nieuwId();
   if (!w.status) w.status = 'open';
   return w;
@@ -264,6 +288,7 @@ async function openWoning(id) {
   if (!w) { toast('Woning niet gevonden'); return; }
   S = normaliseer(w);
   draft = leegDraft();
+  draftOpwek = leegDraftOpwek();
   syncAlles();
   toonEditor();
 }
@@ -336,6 +361,7 @@ $('#woninglijst').addEventListener('click', async e => {
 $('#btn-nieuwewoning').addEventListener('click', async () => {
   S = leegWoning();
   draft = leegDraft();
+  draftOpwek = leegDraftOpwek();
   await bewaar();
   syncAlles();
   toonEditor();
@@ -387,6 +413,33 @@ function bind(sel, fn) {
 }
 
 bind('#adres', v => { S.algemeen.adres = v; zetTitel(); });
+
+/* huidige locatie -> adres (enige externe call in de app, enkel op tik; offline: coördinaten) */
+$('#btn-locatie').addEventListener('click', () => {
+  if (!S) return;
+  if (!('geolocation' in navigator)) { toast('Locatie niet beschikbaar'); return; }
+  toast('Locatie ophalen…');
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    let adres = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=nl&zoom=18`);
+      if (r.ok) {
+        const a = (await r.json()).address || {};
+        const straat = [a.road, a.house_number].filter(Boolean).join(' ');
+        const plaats = a.town || a.village || a.city || a.municipality || '';
+        if (straat || plaats) adres = [straat, plaats].filter(Boolean).join(', ');
+      }
+    } catch (e) { /* offline: hou coördinaten als adres */ }
+    if (!S) return;
+    $('#adres').value = adres;
+    S.algemeen.adres = adres;
+    zetTitel();
+    wijzig();
+    bewaar();
+    toast('Adres ingevuld');
+  }, () => toast('Locatie niet beschikbaar'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+});
 bind('#datum', v => S.algemeen.datum = v);
 bind('#bouwjaar', v => S.algemeen.bouwjaar = v);
 bind('#notities', v => S.algemeen.notities = v);
@@ -438,7 +491,7 @@ function kompasSet(v) {
 }
 
 function updateM2Live() {
-  const b = num($('#breedte').value), h = num($('#hoogte').value);
+  const b = num($('#breedte').value) / 100, h = num($('#hoogte').value) / 100;
   $('#m2live').textContent = (b && h) ? fmt(b * h) + ' m²' : '';
 }
 $('#breedte').addEventListener('input', updateM2Live);
@@ -465,8 +518,8 @@ const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', 'alu-thermisch': 'Al
 
 $('#btn-voegtoe').addEventListener('click', () => {
   if (!S) return;
-  const b = num($('#breedte').value), h = num($('#hoogte').value);
-  if (!b || !h) { toast('Vul breedte en hoogte in'); return; }
+  const b = num($('#breedte').value) / 100, h = num($('#hoogte').value) / 100;
+  if (!b || !h) { toast('Vul breedte en hoogte in (cm)'); return; }
   S.teller = (S.teller || 0) + 1;
   S.ramen.push({
     nr: S.teller,
@@ -525,7 +578,7 @@ function renderRamen() {
     li.innerHTML =
       `<div class="info">
          <div class="r1">#${r.nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}</div>
-         <div class="r2">${fmt(r.b)} × ${fmt(r.h)} m = ${fmt(r.b * r.h)} m²</div>
+         <div class="r2">${fmtCm(r.b)} × ${fmtCm(r.h)} cm = ${fmt(r.b * r.h)} m²</div>
          <div class="r3">${esc(tags.join(' · '))}</div>
        </div>` +
       (r.foto ? `<img class="thumb" src="${r.foto}" alt="foto #${r.nr}">` : '') +
@@ -544,7 +597,7 @@ $('#ramenlijst').addEventListener('click', e => {
   const nr = Number(b.dataset.nr);
   const r = S.ramen.find(x => x.nr === nr);
   if (!r) return;
-  if (!confirm(`#${nr} ${ELEMENT_NAMEN[r.element]} (${fmt(r.b)} × ${fmt(r.h)}) verwijderen?`)) return;
+  if (!confirm(`#${nr} ${ELEMENT_NAMEN[r.element]} (${fmtCm(r.b)} × ${fmtCm(r.h)} cm) verwijderen?`)) return;
   S.ramen = S.ramen.filter(x => x.nr !== nr);
   renderRamen();
   bewaar();
@@ -552,67 +605,114 @@ $('#ramenlijst').addEventListener('click', e => {
 
 /* ============================== tab 3: energie ============================== */
 
-chipsInit('#chips-opwek', vals => { S.energie.opwek = vals; toonEnergiePanelen(); wijzig(); });
+const OPWEK_NAMEN = {
+  gasketel: 'Gasketel', stookolie: 'Stookolieketel', warmtepomp: 'Warmtepomp',
+  airco: 'Airco', elektrisch: 'Elektrisch', kachel: 'Kachel'
+};
+const WP_NAMEN = { 'lucht-water': 'lucht-water', 'lucht-lucht': 'lucht-lucht', 'bodem-water': 'bodem-water', 'water-water': 'water-water' };
+const FUNCTIE_NAMEN = { verwarming: 'verwarming', sww: 'warm water' };
+
+function leegDraftOpwek() {
+  return { type: 'gasketel', functie: ['verwarming'], cond: '', wptype: '', foto: null };
+}
+let draftOpwek = leegDraftOpwek();
+
 chipsInit('#chips-emissie', vals => { S.energie.emissie = vals; wijzig(); });
+chipsInit('#chips-opwekfunctie', vals => { draftOpwek.functie = vals; });
 
-function toonEnergiePanelen() {
-  const o = S.energie.opwek;
-  $('#panel-ketel').hidden = !(o.includes('gasketel') || o.includes('stookolie'));
-  $('#panel-wp').hidden = !o.includes('warmtepomp');
-  $('#panel-airco').hidden = !o.includes('airco');
+segInit('#seg-opwektype', v => { draftOpwek.type = v; toonOpwekVelden(); });
+segInit('#seg-ketelcond', v => draftOpwek.cond = v);
+segInit('#seg-wptype', v => draftOpwek.wptype = v);
+
+function toonOpwekVelden() {
+  $('#opw-ketel').hidden = !(draftOpwek.type === 'gasketel' || draftOpwek.type === 'stookolie');
+  $('#opw-wp').hidden = draftOpwek.type !== 'warmtepomp';
 }
 
-segInit('#seg-ketelcond', v => { S.energie.ketel.cond = v; wijzig(); });
-bind('#ketelmerk', v => S.energie.ketel.merk = v);
-bind('#keteljaar', v => S.energie.ketel.jaar = v);
-
-$('#btn-ketelfoto').addEventListener('click', () => neemFoto(data => {
-  S.energie.ketel.foto = data;
-  updateKetelThumb();
-  bewaar();
+$('#btn-opwekfoto').addEventListener('click', () => neemFoto(data => {
+  draftOpwek.foto = data;
+  updateOpwekThumb();
 }));
-$('#btn-ketelfoto-del').addEventListener('click', () => {
-  S.energie.ketel.foto = null;
-  updateKetelThumb();
-  bewaar();
+$('#btn-opwekfoto-del').addEventListener('click', () => {
+  draftOpwek.foto = null;
+  updateOpwekThumb();
 });
-function updateKetelThumb() {
-  const t = $('#ketelfoto-thumb'), d = $('#btn-ketelfoto-del');
-  t.hidden = d.hidden = !S.energie.ketel.foto;
-  if (S.energie.ketel.foto) t.src = S.energie.ketel.foto;
+function updateOpwekThumb() {
+  const t = $('#opwekfoto-thumb'), d = $('#btn-opwekfoto-del');
+  t.hidden = d.hidden = !draftOpwek.foto;
+  if (draftOpwek.foto) t.src = draftOpwek.foto;
 }
 
-segInit('#seg-wptype', v => { S.energie.wp.type = v; wijzig(); });
+function syncOpwekForm() {
+  segSet('#seg-opwektype', draftOpwek.type);
+  chipsSet('#chips-opwekfunctie', draftOpwek.functie);
+  segSet('#seg-ketelcond', draftOpwek.cond);
+  segSet('#seg-wptype', draftOpwek.wptype);
+  toonOpwekVelden();
+  updateOpwekThumb();
+}
 
-$('#btn-airco-voegtoe').addEventListener('click', () => {
+$('#btn-opwek-voegtoe').addEventListener('click', () => {
   if (!S) return;
-  const ruimte = $('#airco-ruimte').value.trim();
-  const m2 = num($('#airco-m2').value);
-  if (!ruimte) { toast('Vul de ruimte in'); return; }
-  S.energie.airco.push({ ruimte, m2 });
-  $('#airco-ruimte').value = '';
-  $('#airco-m2').value = '';
-  renderAirco();
+  if (!draftOpwek.functie.length) { toast('Kies wat de opwekker doet'); return; }
+  const ketel = draftOpwek.type === 'gasketel' || draftOpwek.type === 'stookolie';
+  S.tellerOpwek = (S.tellerOpwek || 0) + 1;
+  S.energie.opwekkers.push({
+    nr: S.tellerOpwek,
+    type: draftOpwek.type,
+    functie: [...draftOpwek.functie],
+    cond: ketel ? draftOpwek.cond : '',
+    wptype: draftOpwek.type === 'warmtepomp' ? draftOpwek.wptype : '',
+    merk: $('#opw-merk').value.trim(),
+    jaar: $('#opw-jaar').value.trim(),
+    foto: draftOpwek.foto
+  });
+  draftOpwek.foto = null;
+  updateOpwekThumb();
+  $('#opw-merk').value = '';
+  $('#opw-jaar').value = '';
+  renderOpwekkers();
   bewaar();
+  flash($('#btn-opwek-voegtoe'));
+  toast(`${OPWEK_NAMEN[draftOpwek.type]} toegevoegd`);
 });
 
-function renderAirco() {
-  const ul = $('#aircolijst');
+function opwekDetails(o) {
+  const d = [];
+  if (o.cond) d.push(o.cond);
+  if (o.wptype) d.push(WP_NAMEN[o.wptype] || o.wptype);
+  if (o.merk) d.push(o.merk);
+  if (o.jaar) d.push('bouwjaar ' + o.jaar);
+  return d;
+}
+
+function renderOpwekkers() {
+  const ul = $('#opweklijst');
   ul.innerHTML = '';
-  S.energie.airco.forEach((u, i) => {
+  [...S.energie.opwekkers].reverse().forEach(o => {
     const li = document.createElement('li');
+    const det = opwekDetails(o);
     li.innerHTML =
-      `<div class="info"><div class="r1">${esc(u.ruimte)}</div>` +
-      `<div class="r3">${u.m2 ? fmt(u.m2) + ' m²' : 'oppervlakte onbekend'}</div></div>` +
-      `<button type="button" class="del" data-i="${i}">×</button>`;
+      `<div class="info">
+         <div class="r1">#${o.nr} ${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
+         <div class="r2">${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + ') || '-')}</div>
+         ${det.length ? `<div class="r3">${esc(det.join(' · '))}</div>` : ''}
+       </div>` +
+      (o.foto ? `<img class="thumb" src="${o.foto}" alt="kenplaat #${o.nr}">` : '') +
+      `<button type="button" class="del" data-nr="${o.nr}">×</button>`;
     ul.appendChild(li);
   });
 }
-$('#aircolijst').addEventListener('click', e => {
+
+$('#opweklijst').addEventListener('click', e => {
   const b = e.target.closest('.del');
   if (!b || !S) return;
-  S.energie.airco.splice(Number(b.dataset.i), 1);
-  renderAirco();
+  const nr = Number(b.dataset.nr);
+  const o = S.energie.opwekkers.find(x => x.nr === nr);
+  if (!o) return;
+  if (!confirm(`#${nr} ${OPWEK_NAMEN[o.type] || o.type} verwijderen?`)) return;
+  S.energie.opwekkers = S.energie.opwekkers.filter(x => x.nr !== nr);
+  renderOpwekkers();
   bewaar();
 });
 
@@ -685,15 +785,11 @@ $('#ventlijst').addEventListener('click', e => {
 
 /* ============================== tab 5: export ============================== */
 
-const OPWEK_NAMEN = {
-  gasketel: 'Gasketel', stookolie: 'Stookolieketel', warmtepomp: 'Warmtepomp',
-  airco: 'Airco', elektrisch: 'Elektrisch', kachel: 'Kachel'
-};
 const EMISSIE_NAMEN = { radiatoren: 'Radiatoren', vloerverwarming: 'Vloerverwarming', convectoren: 'Convectoren', lucht: 'Lucht' };
 const GEBOUW_NAMEN = { open: 'Open bebouwing', halfopen: 'Halfopen bebouwing', gesloten: 'Gesloten bebouwing', appartement: 'Appartement' };
 
 function fotoCount() {
-  return S.ramen.filter(r => r.foto).length + (S.energie.ketel.foto ? 1 : 0);
+  return S.ramen.filter(r => r.foto).length + S.energie.opwekkers.filter(o => o.foto).length;
 }
 
 function renderSamenvatting() {
@@ -706,7 +802,7 @@ function renderSamenvatting() {
     ['Bouwjaar', S.algemeen.bouwjaar || '-'],
     ['Status', S.status === 'afgewerkt' ? 'Afgewerkt' : 'Open'],
     ['Ramen & deuren', S.ramen.length ? `${S.ramen.length} elementen, ${fmt(totM2)} m²` : '-'],
-    ['Opwekking', S.energie.opwek.map(v => OPWEK_NAMEN[v]).join(', ') || '-'],
+    ['Opwekking', S.energie.opwekkers.map(o => OPWEK_NAMEN[o.type] || o.type).join(', ') || '-'],
     ['Afgifte', S.energie.emissie.map(v => EMISSIE_NAMEN[v]).join(', ') || '-'],
     ['Warm water', SWW_NAMEN[S.energie.sww] || '-'],
     ['PV', S.energie.pv === 'ja' ? `Ja${S.energie.kwp ? `, ${S.energie.kwp} kWp` : ''}` : (S.energie.pv === 'nee' ? 'Nee' : '-')],
@@ -738,10 +834,10 @@ function buildPrint() {
   /* ramen & deuren */
   html += '<h2>Ramen &amp; deuren</h2>';
   if (S.ramen.length) {
-    html += `<table><tr><th>#</th><th>Type</th><th>Gevel</th><th class="num">B (m)</th><th class="num">H (m)</th><th class="num">m²</th><th>Beglazing</th><th>Kader</th><th>Rolluik</th></tr>`;
+    html += `<table><tr><th>#</th><th>Type</th><th>Gevel</th><th class="num">B (cm)</th><th class="num">H (cm)</th><th class="num">m²</th><th>Beglazing</th><th>Kader</th><th>Rolluik</th></tr>`;
     S.ramen.forEach(r => {
       html += `<tr><td>${r.nr}</td><td>${ELEMENT_NAMEN[r.element] || ''}</td><td>${GEVEL_NAMEN[r.gevel] || ''}</td>` +
-        `<td class="num">${fmt(r.b)}</td><td class="num">${fmt(r.h)}</td><td class="num">${fmt(r.b * r.h)}</td>` +
+        `<td class="num">${fmtCm(r.b)}</td><td class="num">${fmtCm(r.h)}</td><td class="num">${fmt(r.b * r.h)}</td>` +
         `<td>${GLAS_NAMEN[r.beglazing] || ''}</td><td>${KADER_NAMEN[r.kader] || ''}</td><td>${r.rolluik ? 'ja' : 'nee'}</td></tr>`;
     });
     html += `<tr class="tot"><td colspan="5">Totaal (${S.ramen.length} elementen)</td><td class="num">${fmt(totM2)}</td><td colspan="3"></td></tr></table>`;
@@ -752,18 +848,15 @@ function buildPrint() {
   /* energie */
   html += '<h2>Energie</h2>';
   const E = S.energie;
-  html += `<p class="kv"><b>Opwekking</b> ${E.opwek.map(v => OPWEK_NAMEN[v]).join(', ') || '-'}</p>`;
-  if (E.opwek.includes('gasketel') || E.opwek.includes('stookolie')) {
-    const k = E.ketel;
-    html += `<p class="kv"><b>Ketel</b> ${[k.cond, k.merk ? esc(k.merk) : '', k.jaar ? 'bouwjaar ' + esc(k.jaar) : ''].filter(Boolean).join(', ') || 'details onbekend'}</p>`;
-  }
-  if (E.opwek.includes('warmtepomp')) {
-    html += `<p class="kv"><b>Warmtepomp</b> ${E.wp.type || 'type onbekend'}</p>`;
-  }
-  if (E.opwek.includes('airco') && E.airco.length) {
-    html += `<table><tr><th>Airco binnenunit</th><th class="num">Oppervlakte</th></tr>` +
-      E.airco.map(u => `<tr><td>${esc(u.ruimte)}</td><td class="num">${u.m2 ? fmt(u.m2) + ' m²' : '-'}</td></tr>`).join('') +
+  if (E.opwekkers.length) {
+    html += '<table><tr><th>#</th><th>Opwekker</th><th>Doet</th><th>Details</th></tr>' +
+      E.opwekkers.map(o =>
+        `<tr><td>${o.nr}</td><td>${OPWEK_NAMEN[o.type] || esc(o.type)}</td>` +
+        `<td>${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + '))}</td>` +
+        `<td>${esc(opwekDetails(o).join(', '))}</td></tr>`).join('') +
       '</table>';
+  } else {
+    html += '<p class="kv">Geen opwekkers genoteerd.</p>';
   }
   html += `<p class="kv"><b>Afgifte</b> ${E.emissie.map(v => EMISSIE_NAMEN[v]).join(', ') || '-'}</p>`;
   html += `<p class="kv"><b>Sanitair warm water</b> ${SWW_NAMEN[E.sww] || '-'}</p>`;
@@ -788,7 +881,9 @@ function buildPrint() {
   S.ramen.forEach(r => {
     if (r.foto) fotos.push({ src: r.foto, cap: `#${r.nr} ${ELEMENT_NAMEN[r.element]} ${GEVEL_NAMEN[r.gevel].toLowerCase()}, afstandhouder` });
   });
-  if (S.energie.ketel.foto) fotos.push({ src: S.energie.ketel.foto, cap: 'Ketel kenplaat' });
+  S.energie.opwekkers.forEach(o => {
+    if (o.foto) fotos.push({ src: o.foto, cap: `#${o.nr} ${OPWEK_NAMEN[o.type] || o.type}, kenplaat` });
+  });
   if (fotos.length) {
     html += '<h2>Foto’s</h2><div class="fotos">' +
       fotos.map(f => `<div class="foto"><img src="${f.src}" alt=""><div class="cap">${esc(f.cap)}</div></div>`).join('') +
@@ -946,15 +1041,11 @@ function syncAlles() {
   updateM2Live();
   renderRamen();
 
-  /* energie */
-  chipsSet('#chips-opwek', S.energie.opwek);
-  toonEnergiePanelen();
-  segSet('#seg-ketelcond', S.energie.ketel.cond);
-  $('#ketelmerk').value = S.energie.ketel.merk;
-  $('#keteljaar').value = S.energie.ketel.jaar;
-  updateKetelThumb();
-  segSet('#seg-wptype', S.energie.wp.type);
-  renderAirco();
+  /* energie: formulier volgt draftOpwek */
+  syncOpwekForm();
+  $('#opw-merk').value = '';
+  $('#opw-jaar').value = '';
+  renderOpwekkers();
   chipsSet('#chips-emissie', S.energie.emissie);
   segSet('#seg-sww', S.energie.sww);
   segSet('#seg-pv', S.energie.pv);

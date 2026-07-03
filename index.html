@@ -39,10 +39,13 @@
 
 <!-- ======================= TAB 1: ALGEMEEN ======================= -->
 <section class="tab active" id="tab-algemeen">
-  <label class="fld">
+  <div class="fld">
     <span class="lbl">Adres</span>
-    <input type="text" id="adres" autocomplete="street-address" placeholder="Straat nr, gemeente">
-  </label>
+    <div class="invulrij">
+      <input type="text" id="adres" autocomplete="street-address" placeholder="Straat nr, gemeente">
+      <button type="button" class="btn addmini" id="btn-locatie" title="Huidige locatie gebruiken">&#128205;</button>
+    </div>
+  </div>
 
   <label class="fld">
     <span class="lbl">Datum plaatsbezoek</span>
@@ -103,7 +106,7 @@
   </div>
 
   <div class="fld">
-    <span class="lbl">Afmetingen (m)</span>
+    <span class="lbl">Afmetingen (cm)</span>
     <div class="dims">
       <input type="text" id="breedte" inputmode="decimal" placeholder="breedte">
       <span class="x">&times;</span>
@@ -157,8 +160,8 @@
 <!-- ======================= TAB 3: ENERGIE ======================= -->
 <section class="tab" id="tab-energie">
   <div class="fld">
-    <span class="lbl">Opwekking verwarming (meerdere mogelijk)</span>
-    <div class="chips" id="chips-opwek">
+    <span class="lbl">Opwekker</span>
+    <div class="seg" id="seg-opwektype">
       <button type="button" data-v="gasketel">Gasketel</button>
       <button type="button" data-v="stookolie">Stookolieketel</button>
       <button type="button" data-v="warmtepomp">Warmtepomp</button>
@@ -168,52 +171,50 @@
     </div>
   </div>
 
-  <div class="panel" id="panel-ketel" hidden>
-    <h3>Ketel</h3>
-    <div class="fld">
-      <span class="lbl">Type</span>
-      <div class="seg" id="seg-ketelcond">
-        <button type="button" data-v="condenserend">Condenserend</button>
-        <button type="button" data-v="niet-condenserend">Niet-condenserend</button>
-      </div>
-    </div>
-    <label class="fld">
-      <span class="lbl">Merk</span>
-      <input type="text" id="ketelmerk" placeholder="bv. Vaillant, Viessmann">
-    </label>
-    <label class="fld">
-      <span class="lbl">Bouwjaar ketel</span>
-      <input type="number" id="keteljaar" inputmode="numeric" placeholder="bv. 2015">
-    </label>
-    <div class="fld fotorow">
-      <button type="button" class="btn sec" id="btn-ketelfoto">&#128247; Foto kenplaat</button>
-      <img id="ketelfoto-thumb" class="thumb" hidden alt="foto kenplaat">
-      <button type="button" class="thumbdel" id="btn-ketelfoto-del" hidden>&times;</button>
+  <div class="fld">
+    <span class="lbl">Doet (meerdere mogelijk)</span>
+    <div class="chips" id="chips-opwekfunctie">
+      <button type="button" data-v="verwarming">Verwarming</button>
+      <button type="button" data-v="sww">Warm water</button>
     </div>
   </div>
 
-  <div class="panel" id="panel-wp" hidden>
-    <h3>Warmtepomp</h3>
-    <div class="fld">
-      <span class="lbl">Type</span>
-      <div class="seg" id="seg-wptype">
-        <button type="button" data-v="lucht-water">Lucht-water</button>
-        <button type="button" data-v="lucht-lucht">Lucht-lucht</button>
-        <button type="button" data-v="bodem-water">Bodem-water</button>
-        <button type="button" data-v="water-water">Water-water</button>
-      </div>
+  <div class="fld" id="opw-ketel" hidden>
+    <span class="lbl">Type ketel</span>
+    <div class="seg" id="seg-ketelcond">
+      <button type="button" data-v="condenserend">Condenserend</button>
+      <button type="button" data-v="niet-condenserend">Niet-condenserend</button>
     </div>
   </div>
 
-  <div class="panel" id="panel-airco" hidden>
-    <h3>Airco binnenunits</h3>
-    <div class="dims">
-      <input type="text" id="airco-ruimte" placeholder="ruimte">
-      <input type="text" id="airco-m2" inputmode="decimal" placeholder="m&sup2;">
-      <button type="button" class="btn addmini" id="btn-airco-voegtoe">+</button>
+  <div class="fld" id="opw-wp" hidden>
+    <span class="lbl">Type warmtepomp</span>
+    <div class="seg" id="seg-wptype">
+      <button type="button" data-v="lucht-water">Lucht-water</button>
+      <button type="button" data-v="lucht-lucht">Lucht-lucht</button>
+      <button type="button" data-v="bodem-water">Bodem-water</button>
+      <button type="button" data-v="water-water">Water-water</button>
     </div>
-    <ul id="aircolijst" class="lijst"></ul>
   </div>
+
+  <label class="fld">
+    <span class="lbl">Merk / omschrijving</span>
+    <input type="text" id="opw-merk" placeholder="bv. Vaillant, of: unit in living">
+  </label>
+
+  <label class="fld">
+    <span class="lbl">Bouwjaar toestel</span>
+    <input type="number" id="opw-jaar" inputmode="numeric" placeholder="bv. 2015">
+  </label>
+
+  <div class="fld fotorow">
+    <button type="button" class="btn sec" id="btn-opwekfoto">&#128247; Foto kenplaat</button>
+    <img id="opwekfoto-thumb" class="thumb" hidden alt="foto kenplaat">
+    <button type="button" class="thumbdel" id="btn-opwekfoto-del" hidden>&times;</button>
+  </div>
+
+  <button type="button" class="btn big" id="btn-opwek-voegtoe">Voeg opwekker toe</button>
+  <ul id="opweklijst" class="lijst"></ul>
 
   <div class="fld">
     <span class="lbl">Afgifte (meerdere mogelijk)</span>
