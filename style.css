@@ -11,7 +11,7 @@
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none !important}
-html{font-size:15px}
+html{font-size:14px}
 body{
   margin:0;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
@@ -24,10 +24,10 @@ body{
 #topbar{
   position:sticky;top:0;z-index:5;
   background:var(--acc);color:#fff;
-  padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
+  padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;
   display:flex;align-items:center;gap:10px;
 }
-#topbar h1{margin:0;font-size:1.05rem;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#topbar h1{margin:0;font-size:1rem;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #savestamp{font-size:.72rem;opacity:.85;flex:0 0 auto}
 #btn-terug{
   flex:0 0 auto;border:0;background:none;color:#fff;
@@ -42,7 +42,7 @@ body{
 #woninglijst .leeg{display:block;background:none;border:1.5px dashed var(--line);color:var(--mut);text-align:center;font-size:.95rem;padding:22px 12px}
 #woninglijst li.woning{cursor:pointer}
 .status{
-  flex:0 0 auto;min-width:58px;min-height:40px;
+  flex:0 0 auto;min-width:54px;min-height:36px;
   border-radius:22px;font-family:inherit;font-size:.85rem;font-weight:700;
   border:1.5px solid var(--acc);background:var(--card);color:var(--acc);
 }
@@ -50,17 +50,17 @@ body{
 #backupstatus{font-size:.8rem;color:var(--mut);text-align:center;margin-top:4px;word-break:break-word}
 
 /* ---------- tabs / layout ---------- */
-.tab{display:none;padding:10px 12px calc(86px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
+.tab{display:none;padding:8px 10px calc(76px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
 .tab.active{display:block}
 
-.fld{display:block;margin:0 0 10px}
-.lbl{display:block;font-size:.8rem;font-weight:700;margin-bottom:4px;color:var(--ink)}
+.fld{display:block;margin:0 0 8px}
+.lbl{display:block;font-size:.75rem;font-weight:700;margin-bottom:3px;color:var(--ink)}
 
 input[type=text],input[type=number],input[type=date],textarea,select{
   width:100%;
-  font-size:1rem;
-  padding:9px 10px;
-  min-height:42px;
+  font-size:.95rem;
+  padding:7px 9px;
+  min-height:38px;
   border:1.5px solid var(--line);
   border-radius:10px;
   background:var(--card);
@@ -76,9 +76,9 @@ textarea{resize:vertical}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
 .seg button{
   flex:1 1 auto;
-  min-height:42px;
-  padding:7px 10px;
-  font-size:.9rem;
+  min-height:38px;
+  padding:6px 8px;
+  font-size:.85rem;
   font-weight:600;
   font-family:inherit;
   border:1.5px solid var(--line);
@@ -89,11 +89,11 @@ textarea{resize:vertical}
 .seg button.on{background:var(--acc);border-color:var(--acc-dark);color:#fff}
 
 /* ---------- chips (multi-select) ---------- */
-.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips button{
-  min-height:42px;
-  padding:7px 13px;
-  font-size:.9rem;
+  min-height:38px;
+  padding:6px 11px;
+  font-size:.85rem;
   font-weight:600;
   font-family:inherit;
   border:1.5px solid var(--line);
@@ -111,20 +111,20 @@ textarea{resize:vertical}
   border-radius:12px;
   background:var(--acc);
   color:#fff;
-  min-height:42px;
-  padding:8px 14px;
-  font-size:.95rem;
+  min-height:38px;
+  padding:7px 12px;
+  font-size:.9rem;
 }
-.btn.big{display:block;width:100%;min-height:48px;font-size:1rem;margin:0 0 8px}
+.btn.big{display:block;width:100%;min-height:42px;font-size:.95rem;margin:0 0 6px}
 .btn.sec{background:var(--card);color:var(--acc);border:2px solid var(--acc)}
 .btn.danger{background:var(--warn)}
-.btn.addmini{min-width:48px;font-size:1.3rem;flex:0 0 auto}
+.btn.addmini{min-width:42px;font-size:1.2rem;flex:0 0 auto}
 .btn:active{opacity:.75}
 .btn.flash{background:var(--acc-dark)}
 
 /* ---------- gevelkompas ---------- */
 #kompaswrap{display:flex;justify-content:center}
-#kompas{width:min(56vw,220px);height:auto;display:block}
+#kompas{width:min(46vw,180px);height:auto;display:block}
 #kompas .gevel{fill:var(--card);stroke:var(--line);stroke-width:2;cursor:pointer}
 #kompas .gevel.sel{fill:var(--acc);stroke:var(--acc-dark)}
 #kompas text{font-size:14px;font-weight:700;fill:var(--ink);pointer-events:none;font-family:inherit}
@@ -135,21 +135,30 @@ textarea{resize:vertical}
 .invulrij{display:flex;align-items:center;gap:8px}
 .invulrij input{flex:1;min-width:0;width:auto}
 
+/* ---------- knoppen naast elkaar ---------- */
+.knoprij{display:flex;gap:8px;margin:0 0 6px}
+.knoprij .btn{flex:1;width:auto;margin:0}
+
+/* ---------- uitleg op startscherm ---------- */
+#uitleg{font-size:.8rem;color:var(--mut);margin-top:12px}
+#uitleg summary{font-weight:700;color:var(--ink);min-height:38px;display:flex;align-items:center;cursor:pointer}
+#uitleg p{margin:0 0 6px}
+
 /* ---------- dimensions row ---------- */
 .dims{display:flex;align-items:center;gap:8px}
-.dims input{flex:1;min-width:0;text-align:center;font-size:1.1rem}
+.dims input{flex:1;min-width:0;text-align:center;font-size:1rem}
 .dims .x{font-size:1.3rem;font-weight:700;color:var(--mut)}
-.m2live{flex:0 0 auto;min-width:74px;text-align:right;font-weight:700;font-size:1.05rem;color:var(--acc)}
+.m2live{flex:0 0 auto;min-width:64px;text-align:right;font-weight:700;font-size:.95rem;color:var(--acc)}
 
 /* ---------- photo row ---------- */
 .fotorow{display:flex;align-items:center;gap:10px}
-.thumb{width:46px;height:46px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
+.thumb{width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
 
 /* ---------- lightbox ---------- */
 #lightbox{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center}
 #lightbox img{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px}
 .thumbdel{
-  width:40px;height:40px;border-radius:50%;border:0;
+  width:36px;height:36px;border-radius:50%;border:0;
   background:var(--warn);color:#fff;font-size:1.3rem;font-weight:700;
 }
 
@@ -159,8 +168,8 @@ textarea{resize:vertical}
   background:var(--card);
   border:1.5px solid var(--line);
   border-radius:12px;
-  padding:8px 10px;
-  margin-bottom:6px;
+  padding:6px 8px;
+  margin-bottom:5px;
   display:flex;
   align-items:center;
   gap:10px;
@@ -170,7 +179,7 @@ textarea{resize:vertical}
 .lijst .r2{font-size:.95rem;font-weight:700;color:var(--acc)}
 .lijst .r3{font-size:.82rem;color:var(--mut)}
 .lijst .del{
-  flex:0 0 auto;width:40px;height:40px;border-radius:10px;border:0;
+  flex:0 0 auto;width:36px;height:36px;border-radius:10px;border:0;
   background:#f3e0df;color:var(--warn);font-size:1.25rem;font-weight:700;
 }
 .totaal{margin-top:10px;font-weight:700;font-size:.95rem;color:var(--ink)}
@@ -195,16 +204,16 @@ textarea{resize:vertical}
   padding-bottom:env(safe-area-inset-bottom);
 }
 #tabbar button{
-  flex:1;min-height:52px;border:0;background:none;
+  flex:1;min-height:48px;border:0;background:none;
   font-family:inherit;font-size:.66rem;font-weight:700;color:var(--mut);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
 }
-#tabbar button .ic{font-size:1.15rem;line-height:1}
+#tabbar button .ic{font-size:1.05rem;line-height:1}
 #tabbar button.on{color:var(--acc)}
 
 /* ---------- toast ---------- */
 #toast{
-  position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom));
+  position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));
   transform:translateX(-50%);
   background:#101418;color:#fff;
   padding:12px 20px;border-radius:12px;

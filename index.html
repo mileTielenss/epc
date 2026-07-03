@@ -29,10 +29,17 @@
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
   <button type="button" class="btn sec big" id="btn-exportalles">&#11015; Exporteer alle woningen</button>
   <button type="button" class="btn sec big" id="btn-deelalles" hidden>&#128228; Bewaar alles in Bestanden</button>
-  <button type="button" class="btn sec big" id="btn-importeer">&#11014; Importeer JSON</button>
+  <button type="button" class="btn sec big" id="btn-importeer">&#11014; Importeer backup</button>
   <button type="button" class="btn sec big" id="btn-importmap" hidden>&#128194; Importeer map</button>
   <button type="button" class="btn sec big" id="btn-backupmap" hidden>&#128193; Kies backupmap</button>
   <div id="backupstatus"></div>
+
+  <details id="uitleg">
+    <summary>Hoe wordt alles bewaard?</summary>
+    <p>De app bewaart alles automatisch <b>elke 3 seconden op dit toestel</b>, ook zonder internet. Rechtsboven zie je telkens "opgeslagen" met het tijdstip. Crasht de app of je gsm, dan ben je hoogstens de laatste seconden kwijt.</p>
+    <p>Je data verdwijnt alleen als je de app van je beginscherm verwijdert of Safari-websitedata wist. Tik daarom na elk bezoek op <b>"Bewaar alles in Bestanden"</b>: dat maakt een zip met leesbare JSON en alle foto's in je Files-app.</p>
+    <p>Terugzetten doe je met <b>"Importeer backup"</b> (zip of JSON).</p>
+  </details>
 </section>
 
 <main id="app" hidden>
@@ -156,8 +163,10 @@
     <button type="button" class="thumbdel" id="btn-raamfoto-del" hidden>&times;</button>
   </div>
 
-  <button type="button" class="btn big" id="btn-voegtoe">Voeg toe</button>
-  <button type="button" class="btn sec big" id="btn-herhaal">Zelfde als vorige, nieuwe afmetingen</button>
+  <div class="knoprij">
+    <button type="button" class="btn big" id="btn-voegtoe">Voeg toe</button>
+    <button type="button" class="btn sec big" id="btn-herhaal">Zelfde als vorige</button>
+  </div>
 
   <div id="ramen-totaal" class="totaal"></div>
   <ul id="ramenlijst" class="lijst"></ul>
