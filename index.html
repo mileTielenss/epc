@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>EPC Plaatsbezoek</title>
+<meta name="theme-color" content="#0a6b3d">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="EPC">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="topbar">
+  <h1>EPC Plaatsbezoek</h1>
+  <span id="savestamp"></span>
+</header>
+
+<main id="app">
+
+<!-- ======================= TAB 1: ALGEMEEN ======================= -->
+<section class="tab active" id="tab-algemeen">
+  <label class="fld">
+    <span class="lbl">Adres</span>
+    <input type="text" id="adres" autocomplete="street-address" placeholder="Straat nr, gemeente">
+  </label>
+
+  <label class="fld">
+    <span class="lbl">Datum plaatsbezoek</span>
+    <input type="date" id="datum">
+  </label>
+
+  <div class="fld">
+    <span class="lbl">Type gebouw</span>
+    <div class="seg" id="seg-gebouwtype">
+      <button type="button" data-v="open">Open</button>
+      <button type="button" data-v="halfopen">Halfopen</button>
+      <button type="button" data-v="gesloten">Gesloten</button>
+      <button type="button" data-v="appartement">Appartement</button>
+    </div>
+  </div>
+
+  <label class="fld">
+    <span class="lbl">Bouwjaar</span>
+    <input type="number" id="bouwjaar" inputmode="numeric" placeholder="bv. 1978">
+  </label>
+
+  <label class="fld">
+    <span class="lbl">Notities</span>
+    <textarea id="notities" rows="6" placeholder="Vrije notities over de woning..."></textarea>
+  </label>
+</section>
+
+<!-- ======================= TAB 2: RAMEN & DEUREN ======================= -->
+<section class="tab" id="tab-ramen">
+  <div class="fld">
+    <span class="lbl">Element</span>
+    <div class="seg" id="seg-element">
+      <button type="button" data-v="raam">Raam</button>
+      <button type="button" data-v="deur">Deur</button>
+      <button type="button" data-v="dakraam">Dakraam</button>
+      <button type="button" data-v="glasdeur">Glasdeur</button>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Gevel</span>
+    <div id="kompaswrap">
+      <svg id="kompas" viewBox="0 0 200 200" aria-label="Kies gevel">
+        <polygon class="gevel" data-v="achter" points="4,4 196,4 138,62 62,62"/>
+        <polygon class="gevel" data-v="rechts" points="196,4 196,196 138,138 138,62"/>
+        <polygon class="gevel" data-v="voor"   points="4,196 62,138 138,138 196,196"/>
+        <polygon class="gevel" data-v="links"  points="4,4 62,62 62,138 4,196"/>
+        <g id="kompashuis">
+          <rect x="70" y="88" width="60" height="42" rx="3"/>
+          <polygon points="66,90 100,68 134,90"/>
+        </g>
+        <text data-v="achter" x="100" y="40"  text-anchor="middle">ACHTER</text>
+        <text data-v="voor"   x="100" y="172" text-anchor="middle">VOOR</text>
+        <text data-v="links"  x="30"  y="104" text-anchor="middle" transform="rotate(-90 30 100)">LINKS</text>
+        <text data-v="rechts" x="170" y="104" text-anchor="middle" transform="rotate(90 170 100)">RECHTS</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Afmetingen (m)</span>
+    <div class="dims">
+      <input type="text" id="breedte" inputmode="decimal" placeholder="breedte">
+      <span class="x">&times;</span>
+      <input type="text" id="hoogte" inputmode="decimal" placeholder="hoogte">
+      <span class="m2live" id="m2live"></span>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Beglazing</span>
+    <div class="seg" id="seg-beglazing">
+      <button type="button" data-v="enkel">Enkel</button>
+      <button type="button" data-v="dubbel">Dubbel</button>
+      <button type="button" data-v="hr-dubbel">HR dubbel</button>
+      <button type="button" data-v="drievoudig">Drievoudig</button>
+      <button type="button" data-v="paneel">Vol paneel</button>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Kader</span>
+    <div class="seg" id="seg-kader">
+      <button type="button" data-v="pvc">PVC</button>
+      <button type="button" data-v="alu">Alu</button>
+      <button type="button" data-v="hout">Hout</button>
+      <button type="button" data-v="alu-thermisch">Alu therm. ond.</button>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Rolluik</span>
+    <div class="seg" id="seg-rolluik">
+      <button type="button" data-v="nee">Nee</button>
+      <button type="button" data-v="ja">Ja</button>
+    </div>
+  </div>
+
+  <div class="fld fotorow">
+    <button type="button" class="btn sec" id="btn-raamfoto">&#128247; Foto afstandhouder</button>
+    <img id="raamfoto-thumb" class="thumb" hidden alt="foto afstandhouder">
+    <button type="button" class="thumbdel" id="btn-raamfoto-del" hidden>&times;</button>
+  </div>
+
+  <button type="button" class="btn big" id="btn-voegtoe">Voeg toe</button>
+  <button type="button" class="btn sec big" id="btn-herhaal">Zelfde als vorige, nieuwe afmetingen</button>
+
+  <div id="ramen-totaal" class="totaal"></div>
+  <ul id="ramenlijst" class="lijst"></ul>
+</section>
+
+<!-- ======================= TAB 3: ENERGIE ======================= -->
+<section class="tab" id="tab-energie">
+  <div class="fld">
+    <span class="lbl">Opwekking verwarming (meerdere mogelijk)</span>
+    <div class="chips" id="chips-opwek">
+      <button type="button" data-v="gasketel">Gasketel</button>
+      <button type="button" data-v="stookolie">Stookolieketel</button>
+      <button type="button" data-v="warmtepomp">Warmtepomp</button>
+      <button type="button" data-v="airco">Airco</button>
+      <button type="button" data-v="elektrisch">Elektrisch</button>
+      <button type="button" data-v="kachel">Kachel</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-ketel" hidden>
+    <h3>Ketel</h3>
+    <div class="fld">
+      <span class="lbl">Type</span>
+      <div class="seg" id="seg-ketelcond">
+        <button type="button" data-v="condenserend">Condenserend</button>
+        <button type="button" data-v="niet-condenserend">Niet-condenserend</button>
+      </div>
+    </div>
+    <label class="fld">
+      <span class="lbl">Merk</span>
+      <input type="text" id="ketelmerk" placeholder="bv. Vaillant, Viessmann">
+    </label>
+    <label class="fld">
+      <span class="lbl">Bouwjaar ketel</span>
+      <input type="number" id="keteljaar" inputmode="numeric" placeholder="bv. 2015">
+    </label>
+    <div class="fld fotorow">
+      <button type="button" class="btn sec" id="btn-ketelfoto">&#128247; Foto kenplaat</button>
+      <img id="ketelfoto-thumb" class="thumb" hidden alt="foto kenplaat">
+      <button type="button" class="thumbdel" id="btn-ketelfoto-del" hidden>&times;</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-wp" hidden>
+    <h3>Warmtepomp</h3>
+    <div class="fld">
+      <span class="lbl">Type</span>
+      <div class="seg" id="seg-wptype">
+        <button type="button" data-v="lucht-water">Lucht-water</button>
+        <button type="button" data-v="lucht-lucht">Lucht-lucht</button>
+        <button type="button" data-v="bodem-water">Bodem-water</button>
+        <button type="button" data-v="water-water">Water-water</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-airco" hidden>
+    <h3>Airco binnenunits</h3>
+    <div class="dims">
+      <input type="text" id="airco-ruimte" placeholder="ruimte">
+      <input type="text" id="airco-m2" inputmode="decimal" placeholder="m&sup2;">
+      <button type="button" class="btn addmini" id="btn-airco-voegtoe">+</button>
+    </div>
+    <ul id="aircolijst" class="lijst"></ul>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Afgifte (meerdere mogelijk)</span>
+    <div class="chips" id="chips-emissie">
+      <button type="button" data-v="radiatoren">Radiatoren</button>
+      <button type="button" data-v="vloerverwarming">Vloerverwarming</button>
+      <button type="button" data-v="convectoren">Convectoren</button>
+      <button type="button" data-v="lucht">Lucht</button>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Sanitair warm water</span>
+    <div class="seg" id="seg-sww">
+      <button type="button" data-v="cv-ketel">Via cv-ketel</button>
+      <button type="button" data-v="elektrische-boiler">Elektr. boiler</button>
+      <button type="button" data-v="warmtepompboiler">WP-boiler</button>
+      <button type="button" data-v="zonneboiler">Zonneboiler</button>
+      <button type="button" data-v="doorstromer">Doorstromer</button>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">PV-panelen</span>
+    <div class="seg" id="seg-pv">
+      <button type="button" data-v="nee">Nee</button>
+      <button type="button" data-v="ja">Ja</button>
+    </div>
+  </div>
+
+  <label class="fld" id="fld-kwp" hidden>
+    <span class="lbl">Vermogen (kWp)</span>
+    <input type="text" id="kwp" inputmode="decimal" placeholder="bv. 4,2">
+  </label>
+</section>
+
+<!-- ======================= TAB 4: VENTILATIE ======================= -->
+<section class="tab" id="tab-ventilatie">
+  <div class="fld">
+    <span class="lbl">Systeem</span>
+    <div class="seg" id="seg-ventsysteem">
+      <button type="button" data-v="geen">Geen</button>
+      <button type="button" data-v="A">A</button>
+      <button type="button" data-v="B">B</button>
+      <button type="button" data-v="C">C</button>
+      <button type="button" data-v="D">D</button>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Ruimte toevoegen</span>
+    <div class="chips" id="vent-chips">
+      <button type="button" data-v="Living">Living</button>
+      <button type="button" data-v="Keuken">Keuken</button>
+      <button type="button" data-v="Badkamer">Badkamer</button>
+      <button type="button" data-v="Slaapkamer">Slaapkamer</button>
+      <button type="button" data-v="WC">WC</button>
+      <button type="button" data-v="Berging">Berging</button>
+    </div>
+  </div>
+
+  <ul id="ventlijst" class="lijst"></ul>
+</section>
+
+<!-- ======================= TAB 5: EXPORT ======================= -->
+<section class="tab" id="tab-export">
+  <div class="panel" id="samenvatting"></div>
+
+  <button type="button" class="btn big" id="btn-print">&#128424; Print one-pager (PDF)</button>
+  <button type="button" class="btn sec big" id="btn-export">&#11015; Exporteer JSON</button>
+  <button type="button" class="btn sec big" id="btn-import">&#11014; Importeer JSON</button>
+  <button type="button" class="btn danger big" id="btn-nieuw">Nieuwe woning starten</button>
+</section>
+
+</main>
+
+<nav id="tabbar">
+  <button type="button" class="on" data-tab="algemeen"><span class="ic">&#127968;</span>Algemeen</button>
+  <button type="button" data-tab="ramen"><span class="ic">&#129695;</span>Ramen</button>
+  <button type="button" data-tab="energie"><span class="ic">&#9889;</span>Energie</button>
+  <button type="button" data-tab="ventilatie"><span class="ic">&#127788;&#65039;</span>Ventilatie</button>
+  <button type="button" data-tab="export"><span class="ic">&#128196;</span>Export</button>
+</nav>
+
+<div id="toast" hidden></div>
+<input type="file" id="fotoinput" accept="image/*" capture="environment" hidden>
+<input type="file" id="importinput" accept=".json,application/json" hidden>
+<div id="printview"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
