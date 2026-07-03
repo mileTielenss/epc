@@ -88,7 +88,7 @@ function leegWoning() {
     bestand: null,
     algemeen: { adres: '', foto: null, datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
     ramen: [],
-    energie: { opwekkers: [], pv: '', kwp: '' },
+    energie: { opwekkers: [], pv: '', wp: '' },
     ventilatie: { ruimtes: [] },
     teller: 0,
     tellerOpwek: 0
@@ -152,6 +152,13 @@ function normaliseer(p) {
   delete w.energie.airco;
   delete w.energie.emissie;
   delete w.energie.sww;
+  if (w.energie.kwp !== undefined) {
+    if (!w.energie.wp && w.energie.kwp) {
+      const k = num(w.energie.kwp);
+      w.energie.wp = k ? String(Math.round(k * 1000)) : '';
+    }
+    delete w.energie.kwp;
+  }
   w.tellerOpwek = Math.max(w.tellerOpwek || 0, ...w.energie.opwekkers.map(o => o.nr || 0), 0);
 
   w.ventilatie.ruimtes = (w.ventilatie.ruimtes || []).map(r => ({
@@ -203,8 +210,9 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && S &
 const FSA = 'showDirectoryPicker' in window;
 let backupDir = null;
 
+/* jij nummert je adressen zelf (1. adres, 2. adres), dus het adres alleen volstaat als mapnaam */
 function mapnaam(w) {
-  return `${slug(w.algemeen.adres) || 'woning'}-${w.id}`;
+  return slug(w.algemeen.adres) || `woning-${w.id}`;
 }
 
 async function schrijfBestand(dir, naam, data) {
@@ -848,10 +856,10 @@ $('#opweklijst').addEventListener('click', e => {
 
 segInit('#seg-pv', v => {
   S.energie.pv = v;
-  $('#fld-kwp').hidden = v !== 'ja';
+  $('#fld-wp').hidden = v !== 'ja';
   wijzig();
 });
-bind('#kwp', v => S.energie.kwp = v);
+bind('#wp', v => S.energie.wp = v);
 
 /* ============================== tab 4: ventilatie ============================== */
 
@@ -954,7 +962,7 @@ function buildPrint() {
   } else {
     html += '<p class="kv">Geen opwekkers genoteerd.</p>';
   }
-  html += `<p class="kv"><b>PV-panelen</b> ${E.pv === 'ja' ? 'ja' + (E.kwp ? ', ' + esc(E.kwp) + ' kWp' : '') : (E.pv === 'nee' ? 'nee' : '-')}</p>`;
+  html += `<p class="kv"><b>PV-panelen</b> ${E.pv === 'ja' ? 'ja' + (E.wp ? ', ' + esc(E.wp) + ' Wp' : '') : (E.pv === 'nee' ? 'nee' : '-')}</p>`;
 
   /* ventilatie */
   html += '<h2>Ventilatie</h2>';
@@ -1108,7 +1116,7 @@ function maakBackupZip(alle) {
   const bestanden = [];
   const kopie = JSON.parse(JSON.stringify(alle));
   kopie.forEach(w => {
-    const map = `fotos/${slug(w.algemeen.adres) || 'woning'}-${w.id}`;
+    const map = `fotos/${slug(w.algemeen.adres) || 'woning-' + w.id}`;
     woningFotoVelden(w).forEach(v => {
       if (String(v.obj[v.key]).startsWith('data:')) {
         const pad = `${map}/${v.naam}.jpg`;
@@ -1268,8 +1276,8 @@ function syncAlles() {
   updateM3Live();
   renderOpwekkers();
   segSet('#seg-pv', S.energie.pv);
-  $('#fld-kwp').hidden = S.energie.pv !== 'ja';
-  $('#kwp').value = S.energie.kwp;
+  $('#fld-wp').hidden = S.energie.pv !== 'ja';
+  $('#wp').value = S.energie.wp;
 
   /* ventilatie: modus terug naar geen */
   ventMode = 'geen';
