@@ -1,11 +1,86 @@
 'use strict';
 
-/* ============================== state ============================== */
+/* ============================== helpers ============================== */
 
-const LSKEY = 'epc-plaatsbezoek-v1';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
 
-function leegState() {
+function vandaag() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function nu() { return new Date().toISOString(); }
+function nieuwId() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
+
+function num(s) {
+  const v = parseFloat(String(s).trim().replace(',', '.'));
+  return isFinite(v) && v > 0 ? v : 0;
+}
+function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function slug(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+}
+
+function flash(btn) {
+  btn.classList.add('flash');
+  setTimeout(() => btn.classList.remove('flash'), 200);
+}
+
+/* ============================== IndexedDB ============================== */
+
+let db = null;
+
+function dbOpen() {
+  return new Promise((res, rej) => {
+    const q = indexedDB.open('epc-db', 1);
+    q.onupgradeneeded = () => {
+      q.result.createObjectStore('woningen', { keyPath: 'id' });
+      q.result.createObjectStore('instellingen');
+    };
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+  });
+}
+
+function tx(store, mode, fn) {
+  return new Promise((res, rej) => {
+    const t = db.transaction(store, mode);
+    const r = fn(t.objectStore(store));
+    t.oncomplete = () => res(r && 'result' in r ? r.result : undefined);
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error);
+  });
+}
+
+const dbPutWoning = w => tx('woningen', 'readwrite', s => s.put(w));
+const dbGetWoning = id => tx('woningen', 'readonly', s => s.get(id));
+const dbAlleWoningen = () => tx('woningen', 'readonly', s => s.getAll());
+const dbVerwijderWoning = id => tx('woningen', 'readwrite', s => s.delete(id));
+const dbZetInstelling = (k, v) => tx('instellingen', 'readwrite', s => s.put(v, k));
+const dbGetInstelling = k => tx('instellingen', 'readonly', s => s.get(k));
+
+/* ============================== woningmodel ============================== */
+
+function leegWoning() {
   return {
+    id: nieuwId(),
+    status: 'open',
+    gemaakt: nu(),
+    gewijzigd: nu(),
+    bestand: null,
     algemeen: { adres: '', datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
     ramen: [],
     energie: {
@@ -23,115 +98,248 @@ function leegState() {
   };
 }
 
-function vandaag() {
-  const d = new Date();
-  const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+/* ondiepe merge zodat oudere records nieuwe velden krijgen */
+function normaliseer(p) {
+  const basis = leegWoning();
+  const w = {
+    ...basis, ...p,
+    algemeen: { ...basis.algemeen, ...(p.algemeen || {}) },
+    energie: {
+      ...basis.energie, ...(p.energie || {}),
+      ketel: { ...basis.energie.ketel, ...((p.energie || {}).ketel || {}) },
+      wp: { ...basis.energie.wp, ...((p.energie || {}).wp || {}) }
+    },
+    ventilatie: { ...basis.ventilatie, ...(p.ventilatie || {}) }
+  };
+  if (!w.id) w.id = nieuwId();
+  if (!w.status) w.status = 'open';
+  return w;
 }
 
-let S = laad() || leegState();
+/* ============================== actieve woning + autosave ============================== */
+
+let S = null;      // actieve woning, null = lijstscherm
 let dirty = false;
+let draft = null;  // invoerformulier ramen-tab
 
-/* draft voor het ramen-invoerformulier */
-let draft = { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', foto: null };
-
-function laad() {
-  try {
-    const raw = localStorage.getItem(LSKEY);
-    if (!raw) return null;
-    const p = JSON.parse(raw);
-    // ondiepe merge zodat oudere opslag nieuwe velden krijgt
-    const basis = leegState();
-    return {
-      ...basis, ...p,
-      algemeen: { ...basis.algemeen, ...(p.algemeen || {}) },
-      energie: {
-        ...basis.energie, ...(p.energie || {}),
-        ketel: { ...basis.energie.ketel, ...((p.energie || {}).ketel || {}) },
-        wp: { ...basis.energie.wp, ...((p.energie || {}).wp || {}) }
-      },
-      ventilatie: { ...basis.ventilatie, ...(p.ventilatie || {}) }
-    };
-  } catch (e) { return null; }
+function leegDraft() {
+  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', foto: null };
 }
 
-function bewaar() {
+function wijzig() { dirty = true; }
+
+async function bewaar() {
+  if (!S) return;
+  S.gewijzigd = nu();
   try {
-    localStorage.setItem(LSKEY, JSON.stringify(S));
+    await dbPutWoning(S);
     dirty = false;
     const d = new Date();
     const p = n => String(n).padStart(2, '0');
     $('#savestamp').textContent = `opgeslagen ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   } catch (e) {
-    toast('Opslag vol! Exporteer JSON en start opnieuw.');
+    toast('Opslaan mislukt!');
+    return;
+  }
+  schrijfBackup(S);
+}
+
+setInterval(() => { if (S && dirty) bewaar(); }, 3000);
+window.addEventListener('pagehide', () => { if (S && dirty) bewaar(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && S && dirty) bewaar(); });
+
+/* ============================== bestandsbackup (File System Access API) ============================== */
+
+const FSA = 'showDirectoryPicker' in window;
+let backupDir = null;
+
+function bestandsnaam(w) {
+  return `epc-${slug(w.algemeen.adres) || 'woning'}-${w.id}.json`;
+}
+
+async function schrijfBackup(w) {
+  if (!backupDir) return;
+  const naam = bestandsnaam(w);
+  try {
+    if (w.bestand && w.bestand !== naam) {
+      try { await backupDir.removeEntry(w.bestand); } catch (e) { /* al weg */ }
+    }
+    const fh = await backupDir.getFileHandle(naam, { create: true });
+    const ws = await fh.createWritable();
+    await ws.write(JSON.stringify(w, null, 1));
+    await ws.close();
+    if (w.bestand !== naam) { w.bestand = naam; dbPutWoning(w); }
+    backupStatus(`Backup ok: ${naam}`);
+  } catch (e) {
+    backupStatus('Backup mislukt: ' + e.name);
   }
 }
 
-function wijzig() { dirty = true; }
-
-setInterval(() => { if (dirty) bewaar(); }, 3000);
-window.addEventListener('pagehide', () => { if (dirty) bewaar(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) bewaar(); });
-
-/* ============================== helpers ============================== */
-
-const $ = s => document.querySelector(s);
-const $$ = s => [...document.querySelectorAll(s)];
-
-function num(s) {
-  const v = parseFloat(String(s).trim().replace(',', '.'));
-  return isFinite(v) && v > 0 ? v : 0;
-}
-function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function verwijderBackup(w) {
+  if (!backupDir || !w || !w.bestand) return;
+  try { await backupDir.removeEntry(w.bestand); } catch (e) { /* al weg */ }
 }
 
-let toastTimer = null;
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+async function backupAlles() {
+  if (!backupDir) return;
+  const alle = await dbAlleWoningen();
+  for (const w of alle) await schrijfBackup(w);
 }
 
-function flash(btn) {
-  btn.classList.add('flash');
-  setTimeout(() => btn.classList.remove('flash'), 200);
+function backupStatus(msg) {
+  $('#backupstatus').textContent = msg;
 }
 
-/* segmented control: init met callback, waarde zetten */
-function segInit(sel, cb) {
-  $(sel).addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    segSet(sel, b.dataset.v);
-    cb(b.dataset.v);
+async function laadBackupmap() {
+  if (!FSA) return;
+  $('#btn-backupmap').hidden = false;
+  try {
+    const h = await dbGetInstelling('backupmap');
+    if (!h) { backupStatus('Geen backupmap gekozen. Kies een map voor automatische JSON-backups.'); return; }
+    const perm = await h.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      backupDir = h;
+      backupStatus(`Backupmap actief: ${h.name}`);
+      backupAlles();
+    } else {
+      $('#btn-backupmap').textContent = '\u{1F4C1} Backup hervatten';
+      backupStatus('Tik op "Backup hervatten" om de backupmap opnieuw toe te laten.');
+    }
+  } catch (e) {
+    backupStatus('Backupmap niet beschikbaar.');
+  }
+}
+
+$('#btn-backupmap').addEventListener('click', async () => {
+  try {
+    let h = await dbGetInstelling('backupmap');
+    if (h && await h.requestPermission({ mode: 'readwrite' }) === 'granted') {
+      backupDir = h;
+    } else {
+      h = await window.showDirectoryPicker({ mode: 'readwrite' });
+      await dbZetInstelling('backupmap', h);
+      backupDir = h;
+    }
+    $('#btn-backupmap').textContent = '\u{1F4C1} Backupmap wijzigen';
+    backupStatus(`Backupmap actief: ${backupDir.name}`);
+    await backupAlles();
+    toast('Alle woningen gebackupt');
+  } catch (e) {
+    if (e.name !== 'AbortError') backupStatus('Backupmap kiezen mislukt.');
+  }
+});
+
+/* ============================== views ============================== */
+
+function toonLijst() {
+  $('#view-lijst').hidden = false;
+  $('#app').hidden = true;
+  $('#tabbar').hidden = true;
+  $('#btn-terug').hidden = true;
+  $('#titel').textContent = 'EPC Plaatsbezoek';
+  $('#savestamp').textContent = '';
+}
+
+function toonEditor() {
+  $('#view-lijst').hidden = true;
+  $('#app').hidden = false;
+  $('#tabbar').hidden = false;
+  $('#btn-terug').hidden = false;
+  zetTab('algemeen');
+  zetTitel();
+}
+
+function zetTab(naam) {
+  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === naam));
+  $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + naam));
+  window.scrollTo(0, 0);
+}
+
+function zetTitel() {
+  $('#titel').textContent = (S && S.algemeen.adres) || 'Nieuwe woning';
+}
+
+async function openWoning(id) {
+  const w = await dbGetWoning(id);
+  if (!w) { toast('Woning niet gevonden'); return; }
+  S = normaliseer(w);
+  draft = leegDraft();
+  syncAlles();
+  toonEditor();
+}
+
+async function sluitWoning() {
+  if (S && dirty) await bewaar();
+  S = null;
+  await renderLijst();
+  toonLijst();
+}
+
+$('#btn-terug').addEventListener('click', sluitWoning);
+$('#btn-sluiten').addEventListener('click', sluitWoning);
+
+/* ============================== woningenlijst ============================== */
+
+const STATUS_NAMEN = { open: 'Open', afgewerkt: 'Af' };
+
+async function renderLijst() {
+  const alle = (await dbAlleWoningen()).sort((a, b) => (b.gewijzigd || '').localeCompare(a.gewijzigd || ''));
+  const ul = $('#woninglijst');
+  ul.innerHTML = '';
+  if (!alle.length) {
+    ul.innerHTML = '<li class="leeg">Nog geen woningen. Start hieronder een nieuwe.</li>';
+    return;
+  }
+  alle.forEach(w => {
+    const tot = (w.ramen || []).reduce((a, r) => a + r.b * r.h, 0);
+    const li = document.createElement('li');
+    li.className = 'woning';
+    li.dataset.id = w.id;
+    li.innerHTML =
+      `<div class="info">
+         <div class="r1">${esc(w.algemeen.adres || 'Zonder adres')}</div>
+         <div class="r3">${esc(w.algemeen.datum || '')} · ${(w.ramen || []).length} elementen · ${fmt(tot)} m²</div>
+       </div>
+       <button type="button" class="status ${w.status}" data-id="${w.id}">${STATUS_NAMEN[w.status] || 'Open'}</button>
+       <button type="button" class="del" data-id="${w.id}">×</button>`;
+    ul.appendChild(li);
   });
 }
-function segSet(sel, v) {
-  $$(sel + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-}
 
-/* chips multi-select */
-function chipsInit(sel, cb) {
-  $(sel).addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    b.classList.toggle('on');
-    cb(chipsVals(sel));
-  });
-}
-function chipsVals(sel) { return $$(sel + ' button.on').map(b => b.dataset.v); }
-function chipsSet(sel, vals) {
-  $$(sel + ' button').forEach(b => b.classList.toggle('on', vals.includes(b.dataset.v)));
-}
+$('#woninglijst').addEventListener('click', async e => {
+  const del = e.target.closest('.del');
+  if (del) {
+    const w = await dbGetWoning(del.dataset.id);
+    if (!w) return;
+    if (!confirm(`"${w.algemeen.adres || 'Zonder adres'}" definitief verwijderen?`)) return;
+    await dbVerwijderWoning(w.id);
+    await verwijderBackup(w);
+    await renderLijst();
+    toast('Woning verwijderd');
+    return;
+  }
+  const st = e.target.closest('.status');
+  if (st) {
+    const w = await dbGetWoning(st.dataset.id);
+    if (!w) return;
+    w.status = w.status === 'open' ? 'afgewerkt' : 'open';
+    w.gewijzigd = nu();
+    await dbPutWoning(w);
+    schrijfBackup(w);
+    await renderLijst();
+    return;
+  }
+  const li = e.target.closest('li.woning');
+  if (li) openWoning(li.dataset.id);
+});
 
-/* tekstveld binden aan state */
-function bind(sel, fn) {
-  $(sel).addEventListener('input', e => { fn(e.target.value); wijzig(); });
-}
+$('#btn-nieuwewoning').addEventListener('click', async () => {
+  S = leegWoning();
+  draft = leegDraft();
+  await bewaar();
+  syncAlles();
+  toonEditor();
+});
 
 /* ============================== foto's ============================== */
 
@@ -168,19 +376,48 @@ $('#fotoinput').addEventListener('change', () => {
 $('#tabbar').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
-  $$('#tabbar button').forEach(x => x.classList.toggle('on', x === b));
-  $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
-  window.scrollTo(0, 0);
+  zetTab(b.dataset.tab);
   if (b.dataset.tab === 'export') renderSamenvatting();
 });
 
 /* ============================== tab 1: algemeen ============================== */
 
-bind('#adres', v => S.algemeen.adres = v);
+function bind(sel, fn) {
+  $(sel).addEventListener('input', e => { if (!S) return; fn(e.target.value); wijzig(); });
+}
+
+bind('#adres', v => { S.algemeen.adres = v; zetTitel(); });
 bind('#datum', v => S.algemeen.datum = v);
 bind('#bouwjaar', v => S.algemeen.bouwjaar = v);
 bind('#notities', v => S.algemeen.notities = v);
 segInit('#seg-gebouwtype', v => { S.algemeen.gebouwtype = v; wijzig(); });
+
+/* segmented control */
+function segInit(sel, cb) {
+  $(sel).addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !S) return;
+    segSet(sel, b.dataset.v);
+    cb(b.dataset.v);
+  });
+}
+function segSet(sel, v) {
+  $$(sel + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+}
+
+/* chips multi-select */
+function chipsInit(sel, cb) {
+  $(sel).addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !S) return;
+    b.classList.toggle('on');
+    cb(chipsVals(sel));
+  });
+}
+function chipsVals(sel) { return $$(sel + ' button.on').map(b => b.dataset.v); }
+function chipsSet(sel, vals) {
+  $$(sel + ' button').forEach(b => b.classList.toggle('on', vals.includes(b.dataset.v)));
+}
 
 /* ============================== tab 2: ramen & deuren ============================== */
 
@@ -191,7 +428,7 @@ segInit('#seg-rolluik', v => draft.rolluik = v);
 
 $('#kompas').addEventListener('click', e => {
   const p = e.target.closest('.gevel');
-  if (!p) return;
+  if (!p || !S) return;
   draft.gevel = p.dataset.v;
   kompasSet(draft.gevel);
 });
@@ -227,6 +464,7 @@ const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel',
 const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', 'alu-thermisch': 'Alu therm. ond.' };
 
 $('#btn-voegtoe').addEventListener('click', () => {
+  if (!S) return;
   const b = num($('#breedte').value), h = num($('#hoogte').value);
   if (!b || !h) { toast('Vul breedte en hoogte in'); return; }
   S.teller = (S.teller || 0) + 1;
@@ -252,6 +490,7 @@ $('#btn-voegtoe').addEventListener('click', () => {
 });
 
 $('#btn-herhaal').addEventListener('click', () => {
+  if (!S) return;
   const laatste = S.ramen[S.ramen.length - 1];
   if (!laatste) { toast('Nog geen vorige invoer'); return; }
   draft.element = laatste.element;
@@ -301,7 +540,7 @@ function renderRamen() {
 
 $('#ramenlijst').addEventListener('click', e => {
   const b = e.target.closest('.del');
-  if (!b) return;
+  if (!b || !S) return;
   const nr = Number(b.dataset.nr);
   const r = S.ramen.find(x => x.nr === nr);
   if (!r) return;
@@ -346,6 +585,7 @@ function updateKetelThumb() {
 segInit('#seg-wptype', v => { S.energie.wp.type = v; wijzig(); });
 
 $('#btn-airco-voegtoe').addEventListener('click', () => {
+  if (!S) return;
   const ruimte = $('#airco-ruimte').value.trim();
   const m2 = num($('#airco-m2').value);
   if (!ruimte) { toast('Vul de ruimte in'); return; }
@@ -370,7 +610,7 @@ function renderAirco() {
 }
 $('#aircolijst').addEventListener('click', e => {
   const b = e.target.closest('.del');
-  if (!b) return;
+  if (!b || !S) return;
   S.energie.airco.splice(Number(b.dataset.i), 1);
   renderAirco();
   bewaar();
@@ -395,7 +635,7 @@ segInit('#seg-ventsysteem', v => { S.ventilatie.systeem = v; wijzig(); });
 
 $('#vent-chips').addEventListener('click', e => {
   const b = e.target.closest('button');
-  if (!b) return;
+  if (!b || !S) return;
   const basis = b.dataset.v;
   const zelfde = S.ventilatie.ruimtes.filter(r => r.naam === basis || r.naam.startsWith(basis + ' ')).length;
   const naam = zelfde ? `${basis} ${zelfde + 1}` : basis;
@@ -431,13 +671,13 @@ function renderVent() {
 }
 $('#ventlijst').addEventListener('change', e => {
   const s = e.target.closest('select');
-  if (!s) return;
+  if (!s || !S) return;
   S.ventilatie.ruimtes[Number(s.dataset.i)].voorziening = s.value;
   bewaar();
 });
 $('#ventlijst').addEventListener('click', e => {
   const b = e.target.closest('.del');
-  if (!b) return;
+  if (!b || !S) return;
   S.ventilatie.ruimtes.splice(Number(b.dataset.i), 1);
   renderVent();
   bewaar();
@@ -457,12 +697,14 @@ function fotoCount() {
 }
 
 function renderSamenvatting() {
+  if (!S) return;
   const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h, 0);
   const rijen = [
     ['Adres', S.algemeen.adres || '-'],
     ['Datum', S.algemeen.datum || '-'],
     ['Type', GEBOUW_NAMEN[S.algemeen.gebouwtype] || '-'],
     ['Bouwjaar', S.algemeen.bouwjaar || '-'],
+    ['Status', S.status === 'afgewerkt' ? 'Afgewerkt' : 'Open'],
     ['Ramen & deuren', S.ramen.length ? `${S.ramen.length} elementen, ${fmt(totM2)} m²` : '-'],
     ['Opwekking', S.energie.opwek.map(v => OPWEK_NAMEN[v]).join(', ') || '-'],
     ['Afgifte', S.energie.emissie.map(v => EMISSIE_NAMEN[v]).join(', ') || '-'],
@@ -481,6 +723,7 @@ function renderSamenvatting() {
 /* ---------- one-pager / print ---------- */
 
 $('#btn-print').addEventListener('click', () => {
+  if (!S) return;
   buildPrint();
   requestAnimationFrame(() => setTimeout(() => window.print(), 60));
 });
@@ -557,20 +800,31 @@ function buildPrint() {
 
 /* ---------- JSON export / import ---------- */
 
-$('#btn-export').addEventListener('click', () => {
-  const slug = (S.algemeen.adres || 'woning').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'woning';
-  const blob = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
+function downloadJson(naam, data) {
+  const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `epc-${slug}-${S.algemeen.datum || 'export'}.json`;
+  a.download = naam;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+$('#btn-export').addEventListener('click', () => {
+  if (!S) return;
+  downloadJson(bestandsnaam(S), S);
   toast('JSON geëxporteerd');
 });
 
-$('#btn-import').addEventListener('click', () => {
+$('#btn-exportalles').addEventListener('click', async () => {
+  const alle = await dbAlleWoningen();
+  if (!alle.length) { toast('Nog geen woningen'); return; }
+  downloadJson(`epc-alle-woningen-${vandaag()}.json`, { type: 'epc-alle-woningen', geexporteerd: nu(), woningen: alle });
+  toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} geëxporteerd`);
+});
+
+$('#btn-importeer').addEventListener('click', () => {
   $('#importinput').value = '';
   $('#importinput').click();
 });
@@ -578,24 +832,20 @@ $('#importinput').addEventListener('change', () => {
   const f = $('#importinput').files[0];
   if (!f) return;
   const r = new FileReader();
-  r.onload = () => {
+  r.onload = async () => {
     try {
       const p = JSON.parse(r.result);
-      if (!p || typeof p !== 'object' || !p.algemeen) throw new Error('geen epc-bestand');
-      const basis = leegState();
-      S = {
-        ...basis, ...p,
-        algemeen: { ...basis.algemeen, ...(p.algemeen || {}) },
-        energie: {
-          ...basis.energie, ...(p.energie || {}),
-          ketel: { ...basis.energie.ketel, ...((p.energie || {}).ketel || {}) },
-          wp: { ...basis.energie.wp, ...((p.energie || {}).wp || {}) }
-        },
-        ventilatie: { ...basis.ventilatie, ...(p.ventilatie || {}) }
-      };
-      syncAlles();
-      bewaar();
-      toast('Import gelukt');
+      const lijst = Array.isArray(p.woningen) ? p.woningen : (p.algemeen ? [p] : null);
+      if (!lijst) throw new Error('geen epc-bestand');
+      let n = 0;
+      for (const item of lijst) {
+        const w = normaliseer(item);
+        await dbPutWoning(w);
+        schrijfBackup(w);
+        n++;
+      }
+      await renderLijst();
+      toast(`${n} woning${n === 1 ? '' : 'en'} geïmporteerd`);
     } catch (e) {
       toast('Import mislukt: geen geldig bestand');
     }
@@ -603,13 +853,17 @@ $('#importinput').addEventListener('change', () => {
   r.readAsText(f);
 });
 
-$('#btn-nieuw').addEventListener('click', () => {
-  if (!confirm('Alle gegevens van deze woning wissen en opnieuw starten?')) return;
-  S = leegState();
-  draft = { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', foto: null };
-  syncAlles();
-  bewaar();
-  toast('Nieuwe woning gestart');
+$('#btn-verwijder-woning').addEventListener('click', async () => {
+  if (!S) return;
+  if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?`)) return;
+  const w = S;
+  S = null;
+  dirty = false;
+  await dbVerwijderWoning(w.id);
+  await verwijderBackup(w);
+  await renderLijst();
+  toonLijst();
+  toast('Woning verwijderd');
 });
 
 /* ============================== UI sync ============================== */
@@ -652,10 +906,33 @@ function syncAlles() {
   renderSamenvatting();
 }
 
-syncAlles();
+/* ============================== start ============================== */
 
-/* ============================== service worker ============================== */
+(async function init() {
+  try {
+    db = await dbOpen();
+  } catch (e) {
+    toast('Opslag niet beschikbaar in deze browser');
+    return;
+  }
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => { /* offline install vereist https of localhost */ });
-}
+  /* vraag persistente opslag aan tegen eviction */
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+
+  /* migratie: oude single-woning opslag uit v1 */
+  try {
+    const oud = localStorage.getItem('epc-plaatsbezoek-v1');
+    if (oud) {
+      await dbPutWoning(normaliseer(JSON.parse(oud)));
+      localStorage.removeItem('epc-plaatsbezoek-v1');
+    }
+  } catch (e) { /* corrupte oude opslag: negeren */ }
+
+  await laadBackupmap();
+  await renderLijst();
+  toonLijst();
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* offline install vereist https of localhost */ });
+  }
+})();

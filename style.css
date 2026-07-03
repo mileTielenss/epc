@@ -10,6 +10,7 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none !important}
 html{font-size:17px}
 body{
   margin:0;
@@ -24,10 +25,29 @@ body{
   position:sticky;top:0;z-index:5;
   background:var(--acc);color:#fff;
   padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
-  display:flex;justify-content:space-between;align-items:baseline;
+  display:flex;align-items:center;gap:10px;
 }
-#topbar h1{margin:0;font-size:1.05rem;font-weight:700}
-#savestamp{font-size:.72rem;opacity:.85}
+#topbar h1{margin:0;font-size:1.05rem;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#savestamp{font-size:.72rem;opacity:.85;flex:0 0 auto}
+#btn-terug{
+  flex:0 0 auto;border:0;background:none;color:#fff;
+  font-family:inherit;font-size:1rem;font-weight:700;
+  padding:8px 8px 8px 0;margin-left:-4px;
+}
+
+/* ---------- woningenlijst ---------- */
+#view-lijst{padding:14px 14px calc(24px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
+#view-lijst h2{font-size:1.05rem;margin:2px 0 12px}
+#woninglijst{margin:0 0 16px}
+#woninglijst .leeg{display:block;background:none;border:1.5px dashed var(--line);color:var(--mut);text-align:center;font-size:.95rem;padding:22px 12px}
+#woninglijst li.woning{cursor:pointer}
+.status{
+  flex:0 0 auto;min-width:64px;min-height:44px;
+  border-radius:22px;font-family:inherit;font-size:.85rem;font-weight:700;
+  border:1.5px solid var(--acc);background:var(--card);color:var(--acc);
+}
+.status.afgewerkt{background:var(--acc);color:#fff}
+#backupstatus{font-size:.8rem;color:var(--mut);text-align:center;margin-top:4px;word-break:break-word}
 
 /* ---------- tabs / layout ---------- */
 .tab{display:none;padding:14px 14px calc(96px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}

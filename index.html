@@ -17,11 +17,23 @@
 <body>
 
 <header id="topbar">
-  <h1>EPC Plaatsbezoek</h1>
+  <button type="button" id="btn-terug" hidden>&#8249; Woningen</button>
+  <h1 id="titel">EPC Plaatsbezoek</h1>
   <span id="savestamp"></span>
 </header>
 
-<main id="app">
+<!-- ======================= WONINGENLIJST ======================= -->
+<section id="view-lijst">
+  <h2>Woningen</h2>
+  <ul id="woninglijst" class="lijst"></ul>
+  <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
+  <button type="button" class="btn sec big" id="btn-exportalles">&#11015; Exporteer alle woningen</button>
+  <button type="button" class="btn sec big" id="btn-importeer">&#11014; Importeer JSON</button>
+  <button type="button" class="btn sec big" id="btn-backupmap" hidden>&#128193; Kies backupmap</button>
+  <div id="backupstatus"></div>
+</section>
+
+<main id="app" hidden>
 
 <!-- ======================= TAB 1: ALGEMEEN ======================= -->
 <section class="tab active" id="tab-algemeen">
@@ -269,14 +281,14 @@
   <div class="panel" id="samenvatting"></div>
 
   <button type="button" class="btn big" id="btn-print">&#128424; Print one-pager (PDF)</button>
-  <button type="button" class="btn sec big" id="btn-export">&#11015; Exporteer JSON</button>
-  <button type="button" class="btn sec big" id="btn-import">&#11014; Importeer JSON</button>
-  <button type="button" class="btn danger big" id="btn-nieuw">Nieuwe woning starten</button>
+  <button type="button" class="btn sec big" id="btn-export">&#11015; Exporteer deze woning (JSON)</button>
+  <button type="button" class="btn sec big" id="btn-sluiten">Woning sluiten</button>
+  <button type="button" class="btn danger big" id="btn-verwijder-woning">Woning verwijderen</button>
 </section>
 
 </main>
 
-<nav id="tabbar">
+<nav id="tabbar" hidden>
   <button type="button" class="on" data-tab="algemeen"><span class="ic">&#127968;</span>Algemeen</button>
   <button type="button" data-tab="ramen"><span class="ic">&#129695;</span>Ramen</button>
   <button type="button" data-tab="energie"><span class="ic">&#9889;</span>Energie</button>
