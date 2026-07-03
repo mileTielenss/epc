@@ -1290,6 +1290,9 @@ function syncAlles() {
   /* vraag persistente opslag aan tegen eviction */
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
 
+  /* staand vergrendelen waar de browser het toelaat (iOS negeert dit; daar vangt #draai het op) */
+  try { screen.orientation.lock('portrait').catch(() => {}); } catch (e) { /* niet ondersteund */ }
+
   if (!FSA && kanDelen()) $('#btn-deelalles').hidden = false;
 
   await laadBackupmap();
