@@ -196,26 +196,45 @@ setInterval(() => { if (S && dirty) bewaar(); }, 3000);
 window.addEventListener('pagehide', () => { if (S && dirty) bewaar(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && S && dirty) bewaar(); });
 
-/* ============================== bestandsbackup (File System Access API) ============================== */
+/* ============================== mapbackup (File System Access API) ==============================
+   leesbare structuur, zonder de app te openen:
+   <backupmap>/<adres>-<id>/woning.json + fotos/raam-1.jpg ... */
 
 const FSA = 'showDirectoryPicker' in window;
 let backupDir = null;
 
-function bestandsnaam(w) {
-  return `epc-${slug(w.algemeen.adres) || 'woning'}-${w.id}.json`;
+function mapnaam(w) {
+  return `${slug(w.algemeen.adres) || 'woning'}-${w.id}`;
+}
+
+async function schrijfBestand(dir, naam, data) {
+  const fh = await dir.getFileHandle(naam, { create: true });
+  const ws = await fh.createWritable();
+  await ws.write(data);
+  await ws.close();
 }
 
 async function schrijfBackup(w) {
   if (!backupDir) return;
-  const naam = bestandsnaam(w);
+  const naam = mapnaam(w);
   try {
     if (w.bestand && w.bestand !== naam) {
-      try { await backupDir.removeEntry(w.bestand); } catch (e) { /* al weg */ }
+      try { await backupDir.removeEntry(w.bestand, { recursive: true }); } catch (e) { /* al weg */ }
     }
-    const fh = await backupDir.getFileHandle(naam, { create: true });
-    const ws = await fh.createWritable();
-    await ws.write(JSON.stringify(w, null, 1));
-    await ws.close();
+    const dir = await backupDir.getDirectoryHandle(naam, { create: true });
+    const kopie = JSON.parse(JSON.stringify(w));
+    let fotosDir = null;
+    for (const v of woningFotoVelden(kopie)) {
+      if (!String(v.obj[v.key]).startsWith('data:')) continue;
+      if (!fotosDir) fotosDir = await dir.getDirectoryHandle('fotos', { create: true });
+      const bytes = dataUrlNaarBytes(v.obj[v.key]);
+      /* foto's veranderen zelden: enkel schrijven als grootte verschilt */
+      let bestaand = null;
+      try { bestaand = await (await fotosDir.getFileHandle(`${v.naam}.jpg`)).getFile(); } catch (e) { /* nieuw */ }
+      if (!bestaand || bestaand.size !== bytes.length) await schrijfBestand(fotosDir, `${v.naam}.jpg`, bytes);
+      v.obj[v.key] = `fotos/${v.naam}.jpg`;
+    }
+    await schrijfBestand(dir, 'woning.json', JSON.stringify(kopie, null, 1));
     if (w.bestand !== naam) { w.bestand = naam; dbPutWoning(w); }
     backupStatus(`Backup ok: ${naam}`);
   } catch (e) {
@@ -225,17 +244,51 @@ async function schrijfBackup(w) {
 
 async function verwijderBackup(w) {
   if (!backupDir || !w || !w.bestand) return;
-  try { await backupDir.removeEntry(w.bestand); } catch (e) { /* al weg */ }
+  try { await backupDir.removeEntry(w.bestand, { recursive: true }); } catch (e) { /* al weg */ }
 }
 
 async function backupAlles() {
   if (!backupDir) return;
   const alle = await dbAlleWoningen();
   for (const w of alle) await schrijfBackup(w);
+  backupStatus(`Alles bewaard: ${alle.length} woning${alle.length === 1 ? '' : 'en'} in map "${backupDir.name}"`);
+}
+
+/* alles terugzetten uit de backupmap (map per woning met woning.json en fotos/) */
+async function zetAllesTerug() {
+  if (!backupDir) return;
+  if (!confirm('Alles terugzetten uit de backupmap? Woningen met dezelfde id worden overschreven.')) return;
+  let n = 0, fout = 0;
+  for await (const h of backupDir.values()) {
+    if (h.kind !== 'directory') continue;
+    try {
+      const jf = await (await h.getFileHandle('woning.json')).getFile();
+      const w = JSON.parse(await jf.text());
+      for (const v of woningFotoVelden(w)) {
+        const pad = v.obj[v.key];
+        if (typeof pad === 'string' && !pad.startsWith('data:')) {
+          try {
+            const fotosDir = await h.getDirectoryHandle('fotos');
+            const f = await (await fotosDir.getFileHandle(pad.split('/').pop())).getFile();
+            v.obj[v.key] = bytesNaarDataUrl(new Uint8Array(await f.arrayBuffer()));
+          } catch (e) { v.obj[v.key] = null; }
+        }
+      }
+      await dbPutWoning(normaliseer(w));
+      n++;
+    } catch (e) { fout++; /* map zonder woning.json: overslaan */ }
+  }
+  await renderLijst();
+  toast(n ? `${n} woning${n === 1 ? '' : 'en'} teruggezet${fout ? `, ${fout} map(pen) overgeslagen` : ''}` : 'Niets gevonden in de backupmap');
 }
 
 function backupStatus(msg) {
   $('#backupstatus').textContent = msg;
+}
+
+function backupKnoppen() {
+  $('#backupknoppen').hidden = !backupDir;
+  if (backupDir) $('#btn-backupmap').textContent = '\u{1F4C1} Backupmap wijzigen';
 }
 
 async function laadBackupmap() {
@@ -243,10 +296,11 @@ async function laadBackupmap() {
   $('#btn-backupmap').hidden = false;
   try {
     const h = await dbGetInstelling('backupmap');
-    if (!h) { backupStatus('Geen backupmap gekozen. Kies een map voor automatische JSON-backups.'); return; }
+    if (!h) { backupStatus('Geen backupmap gekozen. Kies een map, dan bewaart de app daar automatisch alles leesbaar.'); return; }
     const perm = await h.queryPermission({ mode: 'readwrite' });
     if (perm === 'granted') {
       backupDir = h;
+      backupKnoppen();
       backupStatus(`Backupmap actief: ${h.name}`);
       backupAlles();
     } else {
@@ -268,14 +322,22 @@ $('#btn-backupmap').addEventListener('click', async () => {
       await dbZetInstelling('backupmap', h);
       backupDir = h;
     }
-    $('#btn-backupmap').textContent = '\u{1F4C1} Backupmap wijzigen';
+    backupKnoppen();
     backupStatus(`Backupmap actief: ${backupDir.name}`);
     await backupAlles();
-    toast('Alle woningen gebackupt');
+    toast('Alle woningen bewaard in de map');
   } catch (e) {
     if (e.name !== 'AbortError') backupStatus('Backupmap kiezen mislukt.');
   }
 });
+
+$('#btn-bewaaralles').addEventListener('click', async () => {
+  if (!backupDir) return;
+  await backupAlles();
+  toast('Alles bewaard');
+});
+
+$('#btn-terugzetten').addEventListener('click', zetAllesTerug);
 
 /* ============================== views ============================== */
 
@@ -340,7 +402,6 @@ async function renderLijst() {
     return;
   }
   alle.forEach(w => {
-    const tot = (w.ramen || []).reduce((a, r) => a + r.b * r.h, 0);
     const li = document.createElement('li');
     li.className = 'woning';
     li.dataset.id = w.id;
@@ -348,7 +409,7 @@ async function renderLijst() {
       (w.algemeen.foto ? `<img class="thumb" src="${w.algemeen.foto}" alt="">` : '') +
       `<div class="info">
          <div class="r1">${esc(w.algemeen.adres || 'Zonder adres')}</div>
-         <div class="r3">${esc(w.algemeen.datum || '')} · ${(w.ramen || []).length} elementen · ${fmt(tot)} m²</div>
+         <div class="r3">${esc(w.algemeen.datum || '')}</div>
        </div>
        <button type="button" class="status ${w.status}" data-id="${w.id}">${STATUS_NAMEN[w.status] || 'Open'}</button>
        <button type="button" class="del" data-id="${w.id}">×</button>`;
@@ -1090,14 +1151,6 @@ async function toonExportStatus() {
     : 'Nog geen export gemaakt. Bewaar regelmatig alles in Bestanden.');
 }
 
-$('#btn-exportalles').addEventListener('click', async () => {
-  const alle = await dbAlleWoningen();
-  if (!alle.length) { toast('Nog geen woningen'); return; }
-  downloadBlob(`epc-backup-${vandaag()}.zip`, maakBackupZip(alle));
-  await stempelExport();
-  toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} geëxporteerd`);
-});
-
 /* iOS: deel de backup-zip naar de Files-app via het deelmenu */
 $('#btn-deelalles').addEventListener('click', async () => {
   const alle = await dbAlleWoningen();
@@ -1174,20 +1227,6 @@ $('#importinput').addEventListener('change', () => {
   importeerBestanden([...$('#importinput').files]);
 });
 
-/* desktop: lees alle epc-json-bestanden uit een gekozen map */
-$('#btn-importmap').addEventListener('click', async () => {
-  try {
-    const dir = await window.showDirectoryPicker();
-    const files = [];
-    for await (const h of dir.values()) {
-      if (h.kind === 'file' && /\.(json|zip)$/i.test(h.name)) files.push(await h.getFile());
-    }
-    if (!files.length) { toast('Geen JSON- of zip-bestanden in deze map'); return; }
-    await importeerBestanden(files);
-  } catch (e) {
-    if (e.name !== 'AbortError') toast('Map importeren mislukt');
-  }
-});
 
 $('#btn-verwijder-woning').addEventListener('click', async () => {
   if (!S) return;
@@ -1251,8 +1290,7 @@ function syncAlles() {
   /* vraag persistente opslag aan tegen eviction */
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
 
-  if (FSA) $('#btn-importmap').hidden = false;
-  else if (kanDelen()) $('#btn-deelalles').hidden = false;
+  if (!FSA && kanDelen()) $('#btn-deelalles').hidden = false;
 
   await laadBackupmap();
   await toonExportStatus();

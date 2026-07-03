@@ -27,11 +27,13 @@
   <h2>Woningen</h2>
   <ul id="woninglijst" class="lijst"></ul>
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
-  <button type="button" class="btn sec big" id="btn-exportalles">&#11015; Exporteer alle woningen</button>
   <button type="button" class="btn sec big" id="btn-deelalles" hidden>&#128228; Bewaar alles in Bestanden</button>
-  <button type="button" class="btn sec big" id="btn-importeer">&#11014; Importeer backup</button>
-  <button type="button" class="btn sec big" id="btn-importmap" hidden>&#128194; Importeer map</button>
   <button type="button" class="btn sec big" id="btn-backupmap" hidden>&#128193; Kies backupmap</button>
+  <div class="knoprij" id="backupknoppen" hidden>
+    <button type="button" class="btn big" id="btn-bewaaralles">&#128190; Bewaar alles</button>
+    <button type="button" class="btn sec big" id="btn-terugzetten">&#8617; Zet alles terug</button>
+  </div>
+  <button type="button" class="btn sec big" id="btn-importeer">&#11014; Importeer backup</button>
   <div id="backupstatus"></div>
 
   <details id="uitleg">
@@ -102,16 +104,16 @@
     <span class="lbl">Gevel</span>
     <div id="kompaswrap">
       <svg id="kompas" viewBox="0 0 200 200" aria-label="Kies gevel">
-        <polygon class="gevel" data-v="achter" points="4,4 196,4 138,62 62,62"/>
+        <polygon class="gevel" data-v="voor"   points="4,4 196,4 138,62 62,62"/>
         <polygon class="gevel" data-v="rechts" points="196,4 196,196 138,138 138,62"/>
-        <polygon class="gevel" data-v="voor"   points="4,196 62,138 138,138 196,196"/>
+        <polygon class="gevel" data-v="achter" points="4,196 62,138 138,138 196,196"/>
         <polygon class="gevel" data-v="links"  points="4,4 62,62 62,138 4,196"/>
         <g id="kompashuis">
           <rect x="70" y="88" width="60" height="42" rx="3"/>
           <polygon points="66,90 100,68 134,90"/>
         </g>
-        <text data-v="achter" x="100" y="40"  text-anchor="middle">ACHTER</text>
-        <text data-v="voor"   x="100" y="172" text-anchor="middle">VOOR</text>
+        <text data-v="voor"   x="100" y="40"  text-anchor="middle">VOOR</text>
+        <text data-v="achter" x="100" y="172" text-anchor="middle">ACHTER</text>
         <text data-v="links"  x="30"  y="104" text-anchor="middle" transform="rotate(-90 30 100)">LINKS</text>
         <text data-v="rechts" x="170" y="104" text-anchor="middle" transform="rotate(90 170 100)">RECHTS</text>
       </svg>
