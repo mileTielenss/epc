@@ -86,7 +86,7 @@ function leegWoning() {
     gemaakt: nu(),
     gewijzigd: nu(),
     bestand: null,
-    algemeen: { adres: '', datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
+    algemeen: { adres: '', foto: null, datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
     ramen: [],
     energie: { opwekkers: [], pv: '', kwp: '' },
     ventilatie: { ruimtes: [] },
@@ -345,6 +345,7 @@ async function renderLijst() {
     li.className = 'woning';
     li.dataset.id = w.id;
     li.innerHTML =
+      (w.algemeen.foto ? `<img class="thumb" src="${w.algemeen.foto}" alt="">` : '') +
       `<div class="info">
          <div class="r1">${esc(w.algemeen.adres || 'Zonder adres')}</div>
          <div class="r3">${esc(w.algemeen.datum || '')} · ${(w.ramen || []).length} elementen · ${fmt(tot)} m²</div>
@@ -356,6 +357,7 @@ async function renderLijst() {
 }
 
 $('#woninglijst').addEventListener('click', async e => {
+  if (e.target.closest('img.thumb')) return; /* tik op fotominiatuur: enkel lightbox */
   const del = e.target.closest('.del');
   if (del) {
     const w = await dbGetWoning(del.dataset.id);
@@ -477,6 +479,23 @@ $('#btn-locatie').addEventListener('click', () => {
     toast('Adres ingevuld');
   }, () => toast('Locatie niet beschikbaar'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 });
+/* hoofdfoto van de woning, komt op de one-pager en in de woningenlijst */
+$('#btn-hoofdfoto').addEventListener('click', () => neemFoto(data => {
+  S.algemeen.foto = data;
+  updateHoofdfotoThumb();
+  bewaar();
+}));
+$('#btn-hoofdfoto-del').addEventListener('click', () => {
+  S.algemeen.foto = null;
+  updateHoofdfotoThumb();
+  bewaar();
+});
+function updateHoofdfotoThumb() {
+  const t = $('#hoofdfoto-thumb'), d = $('#btn-hoofdfoto-del');
+  t.hidden = d.hidden = !S.algemeen.foto;
+  if (S.algemeen.foto) t.src = S.algemeen.foto;
+}
+
 bind('#datum', v => S.algemeen.datum = v);
 bind('#bouwjaar', v => S.algemeen.bouwjaar = v);
 bind('#notities', v => S.algemeen.notities = v);
@@ -827,7 +846,8 @@ function buildPrint() {
   const A = S.algemeen;
   const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h, 0);
 
-  let html = `<h1>EPC Plaatsbezoek</h1>
+  let html = (A.foto ? `<img class="hoofdfoto" src="${A.foto}" alt="">` : '') +
+    `<h1>EPC Plaatsbezoek</h1>
     <p class="sub">${esc(A.adres || 'Adres onbekend')} · ${esc(A.datum || '')} · ${esc(GEBOUW_NAMEN[A.gebouwtype] || '')}${A.bouwjaar ? ' · bouwjaar ' + esc(A.bouwjaar) : ''}</p>`;
 
   /* ramen & deuren */
@@ -997,6 +1017,7 @@ function bytesNaarDataUrl(bytes) {
 
 function woningFotoVelden(w) {
   const velden = [];
+  if ((w.algemeen || {}).foto) velden.push({ obj: w.algemeen, naam: 'hoofdfoto' });
   (w.ramen || []).forEach(r => { if (r.foto) velden.push({ obj: r, naam: `raam-${r.nr}` }); });
   ((w.energie || {}).opwekkers || []).forEach(o => { if (o.foto) velden.push({ obj: o, naam: `opwekker-${o.nr}` }); });
   return velden;
@@ -1166,6 +1187,7 @@ $('#btn-verwijder-woning').addEventListener('click', async () => {
 function syncAlles() {
   /* algemeen */
   $('#adres').value = S.algemeen.adres;
+  updateHoofdfotoThumb();
   $('#datum').value = S.algemeen.datum;
   $('#bouwjaar').value = S.algemeen.bouwjaar;
   $('#notities').value = S.algemeen.notities;

@@ -14,7 +14,7 @@ Het startscherm toont alle woningen. Tik op een woning om ze te openen, op de st
 
 ## Tabs
 
-- **Algemeen**: adres (met locatieknop: GPS plus OpenStreetMap, de enige externe call in de app), datum, gebouwtype, bouwjaar, notities.
+- **Algemeen**: adres (met locatieknop: GPS plus OpenStreetMap, de enige externe call in de app), hoofdfoto van de woning (komt op de one-pager en in de woningenlijst), datum, gebouwtype, bouwjaar, notities.
 - **Ramen**: snelle invoer per element met gevelkompas, afmetingen in cm (komma-decimalen), beglazing, kader, rolluik en foto van de afstandhouder. Knop "Zelfde als vorige" herhaalt de laatste invoer met nieuwe afmetingen.
 - **Energie**: opwekkers toevoegen (gas, stookolie, airco, andere) met wat ze doen (radiatoren, vloerverwarming, sanitair warm water), beschrijving en kenplaatfoto. Bij airco ook kamerafmetingen in cm voor het volume. Daarnaast PV.
 - **Ventilatie**: kies geen/natuurlijk/mechanisch en tik daarna de ruimtes aan; tik op een ruimte in de lijst om te wisselen.

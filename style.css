@@ -219,6 +219,7 @@ textarea{resize:vertical}
   #printview{display:block !important}
   body{background:#fff}
   #printview{font-size:10px;color:#000;font-family:-apple-system,"Segoe UI",Arial,sans-serif}
+  #printview .hoofdfoto{float:right;width:40mm;max-height:32mm;object-fit:cover;border:1px solid #999;margin:0 0 4px 6px}
   #printview h1{font-size:15px;margin:0 0 2px}
   #printview .sub{font-size:10px;color:#333;margin:0 0 10px}
   #printview h2{font-size:11px;margin:10px 0 4px;border-bottom:1.5px solid #000;padding-bottom:2px;text-transform:uppercase;letter-spacing:.03em}
