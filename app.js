@@ -817,40 +817,103 @@ $('#btn-export').addEventListener('click', () => {
   toast('JSON geëxporteerd');
 });
 
+function alleWoningenBundel(alle) {
+  return { type: 'epc-alle-woningen', geexporteerd: nu(), woningen: alle };
+}
+
+async function stempelExport() {
+  await dbZetInstelling('laatsteExport', nu());
+  toonExportStatus();
+}
+
+async function toonExportStatus() {
+  if (FSA) return; /* op desktop toont de backupmap zijn eigen status */
+  const t = await dbGetInstelling('laatsteExport');
+  backupStatus(t
+    ? `Laatste export: ${new Date(t).toLocaleString('nl-BE')}`
+    : 'Nog geen export gemaakt. Bewaar regelmatig alles in Bestanden.');
+}
+
 $('#btn-exportalles').addEventListener('click', async () => {
   const alle = await dbAlleWoningen();
   if (!alle.length) { toast('Nog geen woningen'); return; }
-  downloadJson(`epc-alle-woningen-${vandaag()}.json`, { type: 'epc-alle-woningen', geexporteerd: nu(), woningen: alle });
+  downloadJson(`epc-alle-woningen-${vandaag()}.json`, alleWoningenBundel(alle));
+  await stempelExport();
   toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} geëxporteerd`);
 });
+
+/* iOS: deel de bundel naar de Files-app via het deelmenu */
+$('#btn-deelalles').addEventListener('click', async () => {
+  const alle = await dbAlleWoningen();
+  if (!alle.length) { toast('Nog geen woningen'); return; }
+  const naam = `epc-alle-woningen-${vandaag()}.json`;
+  const file = new File([JSON.stringify(alleWoningenBundel(alle), null, 1)], naam, { type: 'application/json' });
+  try {
+    await navigator.share({ files: [file], title: naam });
+    await stempelExport();
+    toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} gedeeld`);
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      downloadJson(naam, alleWoningenBundel(alle));
+      await stempelExport();
+    }
+  }
+});
+
+function kanDelen() {
+  try {
+    const f = new File(['{}'], 'test.json', { type: 'application/json' });
+    return !!(navigator.canShare && navigator.canShare({ files: [f] }));
+  } catch (e) { return false; }
+}
+
+/* een geparste JSON kan 1 woning of een alle-woningen-bundel zijn */
+async function importeerData(p) {
+  const lijst = Array.isArray(p.woningen) ? p.woningen : (p.algemeen ? [p] : null);
+  if (!lijst) throw new Error('geen epc-bestand');
+  let n = 0;
+  for (const item of lijst) {
+    const w = normaliseer(item);
+    await dbPutWoning(w);
+    schrijfBackup(w);
+    n++;
+  }
+  return n;
+}
+
+async function importeerBestanden(files) {
+  let n = 0, fout = 0;
+  for (const f of files) {
+    try {
+      n += await importeerData(JSON.parse(await f.text()));
+    } catch (e) { fout++; }
+  }
+  await renderLijst();
+  if (n) toast(`${n} woning${n === 1 ? '' : 'en'} geïmporteerd${fout ? `, ${fout} bestand(en) overgeslagen` : ''}`);
+  else toast('Import mislukt: geen geldig bestand');
+}
 
 $('#btn-importeer').addEventListener('click', () => {
   $('#importinput').value = '';
   $('#importinput').click();
 });
 $('#importinput').addEventListener('change', () => {
-  const f = $('#importinput').files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = async () => {
-    try {
-      const p = JSON.parse(r.result);
-      const lijst = Array.isArray(p.woningen) ? p.woningen : (p.algemeen ? [p] : null);
-      if (!lijst) throw new Error('geen epc-bestand');
-      let n = 0;
-      for (const item of lijst) {
-        const w = normaliseer(item);
-        await dbPutWoning(w);
-        schrijfBackup(w);
-        n++;
-      }
-      await renderLijst();
-      toast(`${n} woning${n === 1 ? '' : 'en'} geïmporteerd`);
-    } catch (e) {
-      toast('Import mislukt: geen geldig bestand');
+  importeerBestanden([...$('#importinput').files]);
+});
+
+/* desktop: lees alle epc-json-bestanden uit een gekozen map */
+$('#btn-importmap').addEventListener('click', async () => {
+  try {
+    const dir = await window.showDirectoryPicker();
+    const files = [];
+    for await (const h of dir.values()) {
+      if (h.kind === 'file' && h.name.toLowerCase().endsWith('.json')) files.push(await h.getFile());
     }
-  };
-  r.readAsText(f);
+    if (!files.length) { toast('Geen JSON-bestanden in deze map'); return; }
+    await importeerBestanden(files);
+  } catch (e) {
+    if (e.name !== 'AbortError') toast('Map importeren mislukt');
+  }
 });
 
 $('#btn-verwijder-woning').addEventListener('click', async () => {
@@ -919,16 +982,11 @@ function syncAlles() {
   /* vraag persistente opslag aan tegen eviction */
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
 
-  /* migratie: oude single-woning opslag uit v1 */
-  try {
-    const oud = localStorage.getItem('epc-plaatsbezoek-v1');
-    if (oud) {
-      await dbPutWoning(normaliseer(JSON.parse(oud)));
-      localStorage.removeItem('epc-plaatsbezoek-v1');
-    }
-  } catch (e) { /* corrupte oude opslag: negeren */ }
+  if (FSA) $('#btn-importmap').hidden = false;
+  else if (kanDelen()) $('#btn-deelalles').hidden = false;
 
   await laadBackupmap();
+  await toonExportStatus();
   await renderLijst();
   toonLijst();
 

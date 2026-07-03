@@ -28,7 +28,9 @@
   <ul id="woninglijst" class="lijst"></ul>
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
   <button type="button" class="btn sec big" id="btn-exportalles">&#11015; Exporteer alle woningen</button>
+  <button type="button" class="btn sec big" id="btn-deelalles" hidden>&#128228; Bewaar alles in Bestanden</button>
   <button type="button" class="btn sec big" id="btn-importeer">&#11014; Importeer JSON</button>
+  <button type="button" class="btn sec big" id="btn-importmap" hidden>&#128194; Importeer map</button>
   <button type="button" class="btn sec big" id="btn-backupmap" hidden>&#128193; Kies backupmap</button>
   <div id="backupstatus"></div>
 </section>
@@ -298,7 +300,7 @@
 
 <div id="toast" hidden></div>
 <input type="file" id="fotoinput" accept="image/*" capture="environment" hidden>
-<input type="file" id="importinput" accept=".json,application/json" hidden>
+<input type="file" id="importinput" accept=".json,application/json" multiple hidden>
 <div id="printview"></div>
 
 <script src="app.js"></script>
