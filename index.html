@@ -162,49 +162,37 @@
   <div class="fld">
     <span class="lbl">Opwekker</span>
     <div class="seg" id="seg-opwektype">
-      <button type="button" data-v="gasketel">Gasketel</button>
-      <button type="button" data-v="stookolie">Stookolieketel</button>
-      <button type="button" data-v="warmtepomp">Warmtepomp</button>
+      <button type="button" data-v="gas">Gas</button>
+      <button type="button" data-v="stookolie">Stookolie</button>
       <button type="button" data-v="airco">Airco</button>
-      <button type="button" data-v="elektrisch">Elektrisch</button>
-      <button type="button" data-v="kachel">Kachel</button>
+      <button type="button" data-v="andere">Andere</button>
     </div>
   </div>
 
   <div class="fld">
     <span class="lbl">Doet (meerdere mogelijk)</span>
     <div class="chips" id="chips-opwekfunctie">
-      <button type="button" data-v="verwarming">Verwarming</button>
-      <button type="button" data-v="sww">Warm water</button>
+      <button type="button" data-v="radiatoren">Radiatoren</button>
+      <button type="button" data-v="vloer">Vloerverwarming</button>
+      <button type="button" data-v="sww">Sanitair warm water</button>
     </div>
   </div>
 
-  <div class="fld" id="opw-ketel" hidden>
-    <span class="lbl">Type ketel</span>
-    <div class="seg" id="seg-ketelcond">
-      <button type="button" data-v="condenserend">Condenserend</button>
-      <button type="button" data-v="niet-condenserend">Niet-condenserend</button>
-    </div>
-  </div>
-
-  <div class="fld" id="opw-wp" hidden>
-    <span class="lbl">Type warmtepomp</span>
-    <div class="seg" id="seg-wptype">
-      <button type="button" data-v="lucht-water">Lucht-water</button>
-      <button type="button" data-v="lucht-lucht">Lucht-lucht</button>
-      <button type="button" data-v="bodem-water">Bodem-water</button>
-      <button type="button" data-v="water-water">Water-water</button>
+  <div class="fld" id="opw-kamer" hidden>
+    <span class="lbl">Kamer (cm)</span>
+    <div class="dims">
+      <input type="text" id="kamer-b" inputmode="decimal" placeholder="breed">
+      <span class="x">&times;</span>
+      <input type="text" id="kamer-d" inputmode="decimal" placeholder="diep">
+      <span class="x">&times;</span>
+      <input type="text" id="kamer-h" inputmode="decimal" placeholder="hoog">
+      <span class="m2live" id="m3live"></span>
     </div>
   </div>
 
   <label class="fld">
-    <span class="lbl">Merk / omschrijving</span>
-    <input type="text" id="opw-merk" placeholder="bv. Vaillant, of: unit in living">
-  </label>
-
-  <label class="fld">
-    <span class="lbl">Bouwjaar toestel</span>
-    <input type="number" id="opw-jaar" inputmode="numeric" placeholder="bv. 2015">
+    <span class="lbl">Beschrijving</span>
+    <input type="text" id="opw-beschrijving" placeholder="bv. Vaillant condenserend 2015">
   </label>
 
   <div class="fld fotorow">
@@ -215,27 +203,6 @@
 
   <button type="button" class="btn big" id="btn-opwek-voegtoe">Voeg opwekker toe</button>
   <ul id="opweklijst" class="lijst"></ul>
-
-  <div class="fld">
-    <span class="lbl">Afgifte (meerdere mogelijk)</span>
-    <div class="chips" id="chips-emissie">
-      <button type="button" data-v="radiatoren">Radiatoren</button>
-      <button type="button" data-v="vloerverwarming">Vloerverwarming</button>
-      <button type="button" data-v="convectoren">Convectoren</button>
-      <button type="button" data-v="lucht">Lucht</button>
-    </div>
-  </div>
-
-  <div class="fld">
-    <span class="lbl">Sanitair warm water</span>
-    <div class="seg" id="seg-sww">
-      <button type="button" data-v="cv-ketel">Via cv-ketel</button>
-      <button type="button" data-v="elektrische-boiler">Elektr. boiler</button>
-      <button type="button" data-v="warmtepompboiler">WP-boiler</button>
-      <button type="button" data-v="zonneboiler">Zonneboiler</button>
-      <button type="button" data-v="doorstromer">Doorstromer</button>
-    </div>
-  </div>
 
   <div class="fld">
     <span class="lbl">PV-panelen</span>
@@ -254,18 +221,16 @@
 <!-- ======================= TAB 4: VENTILATIE ======================= -->
 <section class="tab" id="tab-ventilatie">
   <div class="fld">
-    <span class="lbl">Systeem</span>
-    <div class="seg" id="seg-ventsysteem">
+    <span class="lbl">Ventilatie</span>
+    <div class="seg" id="seg-ventmode">
       <button type="button" data-v="geen">Geen</button>
-      <button type="button" data-v="A">A</button>
-      <button type="button" data-v="B">B</button>
-      <button type="button" data-v="C">C</button>
-      <button type="button" data-v="D">D</button>
+      <button type="button" data-v="natuurlijk">Natuurlijk</button>
+      <button type="button" data-v="mechanisch">Mechanisch</button>
     </div>
   </div>
 
   <div class="fld">
-    <span class="lbl">Ruimte toevoegen</span>
+    <span class="lbl">Tik de ruimtes aan</span>
     <div class="chips" id="vent-chips">
       <button type="button" data-v="Living">Living</button>
       <button type="button" data-v="Keuken">Keuken</button>
@@ -281,10 +246,7 @@
 
 <!-- ======================= TAB 5: EXPORT ======================= -->
 <section class="tab" id="tab-export">
-  <div class="panel" id="samenvatting"></div>
-
   <button type="button" class="btn big" id="btn-print">&#128424; Print one-pager (PDF)</button>
-  <button type="button" class="btn sec big" id="btn-export">&#11015; Exporteer deze woning (JSON)</button>
   <button type="button" class="btn sec big" id="btn-sluiten">Woning sluiten</button>
   <button type="button" class="btn danger big" id="btn-verwijder-woning">Woning verwijderen</button>
 </section>
@@ -296,7 +258,7 @@
   <button type="button" data-tab="ramen"><span class="ic">&#129695;</span>Ramen</button>
   <button type="button" data-tab="energie"><span class="ic">&#9889;</span>Energie</button>
   <button type="button" data-tab="ventilatie"><span class="ic">&#127788;&#65039;</span>Ventilatie</button>
-  <button type="button" data-tab="export"><span class="ic">&#128196;</span>Export</button>
+  <button type="button" data-tab="export"><span class="ic">&#9989;</span>Afronden</button>
 </nav>
 
 <div id="toast" hidden></div>

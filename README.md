@@ -14,23 +14,22 @@ Het startscherm toont alle woningen. Tik op een woning om ze te openen, op de st
 
 ## Tabs
 
-- **Algemeen**: adres, datum, gebouwtype, bouwjaar, notities.
-- **Ramen**: snelle invoer per element met gevelkompas, afmetingen (komma-decimalen, lasermeter), beglazing, kader, rolluik en foto van de afstandhouder. Knop "Zelfde als vorige" herhaalt de laatste invoer met nieuwe afmetingen.
-- **Energie**: opwekking (multi-select, met detailpanelen voor ketel, warmtepomp en airco-binnenunits), afgifte, sanitair warm water, PV.
-- **Ventilatie**: systeem (geen/A/B/C/D) en per ruimte de voorziening.
-- **Export**: samenvatting, one-pager naar PDF via print, JSON export van de woning, woning sluiten of verwijderen.
+- **Algemeen**: adres (met locatieknop: GPS plus OpenStreetMap, de enige externe call in de app), datum, gebouwtype, bouwjaar, notities.
+- **Ramen**: snelle invoer per element met gevelkompas, afmetingen in cm (komma-decimalen), beglazing, kader, rolluik en foto van de afstandhouder. Knop "Zelfde als vorige" herhaalt de laatste invoer met nieuwe afmetingen.
+- **Energie**: opwekkers toevoegen (gas, stookolie, airco, andere) met wat ze doen (radiatoren, vloerverwarming, sanitair warm water), beschrijving en kenplaatfoto. Bij airco ook kamerafmetingen in cm voor het volume. Daarnaast PV.
+- **Ventilatie**: kies geen/natuurlijk/mechanisch en tik daarna de ruimtes aan; tik op een ruimte in de lijst om te wisselen.
+- **Afronden**: one-pager naar PDF via print, woning sluiten of verwijderen.
 
 ## Data en backups
 
 Elke woning is een eigen record in IndexedDB, elke 3 seconden en bij het verlaten van de pagina bewaard. Foto's worden verkleind tot max 900px JPEG kwaliteit 0.7. De JSON is leesbaar en bevat alles, ook de foto's (base64).
 
-Drie manieren om data uit de app te halen:
+Manieren om data uit de app te halen:
 
 1. **Backupmap (desktop Chrome/Edge)**: kies één keer een map via "Kies backupmap" op het startscherm. Daarna schrijft elke save automatisch `epc-<adres>-<id>.json` per woning naar die map. Gaat de app ooit stuk, dan staan de bestanden er nog.
-2. **Exporteer alle woningen**: één JSON-bestand met alles, werkt overal, ook op iPhone (komt in de Files app terecht). Doe dit regelmatig op iOS, want daar kan de browser niet stil naar bestanden schrijven.
-3. **Exporteer deze woning**: één JSON per woning vanuit de Export-tab.
+2. **Exporteer alle woningen / Bewaar alles in Bestanden**: één JSON-bestand met alles. Op iPhone via het deelmenu naar de Files-app; doe dit regelmatig, want iOS laat de browser niet stil naar bestanden schrijven. Het startscherm toont de laatste exportdatum.
 
-Importeren kan met beide formaten (één woning of alles-bestand); bestaande woningen met dezelfde id worden overschreven.
+Importeren kan per bestand (meerdere tegelijk) of met "Importeer map" (desktop); beide formaten (één woning of alles-bestand) worden herkend. Bestaande woningen met dezelfde id worden overschreven.
 
 ## Iconen opnieuw genereren
 

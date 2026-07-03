@@ -88,18 +88,34 @@ function leegWoning() {
     bestand: null,
     algemeen: { adres: '', datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
     ramen: [],
-    energie: {
-      opwekkers: [],
-      emissie: [],
-      sww: '',
-      pv: '',
-      kwp: ''
-    },
-    ventilatie: { systeem: '', ruimtes: [] },
+    energie: { opwekkers: [], pv: '', kwp: '' },
+    ventilatie: { ruimtes: [] },
     teller: 0,
     tellerOpwek: 0
   };
 }
+
+/* opwekker uit oudere modellen omzetten naar {nr,type,functie,beschrijving,foto,kamer} */
+function migreerOpwekker(o, emissie) {
+  if (o.beschrijving !== undefined) return o; /* al nieuw model */
+  const type = { gasketel: 'gas', stookolie: 'stookolie', airco: 'airco' }[o.type] || 'andere';
+  const EXTRA = { warmtepomp: 'warmtepomp', elektrisch: 'elektrische verwarming', kachel: 'kachel' };
+  const beschrijving = [EXTRA[o.type], o.wptype, o.cond, o.merk, o.jaar ? 'bouwjaar ' + o.jaar : '']
+    .filter(Boolean).join(', ');
+  const functie = [];
+  if ((o.functie || []).includes('verwarming')) {
+    if (emissie.includes('radiatoren')) functie.push('radiatoren');
+    if (emissie.includes('vloerverwarming')) functie.push('vloer');
+  }
+  if ((o.functie || []).includes('sww')) functie.push('sww');
+  return { nr: o.nr, type, functie, beschrijving, foto: o.foto || null, kamer: null };
+}
+
+const VENT_MIGRATIE = {
+  geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch',
+  raamrooster: 'natuurlijk', muurrooster: 'natuurlijk',
+  afvoerventiel: 'mechanisch', toevoerventiel: 'mechanisch', 'mechanische-ventilator': 'mechanisch'
+};
 
 /* ondiepe merge zodat oudere records nieuwe velden krijgen */
 function normaliseer(p) {
@@ -113,7 +129,7 @@ function normaliseer(p) {
   };
   if (!Array.isArray(w.energie.opwekkers)) w.energie.opwekkers = [];
 
-  /* migratie: oud energiemodel (opwek-chips + ketel/wp/airco-panelen) naar opwekkerslijst */
+  /* migratie: oudste energiemodel (opwek-chips + ketel/wp/airco-panelen) naar opwekkerslijst */
   if (!w.energie.opwekkers.length && Array.isArray(pe.opwek) && pe.opwek.length) {
     pe.opwek.forEach(t => {
       const o = { nr: w.energie.opwekkers.length + 1, type: t, functie: ['verwarming'], cond: '', wptype: '', merk: '', jaar: '', foto: null };
@@ -129,11 +145,19 @@ function normaliseer(p) {
       w.energie.opwekkers.push(o);
     });
   }
+  w.energie.opwekkers = w.energie.opwekkers.map(o => migreerOpwekker(o, pe.emissie || []));
   delete w.energie.opwek;
   delete w.energie.ketel;
   delete w.energie.wp;
   delete w.energie.airco;
+  delete w.energie.emissie;
+  delete w.energie.sww;
   w.tellerOpwek = Math.max(w.tellerOpwek || 0, ...w.energie.opwekkers.map(o => o.nr || 0), 0);
+
+  w.ventilatie.ruimtes = (w.ventilatie.ruimtes || []).map(r => ({
+    naam: r.naam, voorziening: VENT_MIGRATIE[r.voorziening] || 'geen'
+  }));
+  delete w.ventilatie.systeem;
 
   if (!w.id) w.id = nieuwId();
   if (!w.status) w.status = 'open';
@@ -403,7 +427,6 @@ $('#tabbar').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
   zetTab(b.dataset.tab);
-  if (b.dataset.tab === 'export') renderSamenvatting();
 });
 
 /* ============================== tab 1: algemeen ============================== */
@@ -605,29 +628,29 @@ $('#ramenlijst').addEventListener('click', e => {
 
 /* ============================== tab 3: energie ============================== */
 
-const OPWEK_NAMEN = {
-  gasketel: 'Gasketel', stookolie: 'Stookolieketel', warmtepomp: 'Warmtepomp',
-  airco: 'Airco', elektrisch: 'Elektrisch', kachel: 'Kachel'
-};
-const WP_NAMEN = { 'lucht-water': 'lucht-water', 'lucht-lucht': 'lucht-lucht', 'bodem-water': 'bodem-water', 'water-water': 'water-water' };
-const FUNCTIE_NAMEN = { verwarming: 'verwarming', sww: 'warm water' };
+const OPWEK_NAMEN = { gas: 'Gas', stookolie: 'Stookolie', airco: 'Airco', andere: 'Andere' };
+const FUNCTIE_NAMEN = { radiatoren: 'radiatoren', vloer: 'vloerverwarming', sww: 'warm water' };
 
 function leegDraftOpwek() {
-  return { type: 'gasketel', functie: ['verwarming'], cond: '', wptype: '', foto: null };
+  return { type: 'gas', functie: [], foto: null };
 }
 let draftOpwek = leegDraftOpwek();
 
-chipsInit('#chips-emissie', vals => { S.energie.emissie = vals; wijzig(); });
 chipsInit('#chips-opwekfunctie', vals => { draftOpwek.functie = vals; });
 
 segInit('#seg-opwektype', v => { draftOpwek.type = v; toonOpwekVelden(); });
-segInit('#seg-ketelcond', v => draftOpwek.cond = v);
-segInit('#seg-wptype', v => draftOpwek.wptype = v);
 
 function toonOpwekVelden() {
-  $('#opw-ketel').hidden = !(draftOpwek.type === 'gasketel' || draftOpwek.type === 'stookolie');
-  $('#opw-wp').hidden = draftOpwek.type !== 'warmtepomp';
+  $('#opw-kamer').hidden = draftOpwek.type !== 'airco';
 }
+
+function updateM3Live() {
+  const b = num($('#kamer-b').value) / 100, d = num($('#kamer-d').value) / 100, h = num($('#kamer-h').value) / 100;
+  $('#m3live').textContent = (b && d && h) ? fmt(b * d * h, 1) + ' m³' : '';
+}
+$('#kamer-b').addEventListener('input', updateM3Live);
+$('#kamer-d').addEventListener('input', updateM3Live);
+$('#kamer-h').addEventListener('input', updateM3Live);
 
 $('#btn-opwekfoto').addEventListener('click', () => neemFoto(data => {
   draftOpwek.foto = data;
@@ -646,44 +669,41 @@ function updateOpwekThumb() {
 function syncOpwekForm() {
   segSet('#seg-opwektype', draftOpwek.type);
   chipsSet('#chips-opwekfunctie', draftOpwek.functie);
-  segSet('#seg-ketelcond', draftOpwek.cond);
-  segSet('#seg-wptype', draftOpwek.wptype);
   toonOpwekVelden();
   updateOpwekThumb();
 }
 
 $('#btn-opwek-voegtoe').addEventListener('click', () => {
   if (!S) return;
-  if (!draftOpwek.functie.length) { toast('Kies wat de opwekker doet'); return; }
-  const ketel = draftOpwek.type === 'gasketel' || draftOpwek.type === 'stookolie';
+  let kamer = null;
+  if (draftOpwek.type === 'airco') {
+    const b = num($('#kamer-b').value) / 100, d = num($('#kamer-d').value) / 100, h = num($('#kamer-h').value) / 100;
+    if (b && d && h) kamer = { b, d, h };
+  }
   S.tellerOpwek = (S.tellerOpwek || 0) + 1;
   S.energie.opwekkers.push({
     nr: S.tellerOpwek,
     type: draftOpwek.type,
     functie: [...draftOpwek.functie],
-    cond: ketel ? draftOpwek.cond : '',
-    wptype: draftOpwek.type === 'warmtepomp' ? draftOpwek.wptype : '',
-    merk: $('#opw-merk').value.trim(),
-    jaar: $('#opw-jaar').value.trim(),
-    foto: draftOpwek.foto
+    beschrijving: $('#opw-beschrijving').value.trim(),
+    foto: draftOpwek.foto,
+    kamer
   });
   draftOpwek.foto = null;
   updateOpwekThumb();
-  $('#opw-merk').value = '';
-  $('#opw-jaar').value = '';
+  $('#opw-beschrijving').value = '';
+  $('#kamer-b').value = '';
+  $('#kamer-d').value = '';
+  $('#kamer-h').value = '';
+  updateM3Live();
   renderOpwekkers();
   bewaar();
   flash($('#btn-opwek-voegtoe'));
   toast(`${OPWEK_NAMEN[draftOpwek.type]} toegevoegd`);
 });
 
-function opwekDetails(o) {
-  const d = [];
-  if (o.cond) d.push(o.cond);
-  if (o.wptype) d.push(WP_NAMEN[o.wptype] || o.wptype);
-  if (o.merk) d.push(o.merk);
-  if (o.jaar) d.push('bouwjaar ' + o.jaar);
-  return d;
+function kamerTekst(k) {
+  return `kamer ${fmtCm(k.b)} × ${fmtCm(k.d)} × ${fmtCm(k.h)} cm = ${fmt(k.b * k.d * k.h, 1)} m³`;
 }
 
 function renderOpwekkers() {
@@ -691,7 +711,7 @@ function renderOpwekkers() {
   ul.innerHTML = '';
   [...S.energie.opwekkers].reverse().forEach(o => {
     const li = document.createElement('li');
-    const det = opwekDetails(o);
+    const det = [o.beschrijving, o.kamer ? kamerTekst(o.kamer) : ''].filter(Boolean);
     li.innerHTML =
       `<div class="info">
          <div class="r1">#${o.nr} ${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
@@ -716,12 +736,6 @@ $('#opweklijst').addEventListener('click', e => {
   bewaar();
 });
 
-const SWW_NAMEN = {
-  'cv-ketel': 'Via cv-ketel', 'elektrische-boiler': 'Elektrische boiler',
-  'warmtepompboiler': 'Warmtepompboiler', 'zonneboiler': 'Zonneboiler', 'doorstromer': 'Doorstromer'
-};
-segInit('#seg-sww', v => { S.energie.sww = v; wijzig(); });
-
 segInit('#seg-pv', v => {
   S.energie.pv = v;
   $('#fld-kwp').hidden = v !== 'ja';
@@ -731,7 +745,11 @@ bind('#kwp', v => S.energie.kwp = v);
 
 /* ============================== tab 4: ventilatie ============================== */
 
-segInit('#seg-ventsysteem', v => { S.ventilatie.systeem = v; wijzig(); });
+/* gekozen modus geldt voor elke ruimte die je daarna aantikt */
+const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch'];
+let ventMode = 'geen';
+
+segInit('#seg-ventmode', v => { ventMode = v; });
 
 $('#vent-chips').addEventListener('click', e => {
   const b = e.target.closest('button');
@@ -739,82 +757,49 @@ $('#vent-chips').addEventListener('click', e => {
   const basis = b.dataset.v;
   const zelfde = S.ventilatie.ruimtes.filter(r => r.naam === basis || r.naam.startsWith(basis + ' ')).length;
   const naam = zelfde ? `${basis} ${zelfde + 1}` : basis;
-  S.ventilatie.ruimtes.push({ naam, voorziening: 'geen' });
+  S.ventilatie.ruimtes.push({ naam, voorziening: ventMode });
   renderVent();
   bewaar();
+  toast(`${naam}: ${ventMode}`);
 });
-
-const VOORZIENINGEN = [
-  ['geen', 'Geen'],
-  ['afvoerventiel', 'Afvoerventiel'],
-  ['toevoerventiel', 'Toevoerventiel'],
-  ['raamrooster', 'Raamrooster'],
-  ['muurrooster', 'Muurrooster'],
-  ['mechanische-ventilator', 'Mechanische ventilator']
-];
-const VOORZIENING_NAMEN = Object.fromEntries(VOORZIENINGEN);
 
 function renderVent() {
   const ul = $('#ventlijst');
   ul.innerHTML = '';
   S.ventilatie.ruimtes.forEach((r, i) => {
     const li = document.createElement('li');
-    const opts = VOORZIENINGEN
-      .map(([v, n]) => `<option value="${v}"${r.voorziening === v ? ' selected' : ''}>${n}</option>`)
-      .join('');
     li.innerHTML =
-      `<span class="naam">${esc(r.naam)}</span>` +
-      `<select data-i="${i}">${opts}</select>` +
+      `<div class="info">
+         <div class="r1">${esc(r.naam)}</div>
+         <div class="r3">${esc(r.voorziening)} · tik om te wisselen</div>
+       </div>` +
       `<button type="button" class="del" data-i="${i}">×</button>`;
+    li.dataset.i = i;
     ul.appendChild(li);
   });
 }
-$('#ventlijst').addEventListener('change', e => {
-  const s = e.target.closest('select');
-  if (!s || !S) return;
-  S.ventilatie.ruimtes[Number(s.dataset.i)].voorziening = s.value;
-  bewaar();
-});
+
 $('#ventlijst').addEventListener('click', e => {
+  if (!S) return;
   const b = e.target.closest('.del');
-  if (!b || !S) return;
-  S.ventilatie.ruimtes.splice(Number(b.dataset.i), 1);
+  if (b) {
+    S.ventilatie.ruimtes.splice(Number(b.dataset.i), 1);
+    renderVent();
+    bewaar();
+    return;
+  }
+  /* tik op de ruimte zelf: wissel geen -> natuurlijk -> mechanisch */
+  const li = e.target.closest('li');
+  if (!li) return;
+  const r = S.ventilatie.ruimtes[Number(li.dataset.i)];
+  r.voorziening = VENT_MODES[(VENT_MODES.indexOf(r.voorziening) + 1) % VENT_MODES.length];
   renderVent();
   bewaar();
 });
 
-/* ============================== tab 5: export ============================== */
+/* ============================== tab 5: afronden ============================== */
 
-const EMISSIE_NAMEN = { radiatoren: 'Radiatoren', vloerverwarming: 'Vloerverwarming', convectoren: 'Convectoren', lucht: 'Lucht' };
 const GEBOUW_NAMEN = { open: 'Open bebouwing', halfopen: 'Halfopen bebouwing', gesloten: 'Gesloten bebouwing', appartement: 'Appartement' };
-
-function fotoCount() {
-  return S.ramen.filter(r => r.foto).length + S.energie.opwekkers.filter(o => o.foto).length;
-}
-
-function renderSamenvatting() {
-  if (!S) return;
-  const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h, 0);
-  const rijen = [
-    ['Adres', S.algemeen.adres || '-'],
-    ['Datum', S.algemeen.datum || '-'],
-    ['Type', GEBOUW_NAMEN[S.algemeen.gebouwtype] || '-'],
-    ['Bouwjaar', S.algemeen.bouwjaar || '-'],
-    ['Status', S.status === 'afgewerkt' ? 'Afgewerkt' : 'Open'],
-    ['Ramen & deuren', S.ramen.length ? `${S.ramen.length} elementen, ${fmt(totM2)} m²` : '-'],
-    ['Opwekking', S.energie.opwekkers.map(o => OPWEK_NAMEN[o.type] || o.type).join(', ') || '-'],
-    ['Afgifte', S.energie.emissie.map(v => EMISSIE_NAMEN[v]).join(', ') || '-'],
-    ['Warm water', SWW_NAMEN[S.energie.sww] || '-'],
-    ['PV', S.energie.pv === 'ja' ? `Ja${S.energie.kwp ? `, ${S.energie.kwp} kWp` : ''}` : (S.energie.pv === 'nee' ? 'Nee' : '-')],
-    ['Ventilatie', (S.ventilatie.systeem ? `Systeem ${S.ventilatie.systeem === 'geen' ? 'geen' : S.ventilatie.systeem}` : '-') +
-      (S.ventilatie.ruimtes.length ? `, ${S.ventilatie.ruimtes.length} ruimtes` : '')],
-    ['Foto’s', String(fotoCount())]
-  ];
-  $('#samenvatting').innerHTML =
-    '<h3>Samenvatting</h3><table>' +
-    rijen.map(([k, v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('') +
-    '</table>';
-}
 
 /* ---------- one-pager / print ---------- */
 
@@ -849,26 +834,25 @@ function buildPrint() {
   html += '<h2>Energie</h2>';
   const E = S.energie;
   if (E.opwekkers.length) {
-    html += '<table><tr><th>#</th><th>Opwekker</th><th>Doet</th><th>Details</th></tr>' +
+    html += '<table><tr><th>#</th><th>Opwekker</th><th>Doet</th><th>Beschrijving</th></tr>' +
       E.opwekkers.map(o =>
         `<tr><td>${o.nr}</td><td>${OPWEK_NAMEN[o.type] || esc(o.type)}</td>` +
         `<td>${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + '))}</td>` +
-        `<td>${esc(opwekDetails(o).join(', '))}</td></tr>`).join('') +
+        `<td>${esc([o.beschrijving, o.kamer ? kamerTekst(o.kamer) : ''].filter(Boolean).join(' · '))}</td></tr>`).join('') +
       '</table>';
   } else {
     html += '<p class="kv">Geen opwekkers genoteerd.</p>';
   }
-  html += `<p class="kv"><b>Afgifte</b> ${E.emissie.map(v => EMISSIE_NAMEN[v]).join(', ') || '-'}</p>`;
-  html += `<p class="kv"><b>Sanitair warm water</b> ${SWW_NAMEN[E.sww] || '-'}</p>`;
   html += `<p class="kv"><b>PV-panelen</b> ${E.pv === 'ja' ? 'ja' + (E.kwp ? ', ' + esc(E.kwp) + ' kWp' : '') : (E.pv === 'nee' ? 'nee' : '-')}</p>`;
 
   /* ventilatie */
   html += '<h2>Ventilatie</h2>';
-  html += `<p class="kv"><b>Systeem</b> ${S.ventilatie.systeem ? (S.ventilatie.systeem === 'geen' ? 'geen' : 'systeem ' + S.ventilatie.systeem) : '-'}</p>`;
   if (S.ventilatie.ruimtes.length) {
-    html += '<table><tr><th>Ruimte</th><th>Voorziening</th></tr>' +
-      S.ventilatie.ruimtes.map(r => `<tr><td>${esc(r.naam)}</td><td>${VOORZIENING_NAMEN[r.voorziening] || ''}</td></tr>`).join('') +
+    html += '<table><tr><th>Ruimte</th><th>Ventilatie</th></tr>' +
+      S.ventilatie.ruimtes.map(r => `<tr><td>${esc(r.naam)}</td><td>${esc(r.voorziening)}</td></tr>`).join('') +
       '</table>';
+  } else {
+    html += '<p class="kv">Geen ruimtes genoteerd.</p>';
   }
 
   /* notities */
@@ -905,12 +889,6 @@ function downloadJson(naam, data) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-
-$('#btn-export').addEventListener('click', () => {
-  if (!S) return;
-  downloadJson(bestandsnaam(S), S);
-  toast('JSON geëxporteerd');
-});
 
 function alleWoningenBundel(alle) {
   return { type: 'epc-alle-woningen', geexporteerd: nu(), woningen: alle };
@@ -1043,21 +1021,20 @@ function syncAlles() {
 
   /* energie: formulier volgt draftOpwek */
   syncOpwekForm();
-  $('#opw-merk').value = '';
-  $('#opw-jaar').value = '';
+  $('#opw-beschrijving').value = '';
+  $('#kamer-b').value = '';
+  $('#kamer-d').value = '';
+  $('#kamer-h').value = '';
+  updateM3Live();
   renderOpwekkers();
-  chipsSet('#chips-emissie', S.energie.emissie);
-  segSet('#seg-sww', S.energie.sww);
   segSet('#seg-pv', S.energie.pv);
   $('#fld-kwp').hidden = S.energie.pv !== 'ja';
   $('#kwp').value = S.energie.kwp;
 
-  /* ventilatie */
-  segSet('#seg-ventsysteem', S.ventilatie.systeem);
+  /* ventilatie: modus terug naar geen */
+  ventMode = 'geen';
+  segSet('#seg-ventmode', ventMode);
   renderVent();
-
-  /* export */
-  renderSamenvatting();
 }
 
 /* ============================== start ============================== */
