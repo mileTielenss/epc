@@ -1166,7 +1166,7 @@ $('#btn-deelalles').addEventListener('click', async () => {
   const naam = `epc-backup-${vandaag()}.zip`;
   const file = new File([maakBackupZip(alle)], naam, { type: 'application/zip' });
   try {
-    await navigator.share({ files: [file], title: naam });
+    await navigator.share({ files: [file] });
     await stempelExport();
     toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} bewaard`);
   } catch (e) {
