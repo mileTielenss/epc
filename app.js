@@ -160,6 +160,12 @@ function normaliseer(p) {
     delete w.energie.kwp;
   }
   w.tellerOpwek = Math.max(w.tellerOpwek || 0, ...w.energie.opwekkers.map(o => o.nr || 0), 0);
+  w.energie.opwekkers.forEach(o => { if (!o.nr) o.nr = ++w.tellerOpwek; });
+
+  /* ramen: tellers en ontbrekende nummers herstellen (bv. bij handgemaakte import) */
+  if (!Array.isArray(w.ramen)) w.ramen = [];
+  w.teller = Math.max(w.teller || 0, ...w.ramen.map(r => r.nr || 0), 0);
+  w.ramen.forEach(r => { if (!r.nr) r.nr = ++w.teller; });
 
   w.ventilatie.ruimtes = (w.ventilatie.ruimtes || []).map(r => ({
     naam: r.naam, voorziening: VENT_MIGRATIE[r.voorziening] || 'geen'
