@@ -154,17 +154,6 @@ textarea{resize:vertical}
 .fotorow{display:flex;align-items:center;gap:10px}
 .thumb{width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
 
-/* ---------- rotatieblok: enkel op touch-toestellen in liggende stand ---------- */
-#draai{display:none}
-@media (orientation:landscape) and (pointer:coarse) and (max-height:600px){
-  #draai{
-    display:flex;position:fixed;inset:0;z-index:40;
-    background:var(--acc);color:#fff;
-    align-items:center;justify-content:center;text-align:center;
-    font-size:1.1rem;font-weight:700;padding:20px;
-  }
-}
-
 /* ---------- lightbox ---------- */
 #lightbox{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center}
 #lightbox img{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px}
