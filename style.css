@@ -48,6 +48,12 @@ body{
 }
 .status.afgewerkt{background:var(--acc);color:#fff}
 #backupstatus{font-size:.8rem;color:var(--mut);text-align:center;margin-top:4px;word-break:break-word}
+#versierij{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;font-size:.78rem;color:var(--mut)}
+#versierij button{
+  font-family:inherit;font-size:.78rem;font-weight:700;
+  border:1.5px solid var(--line);border-radius:8px;background:var(--card);color:var(--mut);
+  min-height:32px;padding:4px 10px;
+}
 
 /* ---------- tabs / layout ---------- */
 .tab{display:none;padding:8px 10px calc(76px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}

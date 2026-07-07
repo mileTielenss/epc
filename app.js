@@ -1565,20 +1565,53 @@ function syncAlles() {
 
   /* nieuwe versie: check bij elke start en bij terugkeer naar de app, en herlaad automatisch */
   if ('serviceWorker' in navigator) {
+    let swReg = null;
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
       .then(reg => {
+        swReg = reg;
         reg.update();
         document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
+        vraagVersie();
       })
       .catch(() => { /* offline install vereist https of localhost */ });
 
     const hadController = !!navigator.serviceWorker.controller;
     let herladen = false;
     navigator.serviceWorker.addEventListener('controllerchange', async () => {
-      if (!hadController || herladen) return; /* eerste installatie: niet herladen */
+      if (!hadController || herladen) { vraagVersie(); return; } /* eerste installatie: niet herladen */
       herladen = true;
       if (S && dirty) await bewaar();
       location.reload();
     });
+
+    /* toon welke versie er op dit toestel echt draait */
+    function vraagVersie() {
+      if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('versie');
+    }
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data && e.data.versie) $('#versie').textContent = 'Versie ' + String(e.data.versie).replace('epc-', '');
+    });
+
+    /* handmatig een update forceren, met duidelijke feedback */
+    let updateBezig = false;
+    $('#btn-update').addEventListener('click', async () => {
+      if (updateBezig) return;
+      updateBezig = true;
+      toast('Zoeken naar update…');
+      try {
+        const reg = swReg || await navigator.serviceWorker.getRegistration();
+        if (!reg) { toast('App nog niet geïnstalleerd'); return; }
+        await reg.update();
+        if (reg.waiting) { reg.waiting.postMessage('skip'); return; } /* activeert en herlaadt vanzelf */
+        if (reg.installing) { toast('Update gevonden, app herlaadt zo…'); return; }
+        toast('Je hebt al de nieuwste versie');
+      } catch (e) {
+        toast('Update checken mislukt. Ben je online?');
+      } finally {
+        updateBezig = false;
+      }
+    });
+  } else {
+    $('#versierij').hidden = true;
   }
 })();

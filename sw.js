@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'epc-v19';
+const CACHE = 'epc-v20';
 const ASSETS = [
   './',
   './index.html',
@@ -22,6 +22,12 @@ self.addEventListener('activate', e => {
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+/* de app vraagt welke versie er echt draait; 'skip' duwt een wachtende update door */
+self.addEventListener('message', e => {
+  if (e.data === 'versie' && e.source) e.source.postMessage({ versie: CACHE });
+  if (e.data === 'skip') self.skipWaiting();
 });
 
 self.addEventListener('fetch', e => {
