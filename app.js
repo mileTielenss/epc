@@ -2,7 +2,7 @@
 
 /* moet gelijklopen met CACHE in sw.js; wijkt de draaiende SW af, dan draaien we
    op verouderde bestanden en herladen we onszelf (eenmalig) */
-const APP_VERSIE = 'epc-v36';
+const APP_VERSIE = 'epc-v37';
 
 /* ============================== helpers ============================== */
 
@@ -77,6 +77,7 @@ const dbPutWoning = w => tx('woningen', 'readwrite', s => s.put(w));
 const dbGetWoning = id => tx('woningen', 'readonly', s => s.get(id));
 const dbAlleWoningen = () => tx('woningen', 'readonly', s => s.getAll());
 const dbVerwijderWoning = id => tx('woningen', 'readwrite', s => s.delete(id));
+const dbZetInstelling = (k, v) => tx('instellingen', 'readwrite', s => s.put(v, k));
 
 /* ============================== woningmodel ============================== */
 
@@ -1588,10 +1589,8 @@ function renderChecks() {
   const ul = $('#checklijst');
   ul.innerHTML = '';
   const zonderFoto = S.ruimtes.filter(r => !S.fotodossier.some(f => f.ruimte === r.naam)).map(r => r.naam);
-  const zonderRaam = S.ruimtes.filter(r => !S.ramen.some(x => x.ruimte === r.naam)).map(r => r.naam);
   const items = [
     { ok: !zonderFoto.length, tekst: 'Elke ruimte minstens één foto', detail: zonderFoto.join(', ') },
-    { ok: !zonderRaam.length, tekst: 'Elke ruimte heeft ramen', detail: zonderRaam.join(', ') },
     { ok: S.energie.opwekkers.length > 0, tekst: 'Verwarming ingevuld', detail: 'nog geen opwekker of toestel' },
     { ok: !!S.algemeen.foto, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
   ];
@@ -1631,11 +1630,18 @@ $('#btn-print').addEventListener('click', () => {
   requestAnimationFrame(() => setTimeout(() => window.print(), 60));
 });
 
-function openPrintVenster() {
-  const blob = new Blob([bouwPrintDocument()], { type: 'text/html' });
+async function openPrintVenster() {
+  const doc = bouwPrintDocument();
+  /* echte URL met het adres erin: de bewaarde PDF heet dan "<adres>.pdf" i.p.v. "blob" */
+  try {
+    await dbZetInstelling('printHtml', doc);
+    const w = window.open('pdf/' + (slug(pdfNaam()) || 'epc'), '_blank');
+    if (w) return;
+  } catch (e) { /* IndexedDB weigert: val terug op blob */ }
+  const blob = new Blob([doc], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  const w = window.open(url, '_blank');
-  if (!w) {
+  const w2 = window.open(url, '_blank');
+  if (!w2) {
     downloadBlob((slug(pdfNaam()) || 'epc') + '.html', blob);
     toast('Open het bestand en deel het als PDF');
   }
@@ -1684,7 +1690,12 @@ body{margin:0;background:#fff;font-family:-apple-system,"Segoe UI",Arial,sans-se
 .pagina .fotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 .pagina .fotos.groot .foto{width:100%}
 .pagina .fotos.groot .foto img{width:100%;height:auto;max-height:170mm;object-fit:contain;border:1px solid #999}
-@media print{.pagina .fotos.groot .foto{page-break-inside:avoid;break-inside:avoid}.pagina .fotos.groot .foto img{max-height:118mm}}
+@page liggend{size:A4 landscape;margin:10mm}
+@media print{
+  .pagina .liggend{page:liggend;page-break-before:always;break-before:page}
+  .pagina .fotos.groot .foto{page-break-inside:avoid;break-inside:avoid}
+  .pagina .fotos.groot .foto img{max-height:82mm}
+}
 .pagina .dossierkop{margin-top:20px}
 @media print{.pagina .dossierkop{page-break-before:always;break-before:page;margin-top:0}}
 .pagina .foto{width:34mm}
@@ -1802,11 +1813,12 @@ function printInhoudHtml() {
     html += `<h2 class="dossierkop">Fotodossier</h2>` +
       `<p class="kv">${esc(A.adres || '')} · plaatsbezoek ${esc(A.datum || '')} · ${dossier.length} foto${dossier.length === 1 ? '' : "'s"}</p>` +
       groepen.map(g => {
-        /* facturen (Algemeen) groot: max 2 per pagina, leesbaar */
+        /* facturen (Algemeen): eigen liggende pagina's, max 2 foto's per pagina */
         const groot = g.fotos.length && g.fotos[0].ruimte === FOTO_ALGEMEEN;
-        return `<h3 class="fotokop">${esc(g.naam)}</h3><div class="fotos${groot ? ' groot' : ''}">` +
+        const binnen = `<h3 class="fotokop">${esc(g.naam)}</h3><div class="fotos${groot ? ' groot' : ''}">` +
           g.fotos.map(f => `<div class="foto"><img src="${f.foto}" alt=""></div>`).join('') +
           '</div>';
+        return groot ? `<div class="liggend">${binnen}</div>` : binnen;
       }).join('');
   }
 

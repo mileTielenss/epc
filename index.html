@@ -142,7 +142,51 @@
 <!-- ======================= TAB 2: DETAILS (per ruimte) ======================= -->
 <section class="tab" id="tab-details">
 
-<details class="sectie" id="sec-ramen" open>
+<details class="sectie" id="sec-vent" open>
+  <summary>Ventilatie</summary>
+  <button type="button" class="cycle" id="btn-vent"><span class="cl">Ventilatie</span><span class="cv">geen</span><span class="ci">&#10227;</span></button>
+  <label class="fld" id="fld-ventbesch" hidden>
+    <span class="lbl">Beschrijving</span>
+    <input type="text" id="vent-besch" placeholder="bv. vraaggestuurd type C">
+  </label>
+</details>
+
+<details class="sectie" id="sec-energie">
+  <summary>Verwarming in deze ruimte</summary>
+  <div id="rv-geen" class="totaal" hidden>Kies bovenaan een ruimte om een toestel toe te voegen.</div>
+  <div id="rv-form">
+    <button type="button" class="cycle" id="cy-rvtype"><span class="cl">Toestel</span><span class="cv">Airco</span><span class="ci">&#10227;</span></button>
+
+    <div class="fld">
+      <span class="lbl">Afmetingen ruimte (m) &mdash; nodig bij airco of kachel</span>
+      <div class="dims">
+        <input type="text" id="ruimte-b" inputmode="decimal" placeholder="breed">
+        <span class="x">&times;</span>
+        <input type="text" id="ruimte-d" inputmode="decimal" placeholder="diep">
+        <span class="x">&times;</span>
+        <input type="text" id="ruimte-h" inputmode="decimal" placeholder="hoog">
+        <span class="m2live" id="ruimtem3"></span>
+      </div>
+    </div>
+
+    <label class="fld">
+      <span class="lbl">Beschrijving</span>
+      <input type="text" id="rv-beschrijving" placeholder="bv. Daikin split-unit">
+    </label>
+
+    <div class="fld fotorow">
+      <button type="button" class="btn sec" id="btn-rvfoto">&#128247; Foto kenplaat</button>
+      <img id="rvfoto-thumb" class="thumb" hidden alt="foto kenplaat">
+      <button type="button" class="thumbdel" id="btn-rvfoto-del" hidden>&times;</button>
+    </div>
+
+    <button type="button" class="btn big" id="btn-rv-voegtoe">Voeg toestel toe</button>
+    <button type="button" class="btn sec big" id="btn-annuleer-rv" hidden>Annuleer wijziging</button>
+  </div>
+  <ul id="rvlijst" class="lijst"></ul>
+</details>
+
+<details class="sectie" id="sec-ramen">
   <summary>Ramen &amp; deuren</summary>
   <div class="fld">
     <div class="seg" id="seg-element">
@@ -194,50 +238,6 @@
 
   <div id="ramen-totaal" class="totaal"></div>
   <ul id="ramenlijst" class="lijst"></ul>
-</details>
-
-<details class="sectie" id="sec-vent">
-  <summary>Ventilatie</summary>
-  <button type="button" class="cycle" id="btn-vent"><span class="cl">Ventilatie</span><span class="cv">geen</span><span class="ci">&#10227;</span></button>
-  <label class="fld" id="fld-ventbesch" hidden>
-    <span class="lbl">Beschrijving</span>
-    <input type="text" id="vent-besch" placeholder="bv. vraaggestuurd type C">
-  </label>
-</details>
-
-<details class="sectie" id="sec-energie">
-  <summary>Verwarming in deze ruimte</summary>
-  <div id="rv-geen" class="totaal" hidden>Kies bovenaan een ruimte om een toestel toe te voegen.</div>
-  <div id="rv-form">
-    <button type="button" class="cycle" id="cy-rvtype"><span class="cl">Toestel</span><span class="cv">Airco</span><span class="ci">&#10227;</span></button>
-
-    <div class="fld">
-      <span class="lbl">Afmetingen ruimte (m) &mdash; nodig bij airco of kachel</span>
-      <div class="dims">
-        <input type="text" id="ruimte-b" inputmode="decimal" placeholder="breed">
-        <span class="x">&times;</span>
-        <input type="text" id="ruimte-d" inputmode="decimal" placeholder="diep">
-        <span class="x">&times;</span>
-        <input type="text" id="ruimte-h" inputmode="decimal" placeholder="hoog">
-        <span class="m2live" id="ruimtem3"></span>
-      </div>
-    </div>
-
-    <label class="fld">
-      <span class="lbl">Beschrijving</span>
-      <input type="text" id="rv-beschrijving" placeholder="bv. Daikin split-unit">
-    </label>
-
-    <div class="fld fotorow">
-      <button type="button" class="btn sec" id="btn-rvfoto">&#128247; Foto kenplaat</button>
-      <img id="rvfoto-thumb" class="thumb" hidden alt="foto kenplaat">
-      <button type="button" class="thumbdel" id="btn-rvfoto-del" hidden>&times;</button>
-    </div>
-
-    <button type="button" class="btn big" id="btn-rv-voegtoe">Voeg toestel toe</button>
-    <button type="button" class="btn sec big" id="btn-annuleer-rv" hidden>Annuleer wijziging</button>
-  </div>
-  <ul id="rvlijst" class="lijst"></ul>
 </details>
 
 <div id="ruimte-info" hidden>

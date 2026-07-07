@@ -385,10 +385,12 @@ textarea{resize:vertical}
   #printview .dossierkop{page-break-before:always;break-before:page}
   #printview .fotokop{font-size:10.5px;margin:8px 0 3px}
   #printview .fotos{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  #printview .liggend{page:liggend;page-break-before:always;break-before:page}
   #printview .fotos.groot .foto{width:100%;page-break-inside:avoid;break-inside:avoid}
-  #printview .fotos.groot .foto img{width:100%;height:auto;max-height:118mm;object-fit:contain;border:1px solid #999}
+  #printview .fotos.groot .foto img{width:100%;height:auto;max-height:82mm;object-fit:contain;border:1px solid #999}
   #printview .foto{width:30mm}
   #printview .foto img{width:100%;height:26mm;object-fit:cover;border:1px solid #999}
   #printview .foto .cap{font-size:8px;text-align:center}
   @page{size:A4;margin:12mm}
+  @page liggend{size:A4 landscape;margin:10mm}
 }

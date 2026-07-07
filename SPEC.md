@@ -176,10 +176,10 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 - Onderaan de tab: een **opmerkingveld** per ruimte (bv. "recht achterboven in de
   hoek") en een knop **"Verwijder deze ruimte"** (confirm; gekoppelde items blijven
   bestaan maar verliezen hun label).
-De **drie secties** (Ramen & deuren, Ventilatie, Verwarming in deze ruimte) werken
-als **accordeon** (één tegelijk open; een raam of toestel bewerken opent vanzelf de
-juiste sectie). **Na het toevoegen van een nieuwe ruimte opent de
-Ventilatie-sectie** automatisch.
+De **drie secties** staan in deze volgorde: **Ventilatie → Verwarming in deze
+ruimte → Ramen & deuren**, en werken als **accordeon** (één tegelijk open; een raam
+of toestel bewerken opent vanzelf de juiste sectie). **Ventilatie staat open** bij
+het binnenkomen en opent ook automatisch na het toevoegen van een nieuwe ruimte.
 
 - Sectie **Ramen & deuren** (inklapbaar, standaard open), **compact genoeg om op
   een iPhone te typen zonder te scrollen**: element (Raam/Deur/Dakraam) en gevel
@@ -243,10 +243,8 @@ Bewust minimaal, géén ventilatie-overzicht (de PDF bevat die tabel al):
 - **Controlelijstje** (informatief, nooit blokkerend) met groene vinkjes of rode
   kruisjes, telkens vers berekend bij het openen van de tab:
   1. elke ruimte minstens één foto (bij rood: welke ruimtes niet),
-  2. elke ruimte heeft ramen (bij rood: welke niet — een WC zonder raam mag,
-     maar je wil het gezien hebben),
-  3. verwarming ingevuld (minstens één opwekker of ruimtetoestel),
-  4. hoofdfoto gekozen (ster op een gevelfoto).
+  2. verwarming ingevuld (minstens één opwekker of ruimtetoestel),
+  3. hoofdfoto gekozen (ster op een gevelfoto).
 - **"Print one-pager (PDF)"** — zie §5.
 - "Woning sluiten" (terug naar de lijst) en "Woning verwijderen" (confirm).
 
@@ -271,9 +269,10 @@ De PDF is het volledige, blijvende dossier en bevat **alle** gegevens:
 - **Fotodossier op een aparte pagina** (paginabreak): adres + datum + alle
   dossierfoto's **gegroepeerd onder een titel per ruimte** — volgorde: Gevels,
   daarna de ruimtes, en **Algemeen altijd als laatste**. Geen bijschriften of
-  nummers per foto. De Algemeen-foto's (facturen) staan **groot, maximaal 2 per
-  pagina** zodat ze leesbaar blijven (geen landscape: gemengde pagina-oriëntatie
-  is in iOS-print niet betrouwbaar).
+  nummers per foto. De Algemeen-foto's (facturen) staan op **eigen pagina's in
+  landscape (CSS named page `@page liggend`), maximaal 2 per pagina**, zodat ze
+  leesbaar blijven; browsers die gemengde oriëntatie niet ondersteunen vallen
+  terug op grote staande weergave.
 - Het **printvenster** (de HTML-pagina vóór het bewaren) heeft een lightbox:
   tik op een foto om ze schermvullend te bekijken, tik opnieuw om te sluiten
   (verschijnt niet in de afdruk). In de bewaarde PDF zelf bestaat geen
@@ -284,9 +283,13 @@ Gedrag:
 
 - **Bestandsnaam = het adres** (browser: via `document.title`-truc rond `window.print()`).
 - **iOS-app op het beginscherm**: `window.print()` werkt daar niet — de one-pager
-  opent dan als zelfstandige HTML-pagina in Safari (blob-URL), zónder knoppen of
-  uitleg (opslaan/delen gaat via de deelknop van Safari zelf). De pagina is
-  responsief (wit, brede tabellen scrollen zijdelings) en print als nette A4.
+  opent dan als zelfstandige pagina op een **echte URL `pdf/<adres-slug>`** (de
+  service worker beantwoordt elke navigatie naar `/pdf/` met `print.html`; die
+  shell leest de kant-en-klare HTML uit IndexedDB-instelling `printHtml` en
+  schrijft ze in het document). Zo is de voorgestelde PDF-naam het adres en nooit
+  "blob". Valt IndexedDB weg, dan is er een blob-URL-fallback zoals voorheen.
+  De pagina is zonder knoppen of uitleg (opslaan/delen via de deelknop van Safari),
+  responsief, en print als nette A4.
 
 ## 6. Werkafspraken voor ontwikkeling
 
