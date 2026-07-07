@@ -31,7 +31,8 @@ daarin is **bewust gekozen** door de gebruiker. Daarom:
   en persistentie na een reload. Plus `node --check` op alle JS.
 - Verifieer na de deploy dat `https://miletielenss.github.io/epc/sw.js` de nieuwe
   versie serveert.
-- Oude woningrecords moeten altijd blijven werken: migraties horen in
-  `normaliseer()` en zijn nooit destructief.
+- `normaliseer()` vult defaults aan en herstelt tellers; legacy-migraties zijn
+  bewust verwijderd (er bestaan geen oude records). Voeg pas migratiecode toe
+  als een modelwijziging échte data in omloop raakt.
 - Wat iOS niet kan (bv. torch in getUserMedia, window.print in standalone) wordt
   eerlijk opgevangen met een fallback en zo in de spec gedocumenteerd.

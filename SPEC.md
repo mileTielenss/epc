@@ -83,8 +83,7 @@ Alle foto's mogen scherp zijn zolang de bestanden klein blijven:
               // ingegeven: dat komt uit documenten of staat op de foto's
   ruimtes: [ { naam, vent ('geen'|'natuurlijk'|'mechanisch'|'mechanisch-permanent'|'ander'),
                ventBeschrijving, opm, afm ({b,d,h} in meter | null) } ],
-  ramen:   [ { nr, ruimte, element ('raam'|'deur'|'dakraam'; legacy 'glasdeur'
-               wordt bij bewerken een 'deur'),
+  ramen:   [ { nr, ruimte, element ('raam'|'deur'|'dakraam'),
                gevel ('voor'|'achter'|'links'|'rechts'), b, h (meter),
                beglazing ('enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel'),
                kader ('pvc'|'alu'|'hout'), rolluik (bool), aantal (≥1), foto } ],
@@ -99,9 +98,10 @@ Alle foto's mogen scherp zijn zolang de bestanden klein blijven:
 }
 ```
 
-- `normaliseer()` migreert oude records verliesvrij (oude ventilatielijsten worden
-  ruimtes, aircokamer-afmetingen verhuizen naar de ruimte, ontbrekende nrs/tellers
-  worden hersteld). Nieuwe velden krijgen altijd een default zodat oude data blijft werken.
+- `normaliseer()` vult ontbrekende velden aan met defaults en herstelt tellers/nrs.
+  **Er is geen legacy-migratiecode**: er bestaan geen woningen van oudere
+  modelversies meer. Wijzigt het datamodel in de toekomst, voeg dan pas migratie
+  toe als er op dat moment echte data in omloop is.
 
 ## 4. Schermen
 

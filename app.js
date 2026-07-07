@@ -2,7 +2,7 @@
 
 /* moet gelijklopen met CACHE in sw.js; wijkt de draaiende SW af, dan draaien we
    op verouderde bestanden en herladen we onszelf (eenmalig) */
-const APP_VERSIE = 'epc-v38';
+const APP_VERSIE = 'epc-v39';
 
 /* ============================== helpers ============================== */
 
@@ -104,123 +104,45 @@ function leegWoning() {
   };
 }
 
-/* opwekker uit oudere modellen omzetten naar {nr,type,functie,beschrijving,foto,kamer} */
-function migreerOpwekker(o, emissie) {
-  if (o.beschrijving !== undefined) return o; /* al nieuw model */
-  const type = { gasketel: 'gas', stookolie: 'stookolie', airco: 'airco' }[o.type] || 'andere';
-  const EXTRA = { warmtepomp: 'warmtepomp', elektrisch: 'elektrische verwarming', kachel: 'kachel' };
-  const beschrijving = [EXTRA[o.type], o.wptype, o.cond, o.merk, o.jaar ? 'bouwjaar ' + o.jaar : '']
-    .filter(Boolean).join(', ');
-  const functie = [];
-  if ((o.functie || []).includes('verwarming')) {
-    if (emissie.includes('radiatoren')) functie.push('radiatoren');
-    if (emissie.includes('vloerverwarming')) functie.push('vloer');
-  }
-  if ((o.functie || []).includes('sww')) functie.push('sww');
-  return { nr: o.nr, type, functie, beschrijving, foto: o.foto || null, kamer: null };
-}
-
-const VENT_MIGRATIE = {
-  geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch',
-  raamrooster: 'natuurlijk', muurrooster: 'natuurlijk',
-  afvoerventiel: 'mechanisch', toevoerventiel: 'mechanisch', 'mechanische-ventilator': 'mechanisch'
-};
-
-/* ondiepe merge zodat oudere records nieuwe velden krijgen */
+/* defaults aanvullen en tellers/nrs herstellen; geen legacy-migraties
+   (er bestaan geen woningen van oudere modelversies) */
 function normaliseer(p) {
   const basis = leegWoning();
-  const pe = p.energie || {};
   const w = {
     ...basis, ...p,
     algemeen: { ...basis.algemeen, ...(p.algemeen || {}) },
-    energie: { ...basis.energie, ...pe }
+    energie: { ...basis.energie, ...(p.energie || {}) }
   };
-  if (!Array.isArray(w.energie.opwekkers)) w.energie.opwekkers = [];
 
-  /* ruimtes: migratie vanuit de oude ventilatie-lijst, anders de standaardset
-     (kijk naar p, niet naar w: de basis vult ruimtes altijd met de standaardset) */
-  if (!Array.isArray(p.ruimtes) || !p.ruimtes.length) {
-    const oud = (p.ventilatie || {}).ruimtes;
-    w.ruimtes = Array.isArray(oud) && oud.length
-      ? oud.map(r => ({ naam: r.naam, vent: VENT_MIGRATIE[r.voorziening] || r.vent || 'geen', ventBeschrijving: '' }))
-      : standaardRuimtes();
-  }
-  w.ruimtes = w.ruimtes.map(r => ({
+  if (!Array.isArray(w.ruimtes) || !w.ruimtes.length) w.ruimtes = standaardRuimtes();
+  w.ruimtes = groepeerRuimtes(w.ruimtes.map(r => ({
     naam: String(r.naam || 'Ruimte'),
     vent: VENT_MODES.includes(r.vent) ? r.vent : 'geen',
     ventBeschrijving: r.ventBeschrijving || '',
     opm: r.opm || '',
     afm: r.afm && num(r.afm.b) && num(r.afm.d) && num(r.afm.h)
       ? { b: num(r.afm.b), d: num(r.afm.d), h: num(r.afm.h) } : null
-  }));
-  w.ruimtes = groepeerRuimtes(w.ruimtes);
-  delete w.ventilatie;
+  })));
 
-  /* migratie: oudste energiemodel (opwek-chips + ketel/wp/airco-panelen) naar opwekkerslijst */
-  if (!w.energie.opwekkers.length && Array.isArray(pe.opwek) && pe.opwek.length) {
-    pe.opwek.forEach(t => {
-      const o = { nr: w.energie.opwekkers.length + 1, type: t, functie: ['verwarming'], cond: '', wptype: '', merk: '', jaar: '', foto: null };
-      if ((t === 'gasketel' || t === 'stookolie') && pe.ketel) {
-        o.cond = pe.ketel.cond || '';
-        o.merk = pe.ketel.merk || '';
-        o.jaar = pe.ketel.jaar || '';
-        o.foto = pe.ketel.foto || null;
-        if (pe.sww === 'cv-ketel') o.functie.push('sww');
-      }
-      if (t === 'warmtepomp' && pe.wp) o.wptype = pe.wp.type || '';
-      if (t === 'airco' && Array.isArray(pe.airco) && pe.airco.length) o.merk = pe.airco.map(u => u.ruimte).join(', ');
-      w.energie.opwekkers.push(o);
-    });
-  }
-  w.energie.opwekkers = w.energie.opwekkers.map(o => migreerOpwekker(o, pe.emissie || []));
-  delete w.energie.opwek;
-  delete w.energie.ketel;
-  delete w.energie.wp;
-  delete w.energie.airco;
-  delete w.energie.emissie;
-  delete w.energie.sww;
-  if (w.energie.kwp !== undefined) {
-    if (!w.energie.wp && w.energie.kwp) {
-      const k = num(w.energie.kwp);
-      w.energie.wp = k ? String(Math.round(k * 1000)) : '';
-    }
-    delete w.energie.kwp;
-  }
-  w.tellerOpwek = Math.max(w.tellerOpwek || 0, ...w.energie.opwekkers.map(o => o.nr || 0), 0);
-  w.energie.opwekkers.forEach(o => { if (!o.nr) o.nr = ++w.tellerOpwek; });
-
-  /* ramen: tellers en ontbrekende nummers herstellen (bv. bij handgemaakte import) */
   if (!Array.isArray(w.ramen)) w.ramen = [];
   w.teller = Math.max(w.teller || 0, ...w.ramen.map(r => r.nr || 0), 0);
-  w.ramen.forEach(r => { if (!r.nr) r.nr = ++w.teller; });
   w.ramen.forEach(r => {
+    if (!r.nr) r.nr = ++w.teller;
     r.aantal = Math.max(1, Math.round(num(r.aantal)) || 1);
     r.ruimte = r.ruimte || '';
   });
-  /* PV: oud ja/nee+Wp wordt een lijst van installaties met orientatie
-     (kijk naar pe, niet naar w: de basis vult pvPanelen altijd met []) */
-  if (!Array.isArray(pe.pvPanelen)) {
-    w.energie.pvPanelen = [];
-    if (pe.pv === 'ja') w.energie.pvPanelen.push({ orientatie: '', wp: String(pe.wp || '') });
-  }
+
+  if (!Array.isArray(w.energie.opwekkers)) w.energie.opwekkers = [];
+  w.tellerOpwek = Math.max(w.tellerOpwek || 0, ...w.energie.opwekkers.map(o => o.nr || 0), 0);
+  w.energie.opwekkers.forEach(o => {
+    if (!o.nr) o.nr = ++w.tellerOpwek;
+    o.ruimte = o.ruimte || '';
+  });
+  if (!Array.isArray(w.energie.pvPanelen)) w.energie.pvPanelen = [];
   w.energie.pvPanelen = w.energie.pvPanelen.map(p => ({ orientatie: p.orientatie || '', wp: String(p.wp || '') }));
   w.energie.zonneboiler = w.energie.zonneboiler === 'ja' ? 'ja' : 'nee';
   if (typeof w.energie.zonneboilerM2 !== 'string') w.energie.zonneboilerM2 = '';
-  delete w.energie.pv;
-  delete w.energie.wp;
 
-  w.energie.opwekkers.forEach(o => {
-    o.ruimte = o.ruimte || '';
-    /* migratie: kamerafmetingen verhuizen van het toestel naar de ruimte zelf */
-    if (o.kamer) {
-      const r = w.ruimtes.find(x => x.naam === o.ruimte);
-      if (r && !r.afm) r.afm = o.kamer;
-      else if (!r) o.beschrijving = [o.beschrijving, `kamer ${o.kamer.b} × ${o.kamer.d} × ${o.kamer.h} m`].filter(Boolean).join(' · ');
-      delete o.kamer;
-    }
-  });
-
-  /* fotodossier: teller en ontbrekende nummers herstellen */
   if (!Array.isArray(w.fotodossier)) w.fotodossier = [];
   w.tellerDossier = Math.max(w.tellerDossier || 0, ...w.fotodossier.map(f => f.nr || 0), 0);
   w.fotodossier.forEach(f => {
@@ -593,13 +515,13 @@ function updateRaamThumb() {
   if (draft.foto) t.src = draft.foto;
 }
 
-const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam', glasdeur: 'Glasdeur' };
+const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam' };
 const GEVEL_NAMEN = { voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
 const GEVEL_ORDE = { voor: 0, achter: 1, links: 2, rechts: 3 };
 
 /* lijst gesorteerd voor weergave/print: eerst alle deuren, daarna de rest;
    telkens op gevel (voor, achter, links, rechts) en dan op nr */
-function isDeur(r) { return r.element === 'deur' || r.element === 'glasdeur'; }
+function isDeur(r) { return r.element === 'deur'; }
 function gesorteerdeRamen() {
   return [...S.ramen].sort((a, b) =>
     (isDeur(a) ? 0 : 1) - (isDeur(b) ? 0 : 1) ||
@@ -607,7 +529,7 @@ function gesorteerdeRamen() {
 }
 function raamAantal(r) { return Math.max(1, r.aantal || 1); }
 const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' };
-const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', 'alu-thermisch': 'Alu therm. ond.' };
+const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout' };
 
 $('#btn-voegtoe').addEventListener('click', () => {
   if (!S) return;
@@ -652,7 +574,7 @@ function startBewerkRaam(nr) {
   const r = S.ramen.find(x => x.nr === nr);
   if (!r) return;
   bewerkRaamNr = nr;
-  draft.element = r.element === 'glasdeur' ? 'deur' : r.element;
+  draft.element = r.element;
   draft.gevel = r.gevel;
   draft.beglazing = r.beglazing;
   draft.kader = r.kader;
