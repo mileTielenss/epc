@@ -140,6 +140,7 @@ Alle foto's mogen scherp zijn zolang de bestanden klein blijven:
 - **"+ Ruimte"** opent sneltoetsen (Slaapkamer, Badkamer, WC, Berging, Bureau, Garage,
   Zolder, Kelder, Veranda, "Andere naam…"). Bestaande naam ⇒ **autonummering**
   (Slaapkamer → Slaapkamer 2, 3, …). Nieuwe ruimte is meteen geselecteerd.
+  Ruimtes verwijderen bestaat niet.
 - Ruimtes staan altijd **gegroepeerd op basisnaam** (alle wc's samen, slaapkamers
   achter elkaar, …), op volgorde van eerste voorkomen; binnen een groep oplopend
   genummerd. Een nieuwe "Badkamer 2" komt dus naast "Badkamer" te staan.
@@ -174,8 +175,8 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
   `geen → natuurlijk → mechanisch → mechanisch permanent → ander`; bij "ander"
   verschijnt een beschrijvingsveld onder de knop (geen popup).
 - Onderaan de tab: een **opmerkingveld** per ruimte (bv. "recht achterboven in de
-  hoek") en een knop **"Verwijder deze ruimte"** (confirm; gekoppelde items blijven
-  bestaan maar verliezen hun label).
+  hoek"). **Ruimtes verwijderen kan niet** (bewust: nooit nodig; een ongebruikte
+  ruimte staat gewoon leeg).
 De **drie secties** staan in deze volgorde: **Ventilatie → Verwarming in deze
 ruimte → Ramen & deuren**, en werken als **accordeon** (één tegelijk open; een raam
 of toestel bewerken opent vanzelf de juiste sectie). **Ventilatie staat open** bij

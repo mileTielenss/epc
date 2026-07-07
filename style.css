@@ -65,7 +65,6 @@ body{
   border:1.5px solid var(--acc);background:var(--card);color:var(--acc);
 }
 .status.afgewerkt{background:var(--acc);color:#fff}
-#backupstatus{font-size:.8rem;color:var(--mut);text-align:center;margin-top:4px;word-break:break-word}
 #versierij{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;font-size:.78rem;color:var(--mut)}
 #versierij button{
   font-family:inherit;font-size:.78rem;font-weight:700;

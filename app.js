@@ -2,7 +2,7 @@
 
 /* moet gelijklopen met CACHE in sw.js; wijkt de draaiende SW af, dan draaien we
    op verouderde bestanden en herladen we onszelf (eenmalig) */
-const APP_VERSIE = 'epc-v37';
+const APP_VERSIE = 'epc-v38';
 
 /* ============================== helpers ============================== */
 
@@ -454,7 +454,7 @@ $('#tabbar').addEventListener('click', e => {
   zetTab(b.dataset.tab);
 });
 
-/* ============================== tab 1: algemeen ============================== */
+/* ============================== algemeen (tab Algemeen) ============================== */
 
 function bind(sel, fn) {
   $(sel).addEventListener('input', e => { if (!S) return; fn(e.target.value); wijzig(); });
@@ -538,7 +538,7 @@ function chipsSet(sel, vals) {
   $$(sel + ' button').forEach(b => b.classList.toggle('on', vals.includes(b.dataset.v)));
 }
 
-/* ============================== tab 2: ramen & deuren ============================== */
+/* ============================== ramen & deuren (tab Details) ============================== */
 
 let bewerkRaamNr = null; /* nr van het raam dat je aan het wijzigen bent, of null */
 
@@ -1252,25 +1252,6 @@ $('#vent-besch').addEventListener('input', () => {
   wijzig();
 });
 
-$('#btn-ruimte-del').addEventListener('click', () => {
-  const r = huidigeRuimte();
-  if (!r) return;
-  const gebruikt =
-    S.ramen.filter(x => x.ruimte === r.naam).length +
-    S.energie.opwekkers.filter(x => x.ruimte === r.naam).length +
-    S.fotodossier.filter(x => x.ruimte === r.naam).length;
-  if (!confirm(`Ruimte "${r.naam}" verwijderen?${gebruikt ? ` ${gebruikt} item(s) verliezen dit label (blijven zelf bestaan).` : ''}`)) return;
-  S.ruimtes = S.ruimtes.filter(x => x.naam !== r.naam);
-  S.ramen.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
-  S.energie.opwekkers.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
-  S.fotodossier.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
-  selectedRuimte = actieveTab === 'details' && S.ruimtes.length ? S.ruimtes[0].naam : '';
-  renderRuimtebalk();
-  renderRamen();
-  renderOpwekkers();
-  renderDossier();
-  bewaar();
-});
 
 /* natte ruimtes eerst (keuken, badkamer, wc), daarna de rest alfabetisch;
    Slaapkamer 1/2/3 blijft zo vanzelf bij elkaar */
@@ -1305,7 +1286,7 @@ function ventTekst(r) {
 }
 
 
-/* ============================== tab 5: fotodossier ============================== */
+/* ============================== fotodossier (tab Foto's) ============================== */
 
 /* minimaal fotodossier voor het projectdossier (10 jaar bewaarplicht): veel foto's,
    snel na elkaar, met alleen een grove categorie als bijschrift in de PDF */
@@ -1580,7 +1561,7 @@ $('#btn-camklaar').addEventListener('click', () => {
 document.addEventListener('visibilitychange', () => { if (document.hidden && camStream) { stopCamera(); bewaar(); } });
 window.addEventListener('pagehide', () => { if (camStream) stopCamera(); });
 
-/* ============================== tab 6: afronden ============================== */
+/* ============================== afronden ============================== */
 
 
 /* ---------- controlelijstje op Afronden: informatief, nooit blokkerend ---------- */
