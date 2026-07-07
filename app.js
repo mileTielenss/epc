@@ -2,7 +2,7 @@
 
 /* moet gelijklopen met CACHE in sw.js; wijkt de draaiende SW af, dan draaien we
    op verouderde bestanden en herladen we onszelf (eenmalig) */
-const APP_VERSIE = 'epc-v39';
+const APP_VERSIE = 'epc-v40';
 
 /* ============================== helpers ============================== */
 
@@ -77,7 +77,6 @@ const dbPutWoning = w => tx('woningen', 'readwrite', s => s.put(w));
 const dbGetWoning = id => tx('woningen', 'readonly', s => s.get(id));
 const dbAlleWoningen = () => tx('woningen', 'readonly', s => s.getAll());
 const dbVerwijderWoning = id => tx('woningen', 'readwrite', s => s.delete(id));
-const dbZetInstelling = (k, v) => tx('instellingen', 'readwrite', s => s.put(v, k));
 
 /* ============================== woningmodel ============================== */
 
@@ -1508,227 +1507,36 @@ function renderChecks() {
   });
 }
 
-/* ---------- one-pager / print ---------- */
+/* ---------- PDF bewaren (zie pdf.js voor de generator) ---------- */
 
-/* op iOS werkt window.print() niet in een op-het-beginscherm-geïnstalleerde app.
-   Daarom openen we daar de one-pager in Safari, waar Delen → Print → Bewaar als PDF wel werkt. */
-function isIOSStandalone() {
-  return navigator.standalone === true;
-}
-
-/* de opgeslagen PDF krijgt de bestandsnaam van de titel; zet die op het adres */
+/* de PDF krijgt het adres als bestandsnaam */
 function pdfNaam() {
   return (S.algemeen.adres || 'EPC plaatsbezoek').trim();
 }
 
-$('#btn-print').addEventListener('click', () => {
+$('#btn-print').addEventListener('click', async () => {
   if (!S) return;
-  if (isIOSStandalone()) { openPrintVenster(); return; }
-  buildPrint();
-  const vorigeTitel = document.title;
-  document.title = pdfNaam();
-  const herstel = () => { document.title = vorigeTitel; window.removeEventListener('afterprint', herstel); };
-  window.addEventListener('afterprint', herstel);
-  setTimeout(herstel, 60000);
-  requestAnimationFrame(() => setTimeout(() => window.print(), 60));
+  toast('PDF maken\u2026');
+  try {
+    const blob = await bouwPdf(S);
+    const naam = (slug(pdfNaam()) || 'epc') + '.pdf';
+    const file = new File([blob], naam, { type: 'application/pdf' });
+    /* deelmenu (iPhone: Bewaar in Bestanden); zonder deelmenu gewoon downloaden */
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+    downloadBlob(naam, file);
+  } catch (e) {
+    toast('PDF maken mislukt' + (e && e.name ? ' (' + e.name + ')' : ''));
+  }
 });
 
-async function openPrintVenster() {
-  const doc = bouwPrintDocument();
-  /* echte URL met het adres erin: de bewaarde PDF heet dan "<adres>.pdf" i.p.v. "blob" */
-  try {
-    await dbZetInstelling('printHtml', doc);
-    const w = window.open('pdf/' + (slug(pdfNaam()) || 'epc'), '_blank');
-    if (w) return;
-  } catch (e) { /* IndexedDB weigert: val terug op blob */ }
-  const blob = new Blob([doc], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const w2 = window.open(url, '_blank');
-  if (!w2) {
-    downloadBlob((slug(pdfNaam()) || 'epc') + '.html', blob);
-    toast('Open het bestand en deel het als PDF');
-  }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
-}
-
-/* volledige, zelfstandige HTML-pagina van de one-pager voor het aparte printvenster;
-   bewust zonder knoppen: delen/opslaan doe je met de deel-knop van Safari zelf */
-function bouwPrintDocument() {
-  return `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8">` +
-    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
-    `<title>${esc(pdfNaam())}</title><style>${PRINT_DOC_CSS}</style></head><body>` +
-    `<div class="pagina">${printInhoudHtml()}</div>` +
-    `<div id="lb" hidden><img alt=""></div>` +
-    `<script>document.addEventListener('click',function(e){var lb=document.getElementById('lb');` +
-    `if(e.target.closest('#lb')){lb.hidden=true;lb.querySelector('img').src='';return;}` +
-    `var img=e.target.closest('.fotos img,.hoofdfoto');` +
-    `if(img){lb.querySelector('img').src=img.src;lb.hidden=false;}});</` + `script></body></html>`;
-}
-
-const PRINT_DOC_CSS = `
-*{box-sizing:border-box}
-[hidden]{display:none !important}
-#lb{position:fixed;inset:0;z-index:9;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center}
-#lb img{max-width:97vw;max-height:97vh;object-fit:contain}
-.pagina .fotokop{font-size:12px;margin:10px 0 3px}
-.fotos img{cursor:zoom-in}
-body{margin:0;background:#fff;font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#000}
-.pagina{max-width:800px;margin:0 auto;padding:16px;font-size:12px}
-/* op een smal scherm: brede tabellen zijdelings scrollbaar in plaats van buiten beeld */
-@media screen and (max-width:640px){
-  .pagina{padding:12px 10px;font-size:11px}
-  .pagina table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
-}
-.pagina .hoofdfoto{float:right;width:44mm;max-height:36mm;object-fit:cover;border:1px solid #999;margin:0 0 4px 8px}
-.pagina h1{font-size:18px;margin:0 0 2px}
-.pagina .sub{font-size:12px;color:#333;margin:0 0 12px}
-.pagina h2{font-size:13px;margin:12px 0 5px;border-bottom:1.5px solid #000;padding-bottom:2px;text-transform:uppercase;letter-spacing:.03em}
-.pagina table{width:100%;border-collapse:collapse;margin:0 0 8px}
-.pagina th,.pagina td{border:1px solid #999;padding:3px 6px;text-align:left;font-size:11px}
-.pagina th{background:#eee}
-.pagina td.num,.pagina th.num{text-align:right}
-.pagina tr.tot td{font-weight:700;background:#f5f5f5}
-.pagina .kv{margin:0 0 3px}
-.pagina .kv b{display:inline-block;min-width:130px}
-.pagina .fotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
-.pagina .fotos.groot .foto{width:100%}
-.pagina .fotos.groot .foto img{width:100%;height:auto;max-height:170mm;object-fit:contain;border:1px solid #999}
-@page liggend{size:A4 landscape;margin:10mm}
-@media print{
-  .pagina .liggend{page:liggend;page-break-before:always;break-before:page}
-  .pagina .fotos.groot .foto{page-break-inside:avoid;break-inside:avoid}
-  .pagina .fotos.groot .foto img{max-height:82mm}
-}
-.pagina .dossierkop{margin-top:20px}
-@media print{.pagina .dossierkop{page-break-before:always;break-before:page;margin-top:0}}
-.pagina .foto{width:34mm}
-.pagina .foto img{width:100%;height:30mm;object-fit:cover;border:1px solid #999}
-.pagina .foto .cap{font-size:8.5px;text-align:center}
-@media print{
-  body{background:#fff}
-  #lb{display:none !important}
-  .pagina{max-width:none;margin:0;padding:0;box-shadow:none;font-size:10px}
-  .pagina .hoofdfoto{width:40mm;max-height:32mm}
-  .pagina h1{font-size:15px}
-  @page{size:A4;margin:12mm}
-}`;
-
-function buildPrint() {
-  $('#printview').innerHTML = printInhoudHtml();
-}
-
-function printInhoudHtml() {
-  const A = S.algemeen;
-  const ramen = gesorteerdeRamen();
-  const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
-  const totAantal = S.ramen.reduce((a, r) => a + raamAantal(r), 0);
-
-  let html = (A.foto ? `<img class="hoofdfoto" src="${A.foto}" alt="">` : '') +
-    `<h1>EPC Plaatsbezoek</h1>
-    <p class="sub">${esc(A.adres || 'Adres onbekend')} · ${esc(A.datum || '')}</p>`;
-
-  /* ramen & deuren */
-  html += '<h2>Ramen &amp; deuren</h2>';
-  if (ramen.length) {
-    html += `<table><tr><th>#</th><th>Type</th><th>Ruimte</th><th>Gevel</th><th class="num">Aantal</th><th class="num">B (m)</th><th class="num">H (m)</th><th class="num">m²</th><th>Beglazing</th><th>Kader</th><th>Rolluik</th></tr>`;
-    ramen.forEach(r => {
-      const n = raamAantal(r);
-      html += `<tr><td>${r.nr}</td><td>${ELEMENT_NAMEN[r.element] || ''}</td><td>${esc(r.ruimte || '')}</td><td>${GEVEL_NAMEN[r.gevel] || ''}</td>` +
-        `<td class="num">${n}</td><td class="num">${fmtM(r.b)}</td><td class="num">${fmtM(r.h)}</td><td class="num">${fmt(r.b * r.h * n)}</td>` +
-        `<td>${GLAS_NAMEN[r.beglazing] || ''}</td><td>${KADER_NAMEN[r.kader] || ''}</td><td>${r.rolluik ? 'ja' : 'nee'}</td></tr>`;
-    });
-    html += `<tr class="tot"><td colspan="4">Totaal (${totAantal} element${totAantal === 1 ? '' : 'en'})</td><td class="num">${totAantal}</td><td colspan="2"></td><td class="num">${fmt(totM2)}</td><td colspan="3"></td></tr></table>`;
-    /* bijhorende foto's direct onder de tabel: type, gevel en ruimte, geen nummers */
-    const raamFotos = ramen.filter(r => r.foto).map(r => ({
-      src: r.foto,
-      cap: `${ELEMENT_NAMEN[r.element] || r.element} ${(GEVEL_NAMEN[r.gevel] || '').toLowerCase()}${r.ruimte ? ' – ' + r.ruimte : ''}, ${r.element === 'dakraam' ? 'kenplaatje' : 'afstandhouder'}`
-    }));
-    if (raamFotos.length) {
-      html += '<div class="fotos">' +
-        raamFotos.map(f => `<div class="foto"><img src="${f.src}" alt=""><div class="cap">${esc(f.cap)}</div></div>`).join('') +
-        '</div>';
-    }
-  } else {
-    html += '<p class="kv">Geen elementen opgemeten.</p>';
-  }
-
-  /* energie */
-  html += '<h2>Energie</h2>';
-  const E = S.energie;
-  if (E.opwekkers.length) {
-    html += '<table><tr><th>#</th><th>Opwekker</th><th>Ruimte</th><th>Doet</th><th>Beschrijving</th></tr>' +
-      E.opwekkers.map(o => {
-        const r = S.ruimtes.find(x => x.naam === o.ruimte);
-        const vol = isRuimteToestel(o) && r && r.afm ? 'ruimte ' + afmTekst(r.afm) : '';
-        return `<tr><td>${o.nr}</td><td>${OPWEK_NAMEN[o.type] || esc(o.type)}</td><td>${esc(o.ruimte || '')}</td>` +
-          `<td>${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + '))}</td>` +
-          `<td>${esc([o.beschrijving, vol].filter(Boolean).join(' · '))}</td></tr>`;
-      }).join('') +
-      '</table>';
-    /* kenplaat- en kranenfoto's direct onder de tabel, met de ruimte in het bijschrift */
-    const opwekFotos = [];
-    E.opwekkers.forEach(o => {
-      const naam = `${OPWEK_NAMEN[o.type] || o.type}${o.ruimte ? ' – ' + o.ruimte : ''}`;
-      if (o.foto) opwekFotos.push({ src: o.foto, cap: `${naam}, kenplaat` });
-      if (o.fotoKraan) opwekFotos.push({ src: o.fotoKraan, cap: `${naam}, radiatorkranen` });
-    });
-    if (opwekFotos.length) {
-      html += '<div class="fotos">' +
-        opwekFotos.map(f => `<div class="foto"><img src="${f.src}" alt=""><div class="cap">${esc(f.cap)}</div></div>`).join('') +
-        '</div>';
-    }
-  } else {
-    html += '<p class="kv">Geen opwekkers genoteerd.</p>';
-  }
-  html += `<p class="kv"><b>Zonnepanelen</b> ${E.pvPanelen.length
-    ? E.pvPanelen.map(p => `${PVOR_NAMEN[p.orientatie] || '?'} ${esc(p.wp)} Wp`).join(' · ')
-    : '-'}</p>`;
-  if (E.zonneboiler === 'ja') {
-    html += `<p class="kv"><b>Zonneboiler</b> ja${E.zonneboilerM2 ? ', ' + esc(E.zonneboilerM2) + ' m²' : ''}</p>`;
-  }
-
-  /* ventilatie per ruimte (natte ruimtes eerst) */
-  html += '<h2>Ventilatie</h2>';
-  if (S.ruimtes.length) {
-    html += '<table><tr><th>Ruimte</th><th>Ventilatie</th><th>Afmetingen</th><th>Opmerking</th></tr>' +
-      gesorteerdeRuimtes().map(r =>
-        `<tr><td>${esc(r.naam)}</td><td>${esc(ventTekst(r))}</td><td>${r.afm ? esc(afmTekst(r.afm)) : ''}</td><td>${esc(r.opm || '')}</td></tr>`).join('') +
-      '</table>';
-  } else {
-    html += '<p class="kv">Geen ruimtes genoteerd.</p>';
-  }
-
-  /* notities */
-  if (A.notities.trim()) {
-    html += `<h2>Notities</h2><p class="kv">${esc(A.notities).replace(/\n/g, '<br>')}</p>`;
-  }
-
-  /* fotodossier: aparte pagina met alle dossierfoto's, als bewijs bij controle */
-  if (S.fotodossier.length) {
-    const dossier = gesorteerdDossier();
-    /* groeperen onder een titel per ruimte (Gevels, Algemeen, dan de ruimtes) */
-    const groepen = [];
-    dossier.forEach(f => {
-      const naam = dossierCap(f);
-      if (!groepen.length || groepen[groepen.length - 1].naam !== naam) groepen.push({ naam, fotos: [] });
-      groepen[groepen.length - 1].fotos.push(f);
-    });
-    html += `<h2 class="dossierkop">Fotodossier</h2>` +
-      `<p class="kv">${esc(A.adres || '')} · plaatsbezoek ${esc(A.datum || '')} · ${dossier.length} foto${dossier.length === 1 ? '' : "'s"}</p>` +
-      groepen.map(g => {
-        /* facturen (Algemeen): eigen liggende pagina's, max 2 foto's per pagina */
-        const groot = g.fotos.length && g.fotos[0].ruimte === FOTO_ALGEMEEN;
-        const binnen = `<h3 class="fotokop">${esc(g.naam)}</h3><div class="fotos${groot ? ' groot' : ''}">` +
-          g.fotos.map(f => `<div class="foto"><img src="${f.foto}" alt=""></div>`).join('') +
-          '</div>';
-        return groot ? `<div class="liggend">${binnen}</div>` : binnen;
-      }).join('');
-  }
-
-  return html;
-}
-
-/* ---------- bestand downloaden (fallback voor het printvenster) ---------- */
+/* ---------- bestand downloaden (desktop zonder deelmenu) ---------- */
 
 function downloadBlob(naam, blob) {
   const a = document.createElement('a');

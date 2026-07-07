@@ -362,34 +362,3 @@ textarea{resize:vertical}
   font-size:.95rem;font-weight:600;z-index:20;
   max-width:86vw;text-align:center;
 }
-
-/* ---------- print ---------- */
-#printview{display:none}
-@media print{
-  body>*{display:none !important}
-  #printview{display:block !important}
-  body{background:#fff}
-  #printview{font-size:10px;color:#000;font-family:-apple-system,"Segoe UI",Arial,sans-serif}
-  #printview .hoofdfoto{float:right;width:40mm;max-height:32mm;object-fit:cover;border:1px solid #999;margin:0 0 4px 6px}
-  #printview h1{font-size:15px;margin:0 0 2px}
-  #printview .sub{font-size:10px;color:#333;margin:0 0 10px}
-  #printview h2{font-size:11px;margin:10px 0 4px;border-bottom:1.5px solid #000;padding-bottom:2px;text-transform:uppercase;letter-spacing:.03em}
-  #printview table{width:100%;border-collapse:collapse;margin:0 0 6px}
-  #printview th,#printview td{border:1px solid #999;padding:2px 5px;text-align:left;font-size:9.5px}
-  #printview th{background:#eee}
-  #printview td.num,#printview th.num{text-align:right}
-  #printview tr.tot td{font-weight:700;background:#f5f5f5}
-  #printview .kv{margin:0 0 2px}
-  #printview .kv b{display:inline-block;min-width:130px}
-  #printview .dossierkop{page-break-before:always;break-before:page}
-  #printview .fotokop{font-size:10.5px;margin:8px 0 3px}
-  #printview .fotos{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-  #printview .liggend{page:liggend;page-break-before:always;break-before:page}
-  #printview .fotos.groot .foto{width:100%;page-break-inside:avoid;break-inside:avoid}
-  #printview .fotos.groot .foto img{width:100%;height:auto;max-height:82mm;object-fit:contain;border:1px solid #999}
-  #printview .foto{width:30mm}
-  #printview .foto img{width:100%;height:26mm;object-fit:cover;border:1px solid #999}
-  #printview .foto .cap{font-size:8px;text-align:center}
-  @page{size:A4;margin:12mm}
-  @page liggend{size:A4 landscape;margin:10mm}
-}

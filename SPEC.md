@@ -39,7 +39,7 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 ## 2. Techniek
 
 - **Vanilla HTML/CSS/JS, één pagina, geen dependencies.** Bestanden: `index.html`,
-  `app.js`, `style.css`, `sw.js`, `manifest.json`, iconen.
+  `app.js`, `pdf.js` (PDF-generator), `style.css`, `sw.js`, `manifest.json`, iconen.
 - **PWA, volledig offline** na installatie op het beginscherm (iOS Safari).
 - Opslag: **IndexedDB** (`epc-db`, store `woningen`, keyPath `id`); `navigator.storage.persist()`
   wordt gevraagd tegen eviction. **Autosave elke 3 s** en bij `pagehide`/`visibilitychange`;
@@ -246,51 +246,37 @@ Bewust minimaal, géén ventilatie-overzicht (de PDF bevat die tabel al):
   1. elke ruimte minstens één foto (bij rood: welke ruimtes niet),
   2. verwarming ingevuld (minstens één opwekker of ruimtetoestel),
   3. hoofdfoto gekozen (ster op een gevelfoto).
-- **"Print one-pager (PDF)"** — zie §5.
+- **"Bewaar PDF"** — genereert en deelt het PDF-dossier, zie §5.
 - "Woning sluiten" (terug naar de lijst) en "Woning verwijderen" (confirm).
 
-## 5. PDF (one-pager + fotodossier)
+## 5. PDF (het dossier)
 
-De PDF is het volledige, blijvende dossier en bevat **alle** gegevens:
+De app genereert **zelf een echt PDF-bestand** (vanilla JS in `pdf.js`, geen
+dependencies; Helvetica base-14 met WinAnsi, foto's als JPEG/DCTDecode). Er is
+géén print- of Safari-omweg meer: op **Afronden** staat één knop **"Bewaar PDF"**
+die het bestand `"<adres>.pdf"` maakt en het deelt via het deelmenu
+(`navigator.share` met een File; zonder deelmenu — desktop — wordt het gewoon
+gedownload). **Enkel PDF**: er valt niets anders te bewaren.
 
-- Kop: hoofdfoto, adres, **datum plaatsbezoek**.
+Inhoud en volgorde:
+
+- Kop: adres (vet), datum plaatsbezoek; hoofdfoto rechtsboven.
 - Tabel **Ramen & deuren**: #, type, ruimte, gevel, aantal, B (m), H (m), m²
   (aantal meegerekend), beglazing, kader, rolluik; totaalregel. Deuren bovenaan,
-  dan gevelvolgorde. **Direct onder de tabel** staan de bijhorende foto's
-  (afstandhouder/kenplaatje) met als bijschrift type, gevel en **ruimte** —
-  zonder nummers.
+  dan gevelvolgorde. Direct onder de tabel de bijhorende foto's
+  (afstandhouder/kenplaatje) met type, gevel en ruimte als bijschrift — zonder nummers.
 - Tabel **Energie**: alle opwekkers (centraal + per ruimte) met ruimte, functies,
-  beschrijving en bij airco/kachel het ruimtevolume. **Direct onder de tabel**
-  staan de bijhorende kenplaat- en kranenfoto's met type en **ruimte** in het
-  bijschrift — zonder nummers. Daarna een regel **Zonnepanelen** (elke installatie
-  met oriëntatie en Wp) en — **alleen als er een zonneboiler is** — een regel
-  **Zonneboiler** met m² collector.
-- Tabel **Ventilatie**: per ruimte de ventilatie, afmetingen en opmerking.
-- Notities.
-- **Fotodossier op een aparte pagina** (paginabreak): adres + datum + alle
-  dossierfoto's **gegroepeerd onder een titel per ruimte** — volgorde: Gevels,
-  daarna de ruimtes, en **Algemeen altijd als laatste**. Geen bijschriften of
-  nummers per foto. De Algemeen-foto's (facturen) staan op **eigen pagina's in
-  landscape (CSS named page `@page liggend`), maximaal 2 per pagina**, zodat ze
-  leesbaar blijven; browsers die gemengde oriëntatie niet ondersteunen vallen
-  terug op grote staande weergave.
-- Het **printvenster** (de HTML-pagina vóór het bewaren) heeft een lightbox:
-  tik op een foto om ze schermvullend te bekijken, tik opnieuw om te sluiten
-  (verschijnt niet in de afdruk). In de bewaarde PDF zelf bestaat geen
-  klik-zoom (een PDF is statisch), maar de foto's zijn 1600 px zodat
-  pinch-zoomen in elke PDF-viewer scherp blijft.
-
-Gedrag:
-
-- **Bestandsnaam = het adres** (browser: via `document.title`-truc rond `window.print()`).
-- **iOS-app op het beginscherm**: `window.print()` werkt daar niet — de one-pager
-  opent dan als zelfstandige pagina op een **echte URL `pdf/<adres-slug>`** (de
-  service worker beantwoordt elke navigatie naar `/pdf/` met `print.html`; die
-  shell leest de kant-en-klare HTML uit IndexedDB-instelling `printHtml` en
-  schrijft ze in het document). Zo is de voorgestelde PDF-naam het adres en nooit
-  "blob". Valt IndexedDB weg, dan is er een blob-URL-fallback zoals voorheen.
-  De pagina is zonder knoppen of uitleg (opslaan/delen via de deelknop van Safari),
-  responsief, en print als nette A4.
+  beschrijving en bij airco/kachel het ruimtevolume. Daaronder de kenplaat- en
+  kranenfoto's met type en ruimte in het bijschrift, dan een regel **Zonnepanelen**
+  (oriëntatie + Wp per installatie) en — alleen bij ja — **Zonneboiler** met m².
+- Tabel **Ventilatie**: per ruimte de ventilatie, afmetingen en opmerking
+  (natte ruimtes eerst).
+- **Notities** (indien ingevuld).
+- **Fotodossier** vanaf een nieuwe pagina: per groep een titel (Gevels, dan de
+  ruimtes, **Algemeen laatst**) met de foto's in een raster van 3 per rij, zonder
+  bijschriften. De **Algemeen-foto's (facturen) staan op eigen liggende A4-pagina's,
+  2 per pagina**, paginavullend zodat ze leesbaar zijn.
+- Elke pagina onderaan: adres · paginanummer.
 
 ## 6. Werkafspraken voor ontwikkeling
 

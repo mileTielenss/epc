@@ -1,12 +1,12 @@
 'use strict';
 
-const CACHE = 'epc-v39';
+const CACHE = 'epc-v40';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
-  './print.html',
+  './pdf.js',
   './manifest.json',
   './icon-180.png',
   './icon-192.png',
@@ -33,14 +33,6 @@ self.addEventListener('message', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  /* pdf/<adres-slug>: serveer de printshell, zodat de bewaarde PDF de naam
-     van het adres krijgt in plaats van "blob" */
-  if (e.request.mode === 'navigate' && new URL(e.request.url).pathname.includes('/pdf/')) {
-    e.respondWith(
-      caches.open(CACHE).then(c => c.match('./print.html')).then(r => r || fetch('./print.html'))
-    );
-    return;
-  }
   e.respondWith(
     /* uitsluitend de eigen cache: een nieuwe SW mag nooit oude bestanden serveren */
     caches.open(CACHE).then(c => c.match(e.request, { ignoreSearch: true })).then(hit => {
@@ -53,7 +45,7 @@ self.addEventListener('fetch', e => {
           }
           return res;
         })
-        .catch(() => (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error()));
+        .catch(() => (e.request.mode === 'navigate' ? caches.open(CACHE).then(c => c.match('./index.html')) : Response.error()));
     })
   );
 });
