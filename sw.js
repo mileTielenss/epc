@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'epc-v35';
+const CACHE = 'epc-v36';
 const ASSETS = [
   './',
   './index.html',
@@ -33,7 +33,8 @@ self.addEventListener('message', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then(hit => {
+    /* uitsluitend de eigen cache: een nieuwe SW mag nooit oude bestanden serveren */
+    caches.open(CACHE).then(c => c.match(e.request, { ignoreSearch: true })).then(hit => {
       if (hit) return hit;
       return fetch(e.request)
         .then(res => {

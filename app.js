@@ -1,5 +1,9 @@
 'use strict';
 
+/* moet gelijklopen met CACHE in sw.js; wijkt de draaiende SW af, dan draaien we
+   op verouderde bestanden en herladen we onszelf (eenmalig) */
+const APP_VERSIE = 'epc-v36';
+
 /* ============================== helpers ============================== */
 
 const $ = s => document.querySelector(s);
@@ -1172,14 +1176,15 @@ function renderRuimtebalk() {
   syncRuimteAfm();
   renderRv();
   renderDossier();
+  syncVent();
+}
+
+/* ventilatie-sectie volgt de gekozen ruimte */
+function syncVent() {
   const r = huidigeRuimte();
-  /* ventilatie vul je op Details in; op Foto's blijft de regel weg */
-  $('#ruimteregel').hidden = !r || actieveTab !== 'details';
-  $('#vent-besch').hidden = !r || r.vent !== 'ander' || actieveTab !== 'details';
-  if (r) {
-    $('#btn-vent').textContent = `\u{1F4A8} Ventilatie: ${VENT_NAMEN[r.vent] || r.vent}`;
-    if (r.vent === 'ander') $('#vent-besch').value = r.ventBeschrijving || '';
-  }
+  $('#btn-vent .cv').textContent = r ? (VENT_NAMEN[r.vent] || r.vent) : '—';
+  $('#fld-ventbesch').hidden = !r || r.vent !== 'ander';
+  if (r && r.vent === 'ander') $('#vent-besch').value = r.ventBeschrijving || '';
 }
 
 /* ruimte wisselen zonder de camera te sluiten */
@@ -1200,7 +1205,7 @@ function voegRuimteToe(naam) {
   selectedRuimte = uniek;
   $('#ruimtekeuze').hidden = true;
   renderRuimtebalk();
-  flash($('#btn-vent'));
+  $('#sec-vent').open = true; /* accordeon sluit de rest */
   bewaar();
   toast(`${uniek} toegevoegd`);
 }
@@ -1229,12 +1234,12 @@ $('#ruimtekeuze').addEventListener('click', e => {
 });
 
 /* ventilatie van de huidige ruimte doorschuiven; bij "ander" verschijnt een
-   tekstveld onder de knop (geen popup) */
+   beschrijvingsveld onder de knop (geen popup) */
 $('#btn-vent').addEventListener('click', () => {
   const r = huidigeRuimte();
   if (!r) return;
   r.vent = VENT_MODES[(VENT_MODES.indexOf(r.vent) + 1) % VENT_MODES.length];
-  renderRuimtebalk();
+  syncVent();
   if (r.vent === 'ander') $('#vent-besch').focus();
   bewaar();
 });
@@ -1943,7 +1948,17 @@ function syncAlles() {
       if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('versie');
     }
     navigator.serviceWorker.addEventListener('message', e => {
-      if (e.data && e.data.versie) $('#versie').textContent = 'Versie ' + String(e.data.versie).replace('epc-', '');
+      if (!e.data || !e.data.versie) return;
+      $('#versie').textContent = 'Versie ' + String(e.data.versie).replace('epc-', '');
+      /* zelfherstel: SW nieuwer dan de geladen bestanden -> eenmalig herladen */
+      if (e.data.versie !== APP_VERSIE) {
+        if (!sessionStorage.getItem('herlaadpoging')) {
+          sessionStorage.setItem('herlaadpoging', '1');
+          location.reload();
+        }
+      } else {
+        sessionStorage.removeItem('herlaadpoging');
+      }
     });
 
     /* handmatig een update forceren, met duidelijke feedback */

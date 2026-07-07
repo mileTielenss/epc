@@ -21,8 +21,9 @@ daarin is **bewust gekozen** door de gebruiker. Daarom:
 - Werk **direct op `main`**; push deployt automatisch naar GitHub Pages.
   Branches `v1`, `v2`, … zijn historische checkpoints — nooit op verder bouwen.
   Maak op vraag van de gebruiker een nieuwe checkpoint-branch vóór grote verbouwingen.
-- **Bump bij elke release de cache-versie in `sw.js`** (`epc-vNN`), anders krijgen
-  toestellen de update niet.
+- **Bump bij elke release de cache-versie in `sw.js` én `APP_VERSIE` in `app.js`**
+  (zelfde `epc-vNN`-waarde), anders krijgen toestellen de update niet of blijft
+  het zelfherstel herladen.
 - **Test vóór elke push** met Playwright in de meegeleverde Chromium
   (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`; camera met
   `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`):

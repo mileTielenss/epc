@@ -44,11 +44,16 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 - Opslag: **IndexedDB** (`epc-db`, store `woningen`, keyPath `id`); `navigator.storage.persist()`
   wordt gevraagd tegen eviction. **Autosave elke 3 s** en bij `pagehide`/`visibilitychange`;
   rechtsboven staat "opgeslagen HH:MM:SS".
-- **Service worker**: cache-naam `epc-vNN` — **bij elke release wordt NN opgehoogd**.
-  Update-check bij elke start en bij terugkeer naar de app; nieuwe versie activeert
-  meteen (skipWaiting + clients.claim) en de pagina herlaadt automatisch (niet bij
-  eerste installatie). De SW beantwoordt `'versie'`-messages met zijn cache-naam en
-  `'skip'` met skipWaiting.
+- **Service worker**: cache-naam `epc-vNN` én dezelfde waarde als `APP_VERSIE` in
+  `app.js` — **bij elke release worden beide samen opgehoogd**. De fetch-handler
+  leest **uitsluitend uit zijn eigen cache** (nooit uit oude caches), zodat een
+  nieuwe SW nooit oude bestanden kan serveren. Update-check bij elke start en bij
+  terugkeer naar de app; nieuwe versie activeert meteen (skipWaiting +
+  clients.claim) en de pagina herlaadt automatisch (niet bij eerste installatie).
+  **Zelfherstel**: meldt de SW een andere versie dan `APP_VERSIE`, dan draait de
+  pagina op verouderde bestanden en herlaadt ze zichzelf één keer automatisch
+  (sessionStorage-vlag tegen herlaadlussen). De SW beantwoordt `'versie'`-messages
+  met zijn cache-naam en `'skip'` met skipWaiting.
 - Startscherm toont **"Versie vNN"** (de écht draaiende versie, via SW-message) en een
   knop **"Zoek update"** die een update forceert met eerlijke feedback
   ("Je hebt al de nieuwste versie" / "Update gevonden, app herlaadt zo…").
@@ -138,11 +143,8 @@ Alle foto's mogen scherp zijn zolang de bestanden klein blijven:
 - Ruimtes staan altijd **gegroepeerd op basisnaam** (alle wc's samen, slaapkamers
   achter elkaar, …), op volgorde van eerste voorkomen; binnen een groep oplopend
   genummerd. Een nieuwe "Badkamer 2" komt dus naast "Badkamer" te staan.
-- Bij een gekozen ruimte verschijnt eronder de **ventilatieknop**: elke tik schuift
-  door `geen → natuurlijk → mechanisch → mechanisch permanent → ander`; bij
-  "ander" verschijnt een **tekstveld onder de knop** (geen popup) voor de
-  beschrijving. Daarnaast een ×-knop die de ruimte verwijdert (confirm;
-  gekoppelde items blijven bestaan maar verliezen hun label).
+- De header bevat **alleen de chips** — ventilatie en ruimtebeheer zitten op de
+  Details-tab zelf (zie 4.4).
 
 ### 4.3 Tab Algemeen (de hele woning)
 
@@ -168,11 +170,16 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 
 ### 4.4 Tab Details (per gekozen ruimte)
 
+- Sectie **Ventilatie** (tussen Ramen en Verwarming): roterende knop
+  `geen → natuurlijk → mechanisch → mechanisch permanent → ander`; bij "ander"
+  verschijnt een beschrijvingsveld onder de knop (geen popup).
 - Onderaan de tab: een **opmerkingveld** per ruimte (bv. "recht achterboven in de
-  hoek", om rare indelingen later te kunnen staven).
-De twee secties werken ook hier als **accordeon** (één tegelijk open; een raam of
-toestel bewerken opent vanzelf de juiste sectie). Na het toevoegen van een nieuwe
-ruimte licht de ventilatieknop kort op als geheugensteun.
+  hoek") en een knop **"Verwijder deze ruimte"** (confirm; gekoppelde items blijven
+  bestaan maar verliezen hun label).
+De **drie secties** (Ramen & deuren, Ventilatie, Verwarming in deze ruimte) werken
+als **accordeon** (één tegelijk open; een raam of toestel bewerken opent vanzelf de
+juiste sectie). **Na het toevoegen van een nieuwe ruimte opent de
+Ventilatie-sectie** automatisch.
 
 - Sectie **Ramen & deuren** (inklapbaar, standaard open), **compact genoeg om op
   een iPhone te typen zonder te scrollen**: element (Raam/Deur/Dakraam) en gevel

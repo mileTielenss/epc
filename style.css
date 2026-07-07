@@ -47,19 +47,7 @@ body{
 #ruimtebalk .chips button.plus{border-style:dashed}
 #ruimtekeuze{margin-top:6px;flex-wrap:wrap !important}
 #ruimtekeuze button{white-space:nowrap}
-.ruimteregel{display:flex;align-items:center;gap:8px;margin-top:6px}
-#btn-vent.flash{background:rgba(255,255,255,.3)}
-#btn-vent{
-  flex:1;min-height:34px;text-align:left;
-  font-family:inherit;font-size:.82rem;font-weight:600;
-  border:1.5px solid rgba(255,255,255,.5);border-radius:10px;
-  background:transparent;color:#fff;padding:4px 11px;
-}
-.ruimteregel .del{
-  flex:0 0 auto;width:34px;height:34px;border-radius:10px;border:1.5px solid rgba(255,255,255,.5);
-  background:transparent;color:#fff;font-size:1.2rem;font-weight:700;
-}
-#vent-besch{margin-top:6px;min-height:36px;font-size:.85rem}
+
 
 /* ---------- woningenlijst ---------- */
 #view-lijst{

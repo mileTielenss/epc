@@ -36,11 +36,6 @@
       <button type="button" data-v="Veranda">Veranda</button>
       <button type="button" data-v="__naam" class="andere">Andere naam&#8230;</button>
     </div>
-    <div class="ruimteregel" id="ruimteregel" hidden>
-      <button type="button" id="btn-vent">&#128168; geen</button>
-      <button type="button" class="del" id="btn-ruimte-del">&times;</button>
-    </div>
-    <input type="text" id="vent-besch" hidden placeholder="beschrijf de ventilatie...">
   </div>
 </header>
 
@@ -201,6 +196,15 @@
   <ul id="ramenlijst" class="lijst"></ul>
 </details>
 
+<details class="sectie" id="sec-vent">
+  <summary>Ventilatie</summary>
+  <button type="button" class="cycle" id="btn-vent"><span class="cl">Ventilatie</span><span class="cv">geen</span><span class="ci">&#10227;</span></button>
+  <label class="fld" id="fld-ventbesch" hidden>
+    <span class="lbl">Beschrijving</span>
+    <input type="text" id="vent-besch" placeholder="bv. vraaggestuurd type C">
+  </label>
+</details>
+
 <details class="sectie" id="sec-energie">
   <summary>Verwarming in deze ruimte</summary>
   <div id="rv-geen" class="totaal" hidden>Kies bovenaan een ruimte om een toestel toe te voegen.</div>
@@ -241,6 +245,7 @@
     <span class="lbl">Opmerking bij deze ruimte</span>
     <input type="text" id="ruimte-opm" placeholder="bv. recht achterboven in de hoek">
   </label>
+  <button type="button" class="btn danger big" id="btn-ruimte-del">Verwijder deze ruimte</button>
 </div>
 
 </section>
