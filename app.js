@@ -73,14 +73,12 @@ const dbPutWoning = w => tx('woningen', 'readwrite', s => s.put(w));
 const dbGetWoning = id => tx('woningen', 'readonly', s => s.get(id));
 const dbAlleWoningen = () => tx('woningen', 'readonly', s => s.getAll());
 const dbVerwijderWoning = id => tx('woningen', 'readwrite', s => s.delete(id));
-const dbZetInstelling = (k, v) => tx('instellingen', 'readwrite', s => s.put(v, k));
-const dbGetInstelling = k => tx('instellingen', 'readonly', s => s.get(k));
 
 /* ============================== woningmodel ============================== */
 
 /* elke woning start met de standaardruimtes; extra ruimtes voeg je toe in de ruimtebalk */
 function standaardRuimtes() {
-  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Berging', 'Slaapkamer 1', 'Slaapkamer 2']
+  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Berging', 'Slaapkamer 1']
     .map(naam => ({ naam, vent: 'geen', ventBeschrijving: '' }));
 }
 
@@ -90,7 +88,6 @@ function leegWoning() {
     status: 'open',
     gemaakt: nu(),
     gewijzigd: nu(),
-    bestand: null,
     algemeen: { adres: '', foto: null, datum: vandaag(), gebouwtype: '', bouwjaar: '', kelder: '', zolder: '', notities: '' },
     ruimtes: standaardRuimtes(),
     ramen: [],
@@ -231,156 +228,11 @@ async function bewaar() {
     toast('Opslaan mislukt!');
     return;
   }
-  schrijfBackup(S);
 }
 
 setInterval(() => { if (S && dirty) bewaar(); }, 3000);
 window.addEventListener('pagehide', () => { if (S && dirty) bewaar(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && S && dirty) bewaar(); });
-
-/* ============================== mapbackup (File System Access API) ==============================
-   leesbare structuur, zonder de app te openen:
-   <backupmap>/<adres>-<id>/woning.json + fotos/raam-1.jpg ... */
-
-const FSA = 'showDirectoryPicker' in window;
-let backupDir = null;
-
-/* jij nummert je adressen zelf (1. adres, 2. adres), dus het adres alleen volstaat als mapnaam */
-function mapnaam(w) {
-  return slug(w.algemeen.adres) || `woning-${w.id}`;
-}
-
-async function schrijfBestand(dir, naam, data) {
-  const fh = await dir.getFileHandle(naam, { create: true });
-  const ws = await fh.createWritable();
-  await ws.write(data);
-  await ws.close();
-}
-
-async function schrijfBackup(w) {
-  if (!backupDir) return;
-  const naam = mapnaam(w);
-  try {
-    if (w.bestand && w.bestand !== naam) {
-      try { await backupDir.removeEntry(w.bestand, { recursive: true }); } catch (e) { /* al weg */ }
-    }
-    const dir = await backupDir.getDirectoryHandle(naam, { create: true });
-    const kopie = JSON.parse(JSON.stringify(w));
-    let fotosDir = null;
-    for (const v of woningFotoVelden(kopie)) {
-      if (!String(v.obj[v.key]).startsWith('data:')) continue;
-      if (!fotosDir) fotosDir = await dir.getDirectoryHandle('fotos', { create: true });
-      const bytes = dataUrlNaarBytes(v.obj[v.key]);
-      /* foto's veranderen zelden: enkel schrijven als grootte verschilt */
-      let bestaand = null;
-      try { bestaand = await (await fotosDir.getFileHandle(`${v.naam}.jpg`)).getFile(); } catch (e) { /* nieuw */ }
-      if (!bestaand || bestaand.size !== bytes.length) await schrijfBestand(fotosDir, `${v.naam}.jpg`, bytes);
-      v.obj[v.key] = `fotos/${v.naam}.jpg`;
-    }
-    await schrijfBestand(dir, 'woning.json', JSON.stringify(kopie, null, 1));
-    if (w.bestand !== naam) { w.bestand = naam; dbPutWoning(w); }
-    backupStatus(`Backup ok: ${naam}`);
-  } catch (e) {
-    backupStatus('Backup mislukt: ' + e.name);
-  }
-}
-
-async function verwijderBackup(w) {
-  if (!backupDir || !w || !w.bestand) return;
-  try { await backupDir.removeEntry(w.bestand, { recursive: true }); } catch (e) { /* al weg */ }
-}
-
-async function backupAlles() {
-  if (!backupDir) return;
-  const alle = await dbAlleWoningen();
-  for (const w of alle) await schrijfBackup(w);
-  backupStatus(`Alles bewaard: ${alle.length} woning${alle.length === 1 ? '' : 'en'} in map "${backupDir.name}"`);
-}
-
-/* alles terugzetten uit de backupmap (map per woning met woning.json en fotos/) */
-async function zetAllesTerug() {
-  if (!backupDir) return;
-  if (!confirm('Alles terugzetten uit de backupmap? Woningen met dezelfde id worden overschreven.')) return;
-  let n = 0, fout = 0;
-  for await (const h of backupDir.values()) {
-    if (h.kind !== 'directory') continue;
-    try {
-      const jf = await (await h.getFileHandle('woning.json')).getFile();
-      const w = JSON.parse(await jf.text());
-      for (const v of woningFotoVelden(w)) {
-        const pad = v.obj[v.key];
-        if (typeof pad === 'string' && !pad.startsWith('data:')) {
-          try {
-            const fotosDir = await h.getDirectoryHandle('fotos');
-            const f = await (await fotosDir.getFileHandle(pad.split('/').pop())).getFile();
-            v.obj[v.key] = bytesNaarDataUrl(new Uint8Array(await f.arrayBuffer()));
-          } catch (e) { v.obj[v.key] = null; }
-        }
-      }
-      await dbPutWoning(normaliseer(w));
-      n++;
-    } catch (e) { fout++; /* map zonder woning.json: overslaan */ }
-  }
-  await renderLijst();
-  toast(n ? `${n} woning${n === 1 ? '' : 'en'} teruggezet${fout ? `, ${fout} map(pen) overgeslagen` : ''}` : 'Niets gevonden in de backupmap');
-}
-
-function backupStatus(msg) {
-  $('#backupstatus').textContent = msg;
-}
-
-function backupKnoppen() {
-  $('#backupknoppen').hidden = !backupDir;
-  if (backupDir) $('#btn-backupmap').textContent = '\u{1F4C1} Backupmap wijzigen';
-}
-
-async function laadBackupmap() {
-  if (!FSA) return;
-  $('#btn-backupmap').hidden = false;
-  try {
-    const h = await dbGetInstelling('backupmap');
-    if (!h) { backupStatus('Geen backupmap gekozen. Kies een map, dan bewaart de app daar automatisch alles leesbaar.'); return; }
-    const perm = await h.queryPermission({ mode: 'readwrite' });
-    if (perm === 'granted') {
-      backupDir = h;
-      backupKnoppen();
-      backupStatus(`Backupmap actief: ${h.name}`);
-      backupAlles();
-    } else {
-      $('#btn-backupmap').textContent = '\u{1F4C1} Backup hervatten';
-      backupStatus('Tik op "Backup hervatten" om de backupmap opnieuw toe te laten.');
-    }
-  } catch (e) {
-    backupStatus('Backupmap niet beschikbaar.');
-  }
-}
-
-$('#btn-backupmap').addEventListener('click', async () => {
-  try {
-    let h = await dbGetInstelling('backupmap');
-    if (h && await h.requestPermission({ mode: 'readwrite' }) === 'granted') {
-      backupDir = h;
-    } else {
-      h = await window.showDirectoryPicker({ mode: 'readwrite' });
-      await dbZetInstelling('backupmap', h);
-      backupDir = h;
-    }
-    backupKnoppen();
-    backupStatus(`Backupmap actief: ${backupDir.name}`);
-    await backupAlles();
-    toast('Alle woningen bewaard in de map');
-  } catch (e) {
-    if (e.name !== 'AbortError') backupStatus('Backupmap kiezen mislukt.');
-  }
-});
-
-$('#btn-bewaaralles').addEventListener('click', async () => {
-  if (!backupDir) return;
-  await backupAlles();
-  toast('Alles bewaard');
-});
-
-$('#btn-terugzetten').addEventListener('click', zetAllesTerug);
 
 /* ============================== views ============================== */
 
@@ -469,7 +321,6 @@ $('#woninglijst').addEventListener('click', async e => {
     if (!w) return;
     if (!confirm(`"${w.algemeen.adres || 'Zonder adres'}" definitief verwijderen?`)) return;
     await dbVerwijderWoning(w.id);
-    await verwijderBackup(w);
     await renderLijst();
     toast('Woning verwijderd');
     return;
@@ -481,7 +332,6 @@ $('#woninglijst').addEventListener('click', async e => {
     w.status = w.status === 'open' ? 'afgewerkt' : 'open';
     w.gewijzigd = nu();
     await dbPutWoning(w);
-    schrijfBackup(w);
     await renderLijst();
     return;
   }
@@ -524,7 +374,7 @@ function verkleinBestand(f, maxDim, kwaliteit) {
   });
 }
 
-/* detailfoto's klein houden (backups!), de hoofdfoto scherper: die bewaar je
+/* detailfoto's klein houden (opslag), de hoofdfoto scherper: die bewaar je
    via save-as op de pc om ze elders als gevelfoto te gebruiken */
 let fotoCb = null, fotoMaxDim = 900, fotoKwaliteit = 0.7;
 function neemFoto(cb, maxDim = 900, kwaliteit = 0.7) {
@@ -1113,23 +963,41 @@ function renderRuimtebalk() {
   }
 }
 
+/* nieuwe ruimte: veelvoorkomende namen als sneltoetsen; zelfde naam krijgt
+   vanzelf een nummer (Slaapkamer -> Slaapkamer 2, 3, ...) */
+function voegRuimteToe(naam) {
+  const zelfde = S.ruimtes.filter(r => r.naam === naam || r.naam.startsWith(naam + ' ')).length;
+  const uniek = zelfde ? `${naam} ${zelfde + 1}` : naam;
+  S.ruimtes.push({ naam: uniek, vent: 'geen', ventBeschrijving: '' });
+  selectedRuimte = uniek;
+  $('#ruimtekeuze').hidden = true;
+  renderRuimtebalk();
+  renderVentOverzicht();
+  bewaar();
+  toast(`${uniek} toegevoegd`);
+}
+
 $('#ruimtechips').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b || !S) return;
   if (b.dataset.v === '__plus') {
-    const naam = (prompt('Naam van de nieuwe ruimte?') || '').trim();
-    if (!naam) return;
-    const zelfde = S.ruimtes.filter(r => r.naam === naam || r.naam.startsWith(naam + ' ')).length;
-    const uniek = zelfde ? `${naam} ${zelfde + 1}` : naam;
-    S.ruimtes.push({ naam: uniek, vent: 'geen', ventBeschrijving: '' });
-    selectedRuimte = uniek;
-    renderRuimtebalk();
-    renderVentOverzicht();
-    bewaar();
+    $('#ruimtekeuze').hidden = !$('#ruimtekeuze').hidden;
     return;
   }
+  $('#ruimtekeuze').hidden = true;
   selectedRuimte = b.dataset.v;
   renderRuimtebalk();
+});
+
+$('#ruimtekeuze').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || !S) return;
+  if (b.dataset.v === '__naam') {
+    const naam = (prompt('Naam van de nieuwe ruimte?') || '').trim();
+    if (naam) voegRuimteToe(naam);
+    return;
+  }
+  voegRuimteToe(b.dataset.v);
 });
 
 /* ventilatie van de huidige ruimte doorschuiven */
@@ -1561,143 +1429,7 @@ function printInhoudHtml() {
   return html;
 }
 
-/* ---------- mini-zip (opslaan zonder compressie; foto's zijn al JPEG) ---------- */
-
-const CRC_TABEL = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-function crc32(data) {
-  let c = 0xFFFFFFFF;
-  for (let i = 0; i < data.length; i++) c = CRC_TABEL[(c ^ data[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
-}
-
-function maakZip(bestanden) {
-  const enc = new TextEncoder();
-  const delen = [], centraal = [];
-  let offset = 0;
-  for (const f of bestanden) {
-    const naam = enc.encode(f.naam);
-    const crc = crc32(f.data);
-    const lok = new DataView(new ArrayBuffer(30));
-    lok.setUint32(0, 0x04034b50, true);
-    lok.setUint16(4, 20, true);
-    lok.setUint16(6, 0x0800, true); /* utf-8 bestandsnamen */
-    lok.setUint32(14, crc, true);
-    lok.setUint32(18, f.data.length, true);
-    lok.setUint32(22, f.data.length, true);
-    lok.setUint16(26, naam.length, true);
-    delen.push(new Uint8Array(lok.buffer), naam, f.data);
-    const cd = new DataView(new ArrayBuffer(46));
-    cd.setUint32(0, 0x02014b50, true);
-    cd.setUint16(4, 20, true);
-    cd.setUint16(6, 20, true);
-    cd.setUint16(8, 0x0800, true);
-    cd.setUint32(16, crc, true);
-    cd.setUint32(20, f.data.length, true);
-    cd.setUint32(24, f.data.length, true);
-    cd.setUint16(28, naam.length, true);
-    cd.setUint32(42, offset, true);
-    centraal.push(new Uint8Array(cd.buffer), naam);
-    offset += 30 + naam.length + f.data.length;
-  }
-  let cdLen = 0;
-  centraal.forEach(d => { cdLen += d.length; });
-  const eind = new DataView(new ArrayBuffer(22));
-  eind.setUint32(0, 0x06054b50, true);
-  eind.setUint16(8, bestanden.length, true);
-  eind.setUint16(10, bestanden.length, true);
-  eind.setUint32(12, cdLen, true);
-  eind.setUint32(16, offset, true);
-  return new Blob([...delen, ...centraal, new Uint8Array(eind.buffer)], { type: 'application/zip' });
-}
-
-/* leest ook zips die elders opnieuw ingepakt zijn (deflate) */
-async function leesZip(buffer) {
-  const b = new Uint8Array(buffer), dv = new DataView(buffer);
-  let e = b.length - 22;
-  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
-  if (e < 0) throw new Error('geen zip');
-  const n = dv.getUint16(e + 10, true);
-  let p = dv.getUint32(e + 16, true);
-  const uit = new Map(), dec = new TextDecoder();
-  for (let i = 0; i < n; i++) {
-    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('zip beschadigd');
-    const methode = dv.getUint16(p + 10, true);
-    const csize = dv.getUint32(p + 20, true);
-    const nlen = dv.getUint16(p + 28, true);
-    const xlen = dv.getUint16(p + 30, true);
-    const clen = dv.getUint16(p + 32, true);
-    const lofs = dv.getUint32(p + 42, true);
-    const naam = dec.decode(b.subarray(p + 46, p + 46 + nlen));
-    const dstart = lofs + 30 + dv.getUint16(lofs + 26, true) + dv.getUint16(lofs + 28, true);
-    let data = b.slice(dstart, dstart + csize);
-    if (methode === 8) {
-      data = new Uint8Array(await new Response(
-        new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-      ).arrayBuffer());
-    } else if (methode !== 0) {
-      throw new Error('zip-methode niet ondersteund');
-    }
-    if (!naam.endsWith('/')) uit.set(naam, data);
-    p += 46 + nlen + xlen + clen;
-  }
-  return uit;
-}
-
-function dataUrlNaarBytes(u) {
-  const bin = atob(u.slice(u.indexOf(',') + 1));
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr;
-}
-function bytesNaarDataUrl(bytes) {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return 'data:image/jpeg;base64,' + btoa(bin);
-}
-
-/* ---------- backup-zip: leesbare woningen.json + fotos/ als echte jpg's ---------- */
-
-function woningFotoVelden(w) {
-  const velden = [];
-  if ((w.algemeen || {}).foto) velden.push({ obj: w.algemeen, key: 'foto', naam: 'hoofdfoto' });
-  (w.ramen || []).forEach(r => { if (r.foto) velden.push({ obj: r, key: 'foto', naam: `raam-${r.nr}` }); });
-  ((w.energie || {}).opwekkers || []).forEach(o => {
-    if (o.foto) velden.push({ obj: o, key: 'foto', naam: `opwekker-${o.nr}` });
-    if (o.fotoKraan) velden.push({ obj: o, key: 'fotoKraan', naam: `opwekker-${o.nr}-radiatorkranen` });
-  });
-  (w.fotodossier || []).forEach(f => {
-    if (f.foto) velden.push({ obj: f, key: 'foto', naam: `dossier-${f.nr}-${f.cat || 'algemeen'}` });
-  });
-  return velden;
-}
-
-function maakBackupZip(alle) {
-  const bestanden = [];
-  const kopie = JSON.parse(JSON.stringify(alle));
-  kopie.forEach(w => {
-    const map = `fotos/${slug(w.algemeen.adres) || 'woning-' + w.id}`;
-    woningFotoVelden(w).forEach(v => {
-      if (String(v.obj[v.key]).startsWith('data:')) {
-        const pad = `${map}/${v.naam}.jpg`;
-        bestanden.push({ naam: pad, data: dataUrlNaarBytes(v.obj[v.key]) });
-        v.obj[v.key] = pad;
-      }
-    });
-  });
-  const json = JSON.stringify(alleWoningenBundel(kopie), null, 1);
-  bestanden.unshift({ naam: 'woningen.json', data: new TextEncoder().encode(json) });
-  return maakZip(bestanden);
-}
-
-/* ---------- export / import ---------- */
+/* ---------- bestand downloaden (fallback voor het printvenster) ---------- */
 
 function downloadBlob(naam, blob) {
   const a = document.createElement('a');
@@ -1709,100 +1441,6 @@ function downloadBlob(naam, blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-function alleWoningenBundel(alle) {
-  return { type: 'epc-alle-woningen', geexporteerd: nu(), woningen: alle };
-}
-
-async function stempelExport() {
-  await dbZetInstelling('laatsteExport', nu());
-  toonExportStatus();
-}
-
-async function toonExportStatus() {
-  if (FSA) return; /* op desktop toont de backupmap zijn eigen status */
-  const t = await dbGetInstelling('laatsteExport');
-  backupStatus(t
-    ? `Laatste export: ${new Date(t).toLocaleString('nl-BE')}`
-    : 'Nog geen export gemaakt. Bewaar regelmatig alles in Bestanden.');
-}
-
-/* iOS: deel de backup-zip naar de Files-app via het deelmenu */
-$('#btn-deelalles').addEventListener('click', async () => {
-  const alle = await dbAlleWoningen();
-  if (!alle.length) { toast('Nog geen woningen'); return; }
-  const naam = `epc-backup-${vandaag()}.zip`;
-  const file = new File([maakBackupZip(alle)], naam, { type: 'application/zip' });
-  try {
-    await navigator.share({ files: [file] });
-    await stempelExport();
-    toast(`${alle.length} woning${alle.length === 1 ? '' : 'en'} bewaard`);
-  } catch (e) {
-    if (e.name !== 'AbortError') {
-      downloadBlob(naam, file);
-      await stempelExport();
-    }
-  }
-});
-
-function kanDelen() {
-  try {
-    const f = new File(['{}'], 'test.json', { type: 'application/json' });
-    return !!(navigator.canShare && navigator.canShare({ files: [f] }));
-  } catch (e) { return false; }
-}
-
-/* een geparste JSON kan 1 woning of een alle-woningen-bundel zijn */
-async function importeerData(p) {
-  const lijst = Array.isArray(p.woningen) ? p.woningen : (p.algemeen ? [p] : null);
-  if (!lijst) throw new Error('geen epc-bestand');
-  let n = 0;
-  for (const item of lijst) {
-    const w = normaliseer(item);
-    await dbPutWoning(w);
-    schrijfBackup(w);
-    n++;
-  }
-  return n;
-}
-
-/* backup-zip: woningen.json lezen en fotopaden terug omzetten naar de foto's zelf */
-async function importeerZip(f) {
-  const inhoud = await leesZip(await f.arrayBuffer());
-  const jsonNaam = [...inhoud.keys()].find(x => x.toLowerCase().endsWith('.json'));
-  if (!jsonNaam) throw new Error('geen json in zip');
-  const p = JSON.parse(new TextDecoder().decode(inhoud.get(jsonNaam)));
-  const lijst = Array.isArray(p.woningen) ? p.woningen : (p.algemeen ? [p] : []);
-  lijst.forEach(w => woningFotoVelden(w).forEach(v => {
-    if (typeof v.obj[v.key] === 'string' && !v.obj[v.key].startsWith('data:')) {
-      const data = inhoud.get(v.obj[v.key]);
-      v.obj[v.key] = data ? bytesNaarDataUrl(data) : null;
-    }
-  }));
-  return importeerData(p);
-}
-
-async function importeerBestanden(files) {
-  let n = 0, fout = 0;
-  for (const f of files) {
-    try {
-      if (f.name.toLowerCase().endsWith('.zip')) n += await importeerZip(f);
-      else n += await importeerData(JSON.parse(await f.text()));
-    } catch (e) { fout++; }
-  }
-  await renderLijst();
-  if (n) toast(`${n} woning${n === 1 ? '' : 'en'} geïmporteerd${fout ? `, ${fout} bestand(en) overgeslagen` : ''}`);
-  else toast('Import mislukt: geen geldig bestand');
-}
-
-$('#btn-importeer').addEventListener('click', () => {
-  $('#importinput').value = '';
-  $('#importinput').click();
-});
-$('#importinput').addEventListener('change', () => {
-  importeerBestanden([...$('#importinput').files]);
-});
-
-
 $('#btn-verwijder-woning').addEventListener('click', async () => {
   if (!S) return;
   if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?`)) return;
@@ -1810,7 +1448,6 @@ $('#btn-verwijder-woning').addEventListener('click', async () => {
   S = null;
   dirty = false;
   await dbVerwijderWoning(w.id);
-  await verwijderBackup(w);
   await renderLijst();
   toonLijst();
   toast('Woning verwijderd');
@@ -1877,10 +1514,6 @@ function syncAlles() {
   /* staand vergrendelen waar de browser het toelaat (iOS negeert dit; daar vangt #draai het op) */
   try { screen.orientation.lock('portrait').catch(() => {}); } catch (e) { /* niet ondersteund */ }
 
-  if (!FSA && kanDelen()) $('#btn-deelalles').hidden = false;
-
-  await laadBackupmap();
-  await toonExportStatus();
   await renderLijst();
   toonLijst();
 

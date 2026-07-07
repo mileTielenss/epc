@@ -21,16 +21,11 @@ Het startscherm toont alle woningen. Tik op een woning om ze te openen, op de st
 - **Foto's**: fotodossier voor het projectdossier (10 jaar bewaarplicht). "Start camera" opent een eigen camerascherm dat open blijft: tik de sluiter zo vaak je wil, daarna "Klaar". Flitsknop verschijnt als het toestel torch via de browser toelaat (iOS meestal niet: gebruik daar "Kies foto's" met de native camera). "Kies foto's" laadt meerdere foto's tegelijk uit de bibliotheek. Categorie en ruimte worden samen het bijschrift in de PDF. Dossierfoto's worden bewaard tot max 1600px kwaliteit 0.75.
 - **Afronden**: overzicht van de ventilatie per ruimte, one-pager naar PDF via print (bevat alle gegevens, ook de datum plaatsbezoek, en krijgt het adres als bestandsnaam), woning sluiten of verwijderen. In de op iOS geïnstalleerde app opent de one-pager in Safari, waar Delen → Afdrukken → Bewaar als PDF wel werkt.
 
-## Data en backups
+## Data
 
-Elke woning is een eigen record in IndexedDB, elke 3 seconden en bij het verlaten van de pagina bewaard. Detailfoto's worden verkleind tot max 900px JPEG kwaliteit 0.7; de hoofdfoto tot max 1600px kwaliteit 0.8, zodat je ze op de pc via save-as als volwaardige gevelfoto kan hergebruiken. De JSON is leesbaar en bevat alles, ook de foto's (base64).
+Elke woning is een eigen record in IndexedDB, elke 3 seconden en bij het verlaten van de pagina bewaard, volledig lokaal op het toestel (persistente opslag wordt aangevraagd tegen eviction). De werkwijze is bewust simpel: gegevens verzamelen tijdens het plaatsbezoek, dagen later eventueel nog aanvullen, op het einde de PDF bewaren via Afronden, en daarna de woning verwijderen. Er is geen backup- of exportfunctie; de PDF is het blijvende dossier. Detailfoto's worden verkleind tot max 900px JPEG kwaliteit 0.7; de hoofdfoto en dossierfoto's tot max 1600px, zodat je ze op de pc via save-as als volwaardige gevelfoto kan hergebruiken.
 
-Manieren om data uit de app te halen:
-
-1. **Backupmap (desktop Chrome/Edge)**: kies één keer een map via "Kies backupmap". Daarna schrijft elke save automatisch een leesbare structuur per woning: `<adres>-<id>/woning.json` plus `fotos/raam-1.jpg` enz. Incrementeel, dus ook met honderden woningen snel. "Bewaar alles" schrijft alles opnieuw, "Zet alles terug" leest de hele map terug in de app.
-2. **Bewaar alles in Bestanden (iPhone)**: één zip met een leesbare `woningen.json` en een `fotos/`-map met echte jpg's per woning, via het deelmenu naar de Files-app. Doe dit regelmatig, want iOS laat de browser niet stil naar bestanden schrijven. Het startscherm toont de laatste exportdatum.
-
-Importeren kan met "Importeer backup" (meerdere bestanden tegelijk, zip of json); ook oude formaten (één woning of alles-json) worden herkend. Bestaande woningen met dezelfde id worden overschreven. De zip mag uitgepakt en opnieuw ingepakt zijn (deflate wordt gelezen), zolang `woningen.json` en de fotopaden kloppen.
+Let op: de data verdwijnt als je de app van het beginscherm verwijdert of Safari-websitedata wist.
 
 ## Iconen opnieuw genereren
 

@@ -179,6 +179,7 @@ textarea{resize:vertical}
 #ruimtebalk .chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
 #ruimtebalk .chips button{flex:0 0 auto;white-space:nowrap}
 #ruimtebalk .chips button.plus{border-style:dashed;color:var(--acc);font-weight:700}
+#ruimtekeuze{margin-top:6px;padding:8px;border:1.5px dashed var(--line);border-radius:12px;background:var(--card)}
 .ruimteregel{display:flex;align-items:center;gap:8px;margin-top:6px}
 #btn-vent{
   flex:1;min-height:38px;text-align:left;

@@ -27,21 +27,13 @@
   <h2>Woningen</h2>
   <ul id="woninglijst" class="lijst"></ul>
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
-  <button type="button" class="btn sec big" id="btn-deelalles" hidden>&#128228; Bewaar alles in Bestanden</button>
-  <button type="button" class="btn sec big" id="btn-backupmap" hidden>&#128193; Kies backupmap</button>
-  <div class="knoprij" id="backupknoppen" hidden>
-    <button type="button" class="btn big" id="btn-bewaaralles">&#128190; Bewaar alles</button>
-    <button type="button" class="btn sec big" id="btn-terugzetten">&#8617; Zet alles terug</button>
-  </div>
-  <button type="button" class="btn sec big" id="btn-importeer">&#11014; Importeer backup</button>
-  <div id="backupstatus"></div>
   <div id="versierij"><span id="versie"></span><button type="button" id="btn-update">Zoek update</button></div>
 
   <details id="uitleg">
     <summary>Hoe wordt alles bewaard?</summary>
-    <p>De app bewaart alles automatisch <b>elke 3 seconden op dit toestel</b>, ook zonder internet. Rechtsboven zie je telkens "opgeslagen" met het tijdstip. Crasht de app of je gsm, dan ben je hoogstens de laatste seconden kwijt.</p>
-    <p>Je data verdwijnt alleen als je de app van je beginscherm verwijdert of Safari-websitedata wist. Tik daarom na elk bezoek op <b>"Bewaar alles in Bestanden"</b>: dat maakt een zip met leesbare JSON en alle foto's in je Files-app.</p>
-    <p>Terugzetten doe je met <b>"Importeer backup"</b> (zip of JSON).</p>
+    <p>De app bewaart alles automatisch <b>elke 3 seconden op dit toestel</b>, ook zonder internet. Rechtsboven zie je telkens "opgeslagen" met het tijdstip. Je kan dagen later terugkomen en gewoon verder werken.</p>
+    <p>Klaar met een woning? Bewaar de PDF via <b>Afronden</b> en verwijder daarna de woning.</p>
+    <p>Let op: je data verdwijnt alleen als je de app van je beginscherm verwijdert of Safari-websitedata wist. Doe dat dus nooit zolang er woningen in de app staan.</p>
   </details>
 </section>
 
@@ -50,6 +42,17 @@
 <!-- ======================= RUIMTEBALK (ramen/energie/foto's) ======================= -->
 <div id="ruimtebalk" hidden>
   <div class="chips" id="ruimtechips"></div>
+  <div class="chips" id="ruimtekeuze" hidden>
+    <button type="button" data-v="Slaapkamer">Slaapkamer</button>
+    <button type="button" data-v="Badkamer">Badkamer</button>
+    <button type="button" data-v="WC">WC</button>
+    <button type="button" data-v="Bureau">Bureau</button>
+    <button type="button" data-v="Garage">Garage</button>
+    <button type="button" data-v="Zolder">Zolder</button>
+    <button type="button" data-v="Kelder">Kelder</button>
+    <button type="button" data-v="Veranda">Veranda</button>
+    <button type="button" data-v="__naam" class="andere">Andere naam&#8230;</button>
+  </div>
   <div class="ruimteregel" id="ruimteregel" hidden>
     <button type="button" id="btn-vent">&#128168; geen</button>
     <button type="button" class="del" id="btn-ruimte-del">&times;</button>
@@ -343,7 +346,6 @@
 <div id="toast" hidden></div>
 <input type="file" id="fotoinput" accept="image/*" capture="environment" hidden>
 <input type="file" id="dossierinput" accept="image/*" multiple hidden>
-<input type="file" id="importinput" accept=".json,.zip,application/json,application/zip" multiple hidden>
 <div id="lightbox" hidden><img alt="foto vergroot"></div>
 <div id="printview"></div>
 
