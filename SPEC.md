@@ -273,8 +273,10 @@ Inhoud en volgorde:
   (natte ruimtes eerst).
 - **Notities** (indien ingevuld).
 - **Fotodossier** vanaf een nieuwe pagina: per groep een titel (Gevels, dan de
-  ruimtes, **Algemeen laatst**) met de foto's in een raster van 3 per rij, zonder
-  bijschriften. De **Algemeen-foto's (facturen) staan op eigen liggende A4-pagina's,
+  ruimtes, **Algemeen laatst**) met de foto's in een compact raster van **4 per
+  rij**, zonder bijschriften. Een groepstitel blijft nooit alleen onderaan een
+  pagina achter: past de eerste fotorij er niet meer bij, dan verhuist de hele
+  groep naar de volgende pagina. De **Algemeen-foto's (facturen) staan op eigen liggende A4-pagina's,
   2 per pagina**, paginavullend zodat ze leesbaar zijn.
 - Elke pagina onderaan: adres · paginanummer.
 

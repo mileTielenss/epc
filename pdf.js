@@ -268,7 +268,7 @@ async function bouwPdf(S) {
           doc.tekst(p, M + k * (celB + gap) + Math.max(0, (celB - pdfBreedte(capregel, 6.5, false)) / 2), y + celH + 1, capregel, 6.5, false, true);
         }
       }
-      y += celH + capH + 6;
+      y += celH + capH + 4;
     }
   }
 
@@ -403,10 +403,11 @@ async function bouwPdf(S) {
         p = doc.nieuwePagina(false);
         y = M;
       } else {
-        checkPagina(40);
+        /* titel nooit alleen onderaan: titel + eerste fotorij horen samen */
+        checkPagina(14 + 100 + 6);
         doc.tekst(p, M, y, g.naam.toUpperCase(), 10.5, true);
         y += 14;
-        await fotoRaster(g.fotos.map(f => ({ src: f.foto })), 3, 140, false);
+        await fotoRaster(g.fotos.map(f => ({ src: f.foto })), 4, 95, false);
       }
     }
     /* lege slotpagina vermijden */

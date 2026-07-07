@@ -2,7 +2,7 @@
 
 /* moet gelijklopen met CACHE in sw.js; wijkt de draaiende SW af, dan draaien we
    op verouderde bestanden en herladen we onszelf (eenmalig) */
-const APP_VERSIE = 'epc-v40';
+const APP_VERSIE = 'epc-v41';
 
 /* ============================== helpers ============================== */
 
