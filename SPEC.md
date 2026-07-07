@@ -84,7 +84,7 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
                             functie (['radiatoren'|'vloer'|'sww']), beschrijving,
                             foto (kenplaat), fotoKraan } ],
              pvPanelen: [ { orientatie ('plat'|'voor'|'achter'|'links'|'rechts'|''), wp } ],
-             zonneboiler (''|'nee'|'ja'), zonneboilerM2 (m² collector, string) },
+             zonneboiler ('nee'|'ja'), zonneboilerM2 (m² collector, string) },
   fotodossier: [ { nr, ruimte, foto } ],
   teller, tellerOpwek, tellerDossier
 }
@@ -100,10 +100,11 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 - Lijst van woningen, **laatst gewijzigd bovenaan**, met hoofdfoto-miniatuur, adres, datum.
 - Per woning: statusknop **Open/Af** (toggle) en ×-verwijderknop (met confirm).
-- "+ Nieuwe woning" en een uitklapbaar **"Info"**-blok (standaard dicht) met daarin:
-  hoe alles bewaard wordt (nooit de app verwijderen zolang er woningen in staan),
-  de versieregel ("Versie vNN" + knop "Zoek update") en korte uitleg over de
-  werkwijze. Versie en update zijn dus verstopt tot je ze nodig hebt.
+- "+ Nieuwe woning" en een uitklapbaar **"Info"**-blok (standaard dicht, **onderaan
+  het scherm geduwd**) met daarin: hoe alles bewaard wordt (nooit de app verwijderen
+  zolang er woningen in staan), een tip over cameratoegang (Instellingen ▸ Apps ▸
+  Safari ▸ Camera), de versieregel ("Versie vNN" + knop "Zoek update") en korte
+  uitleg over de werkwijze. Versie en update zijn dus verstopt tot je ze nodig hebt.
 
 ### 4.2 Header met ruimtebalk
 
@@ -148,8 +149,8 @@ je: adres en datum), de rest is **standaard dichtgeklapt**:
 3. **Extra installaties**: **Zonnepanelen** — meerdere installaties, elk met een
    roterende oriëntatieknop (Plat dak/Voor/Achter/Links/Rechts) en een eigen
    vermogen in Wp; +-knop voegt toe, lijst met ×-verwijderen (confirm).
-   **Zonneboiler** — roterende knop —/Nee/Ja; bij "Ja" verschijnt een veld voor de
-   oppervlakte van de collector in m².
+   **Zonneboiler** — roterende knop Nee/Ja (default Nee, geen lege stand); bij "Ja"
+   verschijnt een veld voor de oppervlakte van de collector in m².
 4. **Opmerkingen**: vrije notities.
 
 De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
@@ -173,7 +174,8 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
   telkens op gevel voor → achter → links → rechts, dan op nr.**
   Totaalregel telt het aantal (incl. aantallen) en de totale m².
 - Sectie **Verwarming in deze ruimte** (inklapbaar, standaard dicht): roterende
-  knop **Airco/Kachel**, daaronder de **afmetingen van de ruimte** (b × d × h in
+  knop **Airco/Kachel/Andere** (type 'ruimte-andere' in het model; het
+  beschrijvingsveld is daar het tekstvak), daaronder de **afmetingen van de ruimte** (b × d × h in
   meter, live m³) — die staan hier omdat ze enkel nodig zijn bij een airco of
   kachel, en je ze maar één keer per ruimte ingeeft, hoeveel toestellen er ook
   hangen — plus beschrijving en kenplaatfoto. Meerdere toestellen per ruimte
@@ -201,13 +203,16 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
   openen dezelfde interne camera in **enkel-modus**: zonder ruimtechips, met
   "Annuleer"; één tik op de sluiter en de camera sluit meteen met de foto op zijn
   plek. Lukt de camera niet (geen toestemming), dan valt het terug op de
-  camerakiezer van het toestel zelf.
+  camerakiezer van het toestel zelf. Faalt de **dossier-camera**, dan opent
+  automatisch de bibliotheekkiezer en meldt een toast de foutnaam plus de
+  iOS-instellingstip.
 - Het raster toont **alleen de foto's van de geselecteerde ruimte** (of van
   "Gevels"); de totaalregel vermeldt ook het totale aantal.
   Per foto: **⇄** = verplaats naar een andere ruimte (keuzepaneel onderaan, zodat
   je de foto niet moet hernemen), **×** = verwijderen (confirm). Alleen bij
   **Gevels-foto's** staat een **★** om die foto als hoofdfoto van de woning te
-  kiezen (confirm; foto blijft ook in het dossier). Tik op de foto zelf = lightbox.
+  kiezen (confirm; foto blijft ook in het dossier): de ster is **wit** op kiesbare
+  foto's en **geel** op de huidige hoofdfoto. Tik op de foto zelf = lightbox.
 
 ### 4.6 Tab Afronden
 
@@ -230,7 +235,8 @@ De PDF is het volledige, blijvende dossier en bevat **alle** gegevens:
   beschrijving en bij airco/kachel het ruimtevolume. **Direct onder de tabel**
   staan de bijhorende kenplaat- en kranenfoto's met type en **ruimte** in het
   bijschrift — zonder nummers. Daarna een regel **Zonnepanelen** (elke installatie
-  met oriëntatie en Wp) en een regel **Zonneboiler** (met m² collector).
+  met oriëntatie en Wp) en — **alleen als er een zonneboiler is** — een regel
+  **Zonneboiler** met m² collector.
 - Tabel **Ventilatie**: per ruimte de ventilatie, afmetingen en opmerking.
 - Notities.
 - **Fotodossier op een aparte pagina** (paginabreak): adres + datum + alle

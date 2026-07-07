@@ -60,7 +60,11 @@ body{
 }
 
 /* ---------- woningenlijst ---------- */
-#view-lijst{padding:14px 14px calc(24px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
+#view-lijst{
+  padding:14px 14px calc(24px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto;
+  display:flex;flex-direction:column;
+  min-height:calc(100dvh - 60px - env(safe-area-inset-top));
+}
 #view-lijst h2{font-size:1.05rem;margin:2px 0 12px}
 #woninglijst{margin:0 0 16px}
 #woninglijst .leeg{display:block;background:none;border:1.5px dashed var(--line);color:var(--mut);text-align:center;font-size:.95rem;padding:22px 12px}
@@ -161,7 +165,7 @@ textarea{resize:vertical}
 .knoprij .btn{flex:1;width:auto;margin:0}
 
 /* ---------- uitleg op startscherm ---------- */
-#uitleg{font-size:.8rem;color:var(--mut);margin-top:12px}
+#uitleg{font-size:.8rem;color:var(--mut);margin-top:auto;padding-top:12px}
 #uitleg summary{font-weight:700;color:var(--ink);min-height:38px;display:flex;align-items:center;cursor:pointer}
 #uitleg p{margin:0 0 6px}
 
@@ -260,8 +264,9 @@ textarea{resize:vertical}
 }
 .fotogrid .ster{
   position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;border:0;
-  background:rgba(16,20,24,.6);color:#f5c518;font-size:1rem;line-height:1;
+  background:rgba(16,20,24,.6);color:#fff;font-size:1rem;line-height:1;
 }
+.fotogrid .ster.hoofd{color:#f5c518}
 .fotogrid .cap{font-size:.7rem;color:var(--mut);text-align:center;margin-top:2px}
 
 /* ---------- camerascherm ---------- */
