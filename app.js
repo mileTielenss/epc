@@ -1157,7 +1157,7 @@ function renderRuimteChips(container, metPlus, metBuiten) {
     if (v !== '__plus') b.classList.toggle('on', selectedRuimte === v);
     container.appendChild(b);
   };
-  if (metBuiten) maak('', 'Gevels');
+  if (metBuiten) { maak('', 'Gevels'); maak(FOTO_ALGEMEEN, 'Algemeen'); }
   S.ruimtes.forEach(r => maak(r.naam, r.naam));
   if (metPlus) maak('__plus', '+ Ruimte', 'plus');
   /* de actieve chip in beeld houden */
@@ -1302,6 +1302,8 @@ function ventTekst(r) {
    snel na elkaar, met alleen een grove categorie als bijschrift in de PDF */
 
 const DOSSIER_MAXDIM = 1600, DOSSIER_KWALITEIT = 0.75;
+/* sentinel voor algemene foto's (papieren e.d.); '' blijft Gevels */
+const FOTO_ALGEMEEN = '__algemeen';
 
 function voegDossierFoto(dataUrl) {
   S.tellerDossier = (S.tellerDossier || 0) + 1;
@@ -1310,8 +1312,9 @@ function voegDossierFoto(dataUrl) {
   renderDossier();
 }
 
-/* bijschrift = de ruimte waar de foto genomen is; zonder ruimte: Gevels (buitenfoto's) */
+/* titel/bijschrift: Gevels ('' ), Algemeen (sentinel) of de ruimtenaam */
 function dossierCap(f) {
+  if (f.ruimte === FOTO_ALGEMEEN) return 'Algemeen';
   return f.ruimte || 'Gevels';
 }
 
@@ -1319,7 +1322,11 @@ function dossierCap(f) {
    volgorde; binnen een ruimte op volgorde van nemen (voor de PDF) */
 function gesorteerdDossier() {
   const orde = new Map(S.ruimtes.map((r, i) => [r.naam, i]));
-  const idx = f => f.ruimte && orde.has(f.ruimte) ? orde.get(f.ruimte) : -1;
+  const idx = f => {
+    if (!f.ruimte) return -2;                       /* Gevels eerst */
+    if (f.ruimte === FOTO_ALGEMEEN) return -1;      /* dan Algemeen */
+    return orde.has(f.ruimte) ? orde.get(f.ruimte) : 98;
+  };
   return [...S.fotodossier].sort((a, b) => idx(a) - idx(b) || a.nr - b.nr);
 }
 
@@ -1396,6 +1403,7 @@ function openVerplaats(nr) {
     chips.appendChild(b);
   };
   maak('', 'Gevels');
+  maak(FOTO_ALGEMEEN, 'Algemeen');
   S.ruimtes.forEach(r => maak(r.naam, r.naam));
   $('#verplaats').hidden = false;
 }
@@ -1408,7 +1416,7 @@ $('#verplaats-chips').addEventListener('click', e => {
     f.ruimte = b.dataset.v;
     renderDossier();
     bewaar();
-    toast(`Foto verplaatst naar ${b.dataset.v || 'Gevels'}`);
+    toast(`Foto verplaatst naar ${b.textContent}`);
   }
   verplaatsNr = null;
   $('#verplaats').hidden = true;
@@ -1599,11 +1607,21 @@ function bouwPrintDocument() {
   return `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<title>${esc(pdfNaam())}</title><style>${PRINT_DOC_CSS}</style></head><body>` +
-    `<div class="pagina">${printInhoudHtml()}</div></body></html>`;
+    `<div class="pagina">${printInhoudHtml()}</div>` +
+    `<div id="lb" hidden><img alt=""></div>` +
+    `<script>document.addEventListener('click',function(e){var lb=document.getElementById('lb');` +
+    `if(e.target.closest('#lb')){lb.hidden=true;lb.querySelector('img').src='';return;}` +
+    `var img=e.target.closest('.fotos img,.hoofdfoto');` +
+    `if(img){lb.querySelector('img').src=img.src;lb.hidden=false;}});</` + `script></body></html>`;
 }
 
 const PRINT_DOC_CSS = `
 *{box-sizing:border-box}
+[hidden]{display:none !important}
+#lb{position:fixed;inset:0;z-index:9;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center}
+#lb img{max-width:97vw;max-height:97vh;object-fit:contain}
+.pagina .fotokop{font-size:12px;margin:10px 0 3px}
+.fotos img{cursor:zoom-in}
 body{margin:0;background:#fff;font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#000}
 .pagina{max-width:800px;margin:0 auto;padding:16px;font-size:12px}
 /* op een smal scherm: brede tabellen zijdelings scrollbaar in plaats van buiten beeld */
@@ -1630,6 +1648,7 @@ body{margin:0;background:#fff;font-family:-apple-system,"Segoe UI",Arial,sans-se
 .pagina .foto .cap{font-size:8.5px;text-align:center}
 @media print{
   body{background:#fff}
+  #lb{display:none !important}
   .pagina{max-width:none;margin:0;padding:0;box-shadow:none;font-size:10px}
   .pagina .hoofdfoto{width:40mm;max-height:32mm}
   .pagina h1{font-size:15px}
@@ -1729,11 +1748,19 @@ function printInhoudHtml() {
   /* fotodossier: aparte pagina met alle dossierfoto's, als bewijs bij controle */
   if (S.fotodossier.length) {
     const dossier = gesorteerdDossier();
+    /* groeperen onder een titel per ruimte (Gevels, Algemeen, dan de ruimtes) */
+    const groepen = [];
+    dossier.forEach(f => {
+      const naam = dossierCap(f);
+      if (!groepen.length || groepen[groepen.length - 1].naam !== naam) groepen.push({ naam, fotos: [] });
+      groepen[groepen.length - 1].fotos.push(f);
+    });
     html += `<h2 class="dossierkop">Fotodossier</h2>` +
       `<p class="kv">${esc(A.adres || '')} · plaatsbezoek ${esc(A.datum || '')} · ${dossier.length} foto${dossier.length === 1 ? '' : "'s"}</p>` +
-      '<div class="fotos">' +
-      dossier.map(f => `<div class="foto"><img src="${f.foto}" alt=""><div class="cap">${esc(dossierCap(f))}</div></div>`).join('') +
-      '</div>';
+      groepen.map(g =>
+        `<h3 class="fotokop">${esc(g.naam)}</h3><div class="fotos">` +
+        g.fotos.map(f => `<div class="foto"><img src="${f.foto}" alt=""></div>`).join('') +
+        '</div>').join('');
   }
 
   return html;

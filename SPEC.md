@@ -55,7 +55,8 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 - Enige externe call: **reverse geocoding** (Nominatim/OpenStreetMap) bij de locatieknop
   naast het adresveld; offline vallen we terug op coördinaten.
 - Deploy: **GitHub Pages** via workflow op push naar `main`. Er wordt direct op `main`
-  gewerkt; branches `v1`, `v2`, … zijn historische checkpoints (nooit hergebruiken).
+  gewerkt; branch `v1` is het historische checkpoint van de eerste stabiele
+  eindversie (nooit op verder bouwen).
 
 ### Foto's (resolutie)
 
@@ -120,10 +121,10 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
   verwarmingstoestellen horen dus altijd bij een echte ruimte; op de Details-tab is
   er **geen "Buiten"-optie** en is altijd een ruimte geselecteerd (bij het openen
   automatisch de eerste).
-- Alleen in de **foto-context** (Foto's-tab en camerascherm) staat vooraan een extra
-  chip **"Gevels"** (bewust geen "ruimte"-naam): gevel- en dakfoto's horen bij geen
-  enkele ruimte binnen het beschermd volume. "Gevels" is daar ook het bijschrift
-  in de PDF.
+- Alleen in de **foto-context** (Foto's-tab en camerascherm) staan vooraan twee
+  extra chips die geen ruimte zijn: **"Gevels"** (gevel- en dakfoto's) en
+  **"Algemeen"** (losse algemene foto's zoals papieren/documenten; intern
+  '__algemeen'). Ze verschijnen zo ook als titel in de PDF.
 - De gekozen ruimte geldt als label voor **alles wat je daarna toevoegt** (ramen,
   toestellen, dossierfoto's), tot je een andere kiest.
 - **"+ Ruimte"** opent sneltoetsen (Slaapkamer, Badkamer, WC, Berging, Bureau, Garage,
@@ -244,7 +245,13 @@ De PDF is het volledige, blijvende dossier en bevat **alle** gegevens:
 - Tabel **Ventilatie**: per ruimte de ventilatie, afmetingen en opmerking.
 - Notities.
 - **Fotodossier op een aparte pagina** (paginabreak): adres + datum + alle
-  dossierfoto's in een raster met enkel de ruimte als bijschrift (geen nummers).
+  dossierfoto's **gegroepeerd onder een titel per ruimte** (Gevels, Algemeen,
+  daarna de ruimtes in volgorde) — geen bijschriften of nummers per foto.
+- Het **printvenster** (de HTML-pagina vóór het bewaren) heeft een lightbox:
+  tik op een foto om ze schermvullend te bekijken, tik opnieuw om te sluiten
+  (verschijnt niet in de afdruk). In de bewaarde PDF zelf bestaat geen
+  klik-zoom (een PDF is statisch), maar de foto's zijn 1600 px zodat
+  pinch-zoomen in elke PDF-viewer scherp blijft.
 
 Gedrag:
 
