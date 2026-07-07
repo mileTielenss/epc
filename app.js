@@ -471,9 +471,13 @@ $('#btn-nieuwewoning').addEventListener('click', async () => {
 
 /* ============================== foto's ============================== */
 
-let fotoCb = null;
-function neemFoto(cb) {
+/* detailfoto's klein houden (backups!), de hoofdfoto scherper: die bewaar je
+   via save-as op de pc om ze elders als gevelfoto te gebruiken */
+let fotoCb = null, fotoMaxDim = 900, fotoKwaliteit = 0.7;
+function neemFoto(cb, maxDim = 900, kwaliteit = 0.7) {
   fotoCb = cb;
+  fotoMaxDim = maxDim;
+  fotoKwaliteit = kwaliteit;
   const inp = $('#fotoinput');
   inp.value = '';
   inp.click();
@@ -487,12 +491,12 @@ $('#fotoinput').addEventListener('change', () => {
   r.onload = () => {
     const img = new Image();
     img.onload = () => {
-      const s = Math.min(1, 900 / Math.max(img.width, img.height));
+      const s = Math.min(1, fotoMaxDim / Math.max(img.width, img.height));
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(img.width * s));
       c.height = Math.max(1, Math.round(img.height * s));
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      cb(c.toDataURL('image/jpeg', 0.7));
+      cb(c.toDataURL('image/jpeg', fotoKwaliteit));
     };
     img.src = r.result;
   };
@@ -555,12 +559,13 @@ $('#btn-locatie').addEventListener('click', () => {
     toast('Adres ingevuld');
   }, () => toast('Locatie niet beschikbaar'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 });
-/* hoofdfoto van de woning, komt op de one-pager en in de woningenlijst */
+/* hoofdfoto van de woning, komt op de one-pager en in de woningenlijst;
+   hogere resolutie zodat save-as op de pc een bruikbare gevelfoto oplevert */
 $('#btn-hoofdfoto').addEventListener('click', () => neemFoto(data => {
   S.algemeen.foto = data;
   updateHoofdfotoThumb();
   bewaar();
-}));
+}, 1600, 0.8));
 $('#btn-hoofdfoto-del').addEventListener('click', () => {
   S.algemeen.foto = null;
   updateHoofdfotoThumb();

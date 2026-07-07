@@ -22,7 +22,7 @@ Het startscherm toont alle woningen. Tik op een woning om ze te openen, op de st
 
 ## Data en backups
 
-Elke woning is een eigen record in IndexedDB, elke 3 seconden en bij het verlaten van de pagina bewaard. Foto's worden verkleind tot max 900px JPEG kwaliteit 0.7. De JSON is leesbaar en bevat alles, ook de foto's (base64).
+Elke woning is een eigen record in IndexedDB, elke 3 seconden en bij het verlaten van de pagina bewaard. Detailfoto's worden verkleind tot max 900px JPEG kwaliteit 0.7; de hoofdfoto tot max 1600px kwaliteit 0.8, zodat je ze op de pc via save-as als volwaardige gevelfoto kan hergebruiken. De JSON is leesbaar en bevat alles, ook de foto's (base64).
 
 Manieren om data uit de app te halen:
 
