@@ -131,6 +131,15 @@
   </div>
 
   <div class="fld">
+    <span class="lbl">Aantal identieke</span>
+    <div class="aantalrij">
+      <button type="button" class="btn sec aantalknop" id="aantal-min">&minus;</button>
+      <input type="text" id="aantal" inputmode="numeric" value="1">
+      <button type="button" class="btn sec aantalknop" id="aantal-plus">+</button>
+    </div>
+  </div>
+
+  <div class="fld">
     <span class="lbl">Beglazing</span>
     <div class="seg" id="seg-beglazing">
       <button type="button" data-v="enkel">Enkel</button>
@@ -168,6 +177,7 @@
     <button type="button" class="btn big" id="btn-voegtoe">Voeg toe</button>
     <button type="button" class="btn sec big" id="btn-herhaal">Zelfde als vorige</button>
   </div>
+  <button type="button" class="btn sec big" id="btn-annuleer-raam" hidden>Annuleer wijziging</button>
 
   <div id="ramen-totaal" class="totaal"></div>
   <ul id="ramenlijst" class="lijst"></ul>
@@ -224,6 +234,7 @@
   </div>
 
   <button type="button" class="btn big" id="btn-opwek-voegtoe">Voeg opwekker toe</button>
+  <button type="button" class="btn sec big" id="btn-annuleer-opwek" hidden>Annuleer wijziging</button>
   <ul id="opweklijst" class="lijst"></ul>
 
   <div class="fld">
@@ -254,12 +265,13 @@
   <div class="fld">
     <span class="lbl">Tik de ruimtes aan</span>
     <div class="chips" id="vent-chips">
-      <button type="button" data-v="Living">Living</button>
       <button type="button" data-v="Keuken">Keuken</button>
       <button type="button" data-v="Badkamer">Badkamer</button>
-      <button type="button" data-v="Slaapkamer">Slaapkamer</button>
       <button type="button" data-v="WC">WC</button>
+      <button type="button" data-v="Living">Living</button>
+      <button type="button" data-v="Slaapkamer">Slaapkamer</button>
       <button type="button" data-v="Berging">Berging</button>
+      <button type="button" data-v="__andere" class="andere">+ Andere ruimte</button>
     </div>
   </div>
 

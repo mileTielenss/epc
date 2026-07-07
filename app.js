@@ -166,6 +166,7 @@ function normaliseer(p) {
   if (!Array.isArray(w.ramen)) w.ramen = [];
   w.teller = Math.max(w.teller || 0, ...w.ramen.map(r => r.nr || 0), 0);
   w.ramen.forEach(r => { if (!r.nr) r.nr = ++w.teller; });
+  w.ramen.forEach(r => { r.aantal = Math.max(1, Math.round(num(r.aantal)) || 1); });
 
   w.ventilatie.ruimtes = (w.ventilatie.ruimtes || []).map(r => ({
     naam: r.naam, voorziening: VENT_MIGRATIE[r.voorziening] || 'geen'
@@ -184,7 +185,7 @@ let dirty = false;
 let draft = null;  // invoerformulier ramen-tab
 
 function leegDraft() {
-  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', foto: null };
+  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', foto: null, aantal: 1 };
 }
 
 function wijzig() { dirty = true; }
@@ -605,10 +606,22 @@ function chipsSet(sel, vals) {
 
 /* ============================== tab 2: ramen & deuren ============================== */
 
+let bewerkRaamNr = null; /* nr van het raam dat je aan het wijzigen bent, of null */
+
 segInit('#seg-element', v => draft.element = v);
 segInit('#seg-beglazing', v => draft.beglazing = v);
 segInit('#seg-kader', v => draft.kader = v);
 segInit('#seg-rolluik', v => draft.rolluik = v);
+
+/* aantal-stepper */
+function zetAantal(n) {
+  draft.aantal = Math.max(1, n);
+  $('#aantal').value = draft.aantal;
+}
+$('#aantal-min').addEventListener('click', () => zetAantal((Math.round(num($('#aantal').value)) || 1) - 1));
+$('#aantal-plus').addEventListener('click', () => zetAantal((Math.round(num($('#aantal').value)) || 1) + 1));
+$('#aantal').addEventListener('input', () => { draft.aantal = Math.max(1, Math.round(num($('#aantal').value)) || 1); });
+$('#aantal').addEventListener('blur', () => zetAantal(Math.round(num($('#aantal').value)) || 1));
 
 $('#kompas').addEventListener('click', e => {
   const p = e.target.closest('.gevel');
@@ -644,6 +657,14 @@ function updateRaamThumb() {
 
 const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam', glasdeur: 'Glasdeur' };
 const GEVEL_NAMEN = { voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
+const GEVEL_ORDE = { voor: 0, achter: 1, links: 2, rechts: 3 };
+
+/* lijst gesorteerd voor weergave/print: eerst voor, dan achter, links, rechts; daarbinnen op nr */
+function gesorteerdeRamen() {
+  return [...S.ramen].sort((a, b) =>
+    (GEVEL_ORDE[a.gevel] ?? 9) - (GEVEL_ORDE[b.gevel] ?? 9) || (a.nr - b.nr));
+}
+function raamAantal(r) { return Math.max(1, r.aantal || 1); }
 const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' };
 const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', 'alu-thermisch': 'Alu therm. ond.' };
 
@@ -651,42 +672,96 @@ $('#btn-voegtoe').addEventListener('click', () => {
   if (!S) return;
   const b = num($('#breedte').value) / 100, h = num($('#hoogte').value) / 100;
   if (!b || !h) { toast('Vul breedte en hoogte in (cm)'); return; }
-  S.teller = (S.teller || 0) + 1;
-  S.ramen.push({
-    nr: S.teller,
+  const aantal = Math.max(1, Math.round(num($('#aantal').value)) || 1);
+  const velden = {
     element: draft.element,
     gevel: draft.gevel,
     b, h,
     beglazing: draft.beglazing,
     kader: draft.kader,
     rolluik: draft.rolluik === 'ja',
+    aantal,
     foto: draft.foto
-  });
+  };
+  if (bewerkRaamNr !== null) {
+    const r = S.ramen.find(x => x.nr === bewerkRaamNr);
+    if (r) Object.assign(r, velden);
+    toast(`${ELEMENT_NAMEN[draft.element]} #${bewerkRaamNr} gewijzigd`);
+    stopBewerkRaam();
+  } else {
+    S.teller = (S.teller || 0) + 1;
+    S.ramen.push({ nr: S.teller, ...velden });
+    toast(`${ELEMENT_NAMEN[draft.element]} toegevoegd`);
+  }
   draft.foto = null;
   updateRaamThumb();
   $('#breedte').value = '';
   $('#hoogte').value = '';
+  zetAantal(1);
   updateM2Live();
   renderRamen();
   bewaar();
   flash($('#btn-voegtoe'));
-  toast(`${ELEMENT_NAMEN[draft.element]} toegevoegd`);
+});
+
+/* een bestaand raam in het formulier laden om te wijzigen */
+function startBewerkRaam(nr) {
+  const r = S.ramen.find(x => x.nr === nr);
+  if (!r) return;
+  bewerkRaamNr = nr;
+  draft.element = r.element;
+  draft.gevel = r.gevel;
+  draft.beglazing = r.beglazing;
+  draft.kader = r.kader;
+  draft.rolluik = r.rolluik ? 'ja' : 'nee';
+  draft.foto = r.foto || null;
+  draft.aantal = raamAantal(r);
+  syncRaamForm();
+  $('#breedte').value = fmtCm(r.b);
+  $('#hoogte').value = fmtCm(r.h);
+  $('#aantal').value = draft.aantal;
+  updateM2Live();
+  $('#btn-voegtoe').textContent = 'Bewaar wijziging';
+  $('#btn-annuleer-raam').hidden = false;
+  renderRamen();
+  window.scrollTo(0, 0);
+}
+
+function stopBewerkRaam() {
+  bewerkRaamNr = null;
+  $('#btn-voegtoe').textContent = 'Voeg toe';
+  $('#btn-annuleer-raam').hidden = true;
+}
+
+$('#btn-annuleer-raam').addEventListener('click', () => {
+  stopBewerkRaam();
+  draft.foto = null;
+  updateRaamThumb();
+  $('#breedte').value = '';
+  $('#hoogte').value = '';
+  zetAantal(1);
+  updateM2Live();
+  renderRamen();
 });
 
 $('#btn-herhaal').addEventListener('click', () => {
   if (!S) return;
   const laatste = S.ramen[S.ramen.length - 1];
   if (!laatste) { toast('Nog geen vorige invoer'); return; }
+  stopBewerkRaam();
   draft.element = laatste.element;
   draft.gevel = laatste.gevel;
   draft.beglazing = laatste.beglazing;
   draft.kader = laatste.kader;
   draft.rolluik = laatste.rolluik ? 'ja' : 'nee';
   draft.foto = null;
+  draft.aantal = 1;
   syncRaamForm();
   $('#breedte').value = '';
   $('#hoogte').value = '';
+  $('#aantal').value = 1;
   updateM2Live();
+  renderRamen();
   $('#breedte').focus();
 });
 
@@ -702,36 +777,47 @@ function syncRaamForm() {
 function renderRamen() {
   const ul = $('#ramenlijst');
   ul.innerHTML = '';
-  [...S.ramen].reverse().forEach(r => {
+  gesorteerdeRamen().forEach(r => {
     const li = document.createElement('li');
+    if (r.nr === bewerkRaamNr) li.className = 'bewerk';
+    li.dataset.nr = r.nr;
+    const n = raamAantal(r);
     const tags = [GLAS_NAMEN[r.beglazing] || r.beglazing, KADER_NAMEN[r.kader] || r.kader];
     if (r.rolluik) tags.push('rolluik');
     li.innerHTML =
       `<div class="info">
-         <div class="r1">#${r.nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}</div>
-         <div class="r2">${fmtCm(r.b)} × ${fmtCm(r.h)} cm = ${fmt(r.b * r.h)} m²</div>
-         <div class="r3">${esc(tags.join(' · '))}</div>
+         <div class="r1">#${r.nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''}</div>
+         <div class="r2">${fmtCm(r.b)} × ${fmtCm(r.h)} cm = ${fmt(r.b * r.h)} m²${n > 1 ? ` (${fmt(r.b * r.h * n)} m² totaal)` : ''}</div>
+         <div class="r3">${esc(tags.join(' · '))} · tik om te wijzigen</div>
        </div>` +
       (r.foto ? `<img class="thumb" src="${r.foto}" alt="foto #${r.nr}">` : '') +
       `<button type="button" class="del" data-nr="${r.nr}">×</button>`;
     ul.appendChild(li);
   });
-  const tot = S.ramen.reduce((a, r) => a + r.b * r.h, 0);
+  const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
+  const totAantal = S.ramen.reduce((a, r) => a + raamAantal(r), 0);
   $('#ramen-totaal').textContent = S.ramen.length
-    ? `Totaal: ${S.ramen.length} element${S.ramen.length === 1 ? '' : 'en'} · ${fmt(tot)} m²`
+    ? `Totaal: ${totAantal} element${totAantal === 1 ? '' : 'en'} · ${fmt(totM2)} m²`
     : 'Nog geen elementen toegevoegd.';
 }
 
 $('#ramenlijst').addEventListener('click', e => {
-  const b = e.target.closest('.del');
-  if (!b || !S) return;
-  const nr = Number(b.dataset.nr);
-  const r = S.ramen.find(x => x.nr === nr);
-  if (!r) return;
-  if (!confirm(`#${nr} ${ELEMENT_NAMEN[r.element]} (${fmtCm(r.b)} × ${fmtCm(r.h)} cm) verwijderen?`)) return;
-  S.ramen = S.ramen.filter(x => x.nr !== nr);
-  renderRamen();
-  bewaar();
+  if (!S) return;
+  if (e.target.closest('img.thumb')) return; /* fotominiatuur: enkel lightbox */
+  const del = e.target.closest('.del');
+  if (del) {
+    const nr = Number(del.dataset.nr);
+    const r = S.ramen.find(x => x.nr === nr);
+    if (!r) return;
+    if (!confirm(`#${nr} ${ELEMENT_NAMEN[r.element]} (${fmtCm(r.b)} × ${fmtCm(r.h)} cm) verwijderen?`)) return;
+    if (bewerkRaamNr === nr) stopBewerkRaam();
+    S.ramen = S.ramen.filter(x => x.nr !== nr);
+    renderRamen();
+    bewaar();
+    return;
+  }
+  const li = e.target.closest('li[data-nr]');
+  if (li) startBewerkRaam(Number(li.dataset.nr));
 });
 
 /* ============================== tab 3: energie ============================== */
@@ -743,6 +829,7 @@ function leegDraftOpwek() {
   return { type: 'gas', functie: [], foto: null, fotoKraan: null };
 }
 let draftOpwek = leegDraftOpwek();
+let bewerkOpwekNr = null; /* nr van de opwekker die je aan het wijzigen bent, of null */
 
 chipsInit('#chips-opwekfunctie', vals => { draftOpwek.functie = vals; toonOpwekVelden(); });
 
@@ -801,19 +888,26 @@ $('#btn-opwek-voegtoe').addEventListener('click', () => {
     const b = num($('#kamer-b').value) / 100, d = num($('#kamer-d').value) / 100, h = num($('#kamer-h').value) / 100;
     if (b && d && h) kamer = { b, d, h };
   }
-  S.tellerOpwek = (S.tellerOpwek || 0) + 1;
-  S.energie.opwekkers.push({
-    nr: S.tellerOpwek,
+  const velden = {
     type: draftOpwek.type,
     functie: [...draftOpwek.functie],
     beschrijving: $('#opw-beschrijving').value.trim(),
     foto: draftOpwek.foto,
     fotoKraan: draftOpwek.functie.includes('radiatoren') ? draftOpwek.fotoKraan : null,
     kamer
-  });
-  draftOpwek.foto = null;
-  draftOpwek.fotoKraan = null;
-  updateOpwekThumb();
+  };
+  if (bewerkOpwekNr !== null) {
+    const o = S.energie.opwekkers.find(x => x.nr === bewerkOpwekNr);
+    if (o) Object.assign(o, velden);
+    toast(`${OPWEK_NAMEN[draftOpwek.type]} #${bewerkOpwekNr} gewijzigd`);
+    stopBewerkOpwek();
+  } else {
+    S.tellerOpwek = (S.tellerOpwek || 0) + 1;
+    S.energie.opwekkers.push({ nr: S.tellerOpwek, ...velden });
+    toast(`${OPWEK_NAMEN[draftOpwek.type]} toegevoegd`);
+  }
+  draftOpwek = leegDraftOpwek();
+  syncOpwekForm();
   $('#opw-beschrijving').value = '';
   $('#kamer-b').value = '';
   $('#kamer-d').value = '';
@@ -822,7 +916,47 @@ $('#btn-opwek-voegtoe').addEventListener('click', () => {
   renderOpwekkers();
   bewaar();
   flash($('#btn-opwek-voegtoe'));
-  toast(`${OPWEK_NAMEN[draftOpwek.type]} toegevoegd`);
+});
+
+/* een bestaande opwekker in het formulier laden om te wijzigen of uit te breiden */
+function startBewerkOpwek(nr) {
+  const o = S.energie.opwekkers.find(x => x.nr === nr);
+  if (!o) return;
+  bewerkOpwekNr = nr;
+  draftOpwek = {
+    type: o.type,
+    functie: [...(o.functie || [])],
+    foto: o.foto || null,
+    fotoKraan: o.fotoKraan || null
+  };
+  syncOpwekForm();
+  $('#opw-beschrijving').value = o.beschrijving || '';
+  $('#kamer-b').value = o.kamer ? fmtCm(o.kamer.b) : '';
+  $('#kamer-d').value = o.kamer ? fmtCm(o.kamer.d) : '';
+  $('#kamer-h').value = o.kamer ? fmtCm(o.kamer.h) : '';
+  updateM3Live();
+  $('#btn-opwek-voegtoe').textContent = 'Bewaar wijziging';
+  $('#btn-annuleer-opwek').hidden = false;
+  renderOpwekkers();
+  window.scrollTo(0, 0);
+}
+
+function stopBewerkOpwek() {
+  bewerkOpwekNr = null;
+  $('#btn-opwek-voegtoe').textContent = 'Voeg opwekker toe';
+  $('#btn-annuleer-opwek').hidden = true;
+}
+
+$('#btn-annuleer-opwek').addEventListener('click', () => {
+  stopBewerkOpwek();
+  draftOpwek = leegDraftOpwek();
+  syncOpwekForm();
+  $('#opw-beschrijving').value = '';
+  $('#kamer-b').value = '';
+  $('#kamer-d').value = '';
+  $('#kamer-h').value = '';
+  updateM3Live();
+  renderOpwekkers();
 });
 
 function kamerTekst(k) {
@@ -834,12 +968,14 @@ function renderOpwekkers() {
   ul.innerHTML = '';
   [...S.energie.opwekkers].reverse().forEach(o => {
     const li = document.createElement('li');
+    if (o.nr === bewerkOpwekNr) li.className = 'bewerk';
+    li.dataset.nr = o.nr;
     const det = [o.beschrijving, o.kamer ? kamerTekst(o.kamer) : ''].filter(Boolean);
     li.innerHTML =
       `<div class="info">
          <div class="r1">#${o.nr} ${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
          <div class="r2">${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + ') || '-')}</div>
-         ${det.length ? `<div class="r3">${esc(det.join(' · '))}</div>` : ''}
+         <div class="r3">${det.length ? esc(det.join(' · ')) + ' · ' : ''}tik om te wijzigen</div>
        </div>` +
       (o.foto ? `<img class="thumb" src="${o.foto}" alt="kenplaat #${o.nr}">` : '') +
       (o.fotoKraan ? `<img class="thumb" src="${o.fotoKraan}" alt="radiatorkranen #${o.nr}">` : '') +
@@ -849,15 +985,22 @@ function renderOpwekkers() {
 }
 
 $('#opweklijst').addEventListener('click', e => {
-  const b = e.target.closest('.del');
-  if (!b || !S) return;
-  const nr = Number(b.dataset.nr);
-  const o = S.energie.opwekkers.find(x => x.nr === nr);
-  if (!o) return;
-  if (!confirm(`#${nr} ${OPWEK_NAMEN[o.type] || o.type} verwijderen?`)) return;
-  S.energie.opwekkers = S.energie.opwekkers.filter(x => x.nr !== nr);
-  renderOpwekkers();
-  bewaar();
+  if (!S) return;
+  if (e.target.closest('img.thumb')) return; /* fotominiatuur: enkel lightbox */
+  const del = e.target.closest('.del');
+  if (del) {
+    const nr = Number(del.dataset.nr);
+    const o = S.energie.opwekkers.find(x => x.nr === nr);
+    if (!o) return;
+    if (!confirm(`#${nr} ${OPWEK_NAMEN[o.type] || o.type} verwijderen?`)) return;
+    if (bewerkOpwekNr === nr) stopBewerkOpwek();
+    S.energie.opwekkers = S.energie.opwekkers.filter(x => x.nr !== nr);
+    renderOpwekkers();
+    bewaar();
+    return;
+  }
+  const li = e.target.closest('li[data-nr]');
+  if (li) startBewerkOpwek(Number(li.dataset.nr));
 });
 
 segInit('#seg-pv', v => {
@@ -875,22 +1018,44 @@ let ventMode = 'geen';
 
 segInit('#seg-ventmode', v => { ventMode = v; });
 
-$('#vent-chips').addEventListener('click', e => {
-  const b = e.target.closest('button');
-  if (!b || !S) return;
-  const basis = b.dataset.v;
+/* natte ruimtes komen eerst, in deze volgorde; daarna de rest alfabetisch (kamers met
+   hetzelfde begin, bv. Slaapkamer 1/2/3, blijven zo vanzelf bij elkaar) */
+const VENT_NAT = ['keuken', 'badkamer', 'wc'];
+function ventBasis(naam) { return String(naam).toLowerCase().replace(/\s*\d+\s*$/, '').trim(); }
+function gesorteerdeVent() {
+  return S.ventilatie.ruimtes.map((r, i) => ({ r, i })).sort((a, b) => {
+    const na = VENT_NAT.indexOf(ventBasis(a.r.naam)), nb = VENT_NAT.indexOf(ventBasis(b.r.naam));
+    const ca = na >= 0 ? 0 : 1, cb = nb >= 0 ? 0 : 1;
+    if (ca !== cb) return ca - cb;
+    if (ca === 0 && na !== nb) return na - nb;
+    return String(a.r.naam).localeCompare(String(b.r.naam), 'nl', { numeric: true });
+  });
+}
+
+function voegVentRuimteToe(basis) {
   const zelfde = S.ventilatie.ruimtes.filter(r => r.naam === basis || r.naam.startsWith(basis + ' ')).length;
   const naam = zelfde ? `${basis} ${zelfde + 1}` : basis;
   S.ventilatie.ruimtes.push({ naam, voorziening: ventMode });
   renderVent();
   bewaar();
   toast(`${naam}: ${ventMode}`);
+}
+
+$('#vent-chips').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || !S) return;
+  if (b.dataset.v === '__andere') {
+    const naam = (prompt('Naam van de ruimte?') || '').trim();
+    if (naam) voegVentRuimteToe(naam);
+    return;
+  }
+  voegVentRuimteToe(b.dataset.v);
 });
 
 function renderVent() {
   const ul = $('#ventlijst');
   ul.innerHTML = '';
-  S.ventilatie.ruimtes.forEach((r, i) => {
+  gesorteerdeVent().forEach(({ r, i }) => {
     const li = document.createElement('li');
     li.innerHTML =
       `<div class="info">
@@ -927,15 +1092,90 @@ const GEBOUW_NAMEN = { open: 'Open bebouwing', halfopen: 'Halfopen bebouwing', g
 
 /* ---------- one-pager / print ---------- */
 
+/* op iOS werkt window.print() niet in een op-het-beginscherm-geïnstalleerde app.
+   Daarom openen we daar de one-pager in Safari, waar Delen → Print → Bewaar als PDF wel werkt. */
+function isIOSStandalone() {
+  return navigator.standalone === true;
+}
+
+/* de opgeslagen PDF krijgt de bestandsnaam van de titel; zet die op het adres */
+function pdfNaam() {
+  return (S.algemeen.adres || 'EPC plaatsbezoek').trim();
+}
+
 $('#btn-print').addEventListener('click', () => {
   if (!S) return;
+  if (isIOSStandalone()) { openPrintVenster(); return; }
   buildPrint();
+  const vorigeTitel = document.title;
+  document.title = pdfNaam();
+  const herstel = () => { document.title = vorigeTitel; window.removeEventListener('afterprint', herstel); };
+  window.addEventListener('afterprint', herstel);
+  setTimeout(herstel, 60000);
   requestAnimationFrame(() => setTimeout(() => window.print(), 60));
 });
 
+function openPrintVenster() {
+  const blob = new Blob([bouwPrintDocument()], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank');
+  if (!w) {
+    downloadBlob((slug(pdfNaam()) || 'epc') + '.html', blob);
+    toast('Open het bestand en deel het als PDF');
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* volledige, zelfstandige HTML-pagina van de one-pager voor het aparte printvenster */
+function bouwPrintDocument() {
+  return `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>${esc(pdfNaam())}</title><style>${PRINT_DOC_CSS}</style></head><body>` +
+    `<div class="balk"><button type="button" onclick="window.print()">\u{1F5A8}️ Bewaar als PDF</button>` +
+    `<span>Lukt de knop niet? Deel-knop onderaan → “Afdrukken” → knijp de voorbeeldpagina open → Deel → “Bewaar in Bestanden”.</span></div>` +
+    `<div class="pagina">${printInhoudHtml()}</div></body></html>`;
+}
+
+const PRINT_DOC_CSS = `
+*{box-sizing:border-box}
+body{margin:0;background:#e9ecee;font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#000}
+.balk{position:sticky;top:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#0a6b3d;color:#fff;padding:12px 16px}
+.balk button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 18px;background:#fff;color:#0a6b3d}
+.balk span{font-size:.8rem;opacity:.95;flex:1;min-width:180px}
+.pagina{background:#fff;max-width:800px;margin:14px auto;padding:18px 22px;font-size:12px;box-shadow:0 1px 8px rgba(0,0,0,.2)}
+.pagina .hoofdfoto{float:right;width:44mm;max-height:36mm;object-fit:cover;border:1px solid #999;margin:0 0 4px 8px}
+.pagina h1{font-size:18px;margin:0 0 2px}
+.pagina .sub{font-size:12px;color:#333;margin:0 0 12px}
+.pagina h2{font-size:13px;margin:12px 0 5px;border-bottom:1.5px solid #000;padding-bottom:2px;text-transform:uppercase;letter-spacing:.03em}
+.pagina table{width:100%;border-collapse:collapse;margin:0 0 8px}
+.pagina th,.pagina td{border:1px solid #999;padding:3px 6px;text-align:left;font-size:11px}
+.pagina th{background:#eee}
+.pagina td.num,.pagina th.num{text-align:right}
+.pagina tr.tot td{font-weight:700;background:#f5f5f5}
+.pagina .kv{margin:0 0 3px}
+.pagina .kv b{display:inline-block;min-width:130px}
+.pagina .fotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.pagina .foto{width:34mm}
+.pagina .foto img{width:100%;height:30mm;object-fit:cover;border:1px solid #999}
+.pagina .foto .cap{font-size:8.5px;text-align:center}
+@media print{
+  body{background:#fff}
+  .balk{display:none}
+  .pagina{max-width:none;margin:0;padding:0;box-shadow:none;font-size:10px}
+  .pagina .hoofdfoto{width:40mm;max-height:32mm}
+  .pagina h1{font-size:15px}
+  @page{size:A4;margin:12mm}
+}`;
+
 function buildPrint() {
+  $('#printview').innerHTML = printInhoudHtml();
+}
+
+function printInhoudHtml() {
   const A = S.algemeen;
-  const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h, 0);
+  const ramen = gesorteerdeRamen();
+  const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
+  const totAantal = S.ramen.reduce((a, r) => a + raamAantal(r), 0);
 
   let html = (A.foto ? `<img class="hoofdfoto" src="${A.foto}" alt="">` : '') +
     `<h1>EPC Plaatsbezoek</h1>
@@ -943,14 +1183,15 @@ function buildPrint() {
 
   /* ramen & deuren */
   html += '<h2>Ramen &amp; deuren</h2>';
-  if (S.ramen.length) {
-    html += `<table><tr><th>#</th><th>Type</th><th>Gevel</th><th class="num">B (cm)</th><th class="num">H (cm)</th><th class="num">m²</th><th>Beglazing</th><th>Kader</th><th>Rolluik</th></tr>`;
-    S.ramen.forEach(r => {
+  if (ramen.length) {
+    html += `<table><tr><th>#</th><th>Type</th><th>Gevel</th><th class="num">Aantal</th><th class="num">B (cm)</th><th class="num">H (cm)</th><th class="num">m²</th><th>Beglazing</th><th>Kader</th><th>Rolluik</th></tr>`;
+    ramen.forEach(r => {
+      const n = raamAantal(r);
       html += `<tr><td>${r.nr}</td><td>${ELEMENT_NAMEN[r.element] || ''}</td><td>${GEVEL_NAMEN[r.gevel] || ''}</td>` +
-        `<td class="num">${fmtCm(r.b)}</td><td class="num">${fmtCm(r.h)}</td><td class="num">${fmt(r.b * r.h)}</td>` +
+        `<td class="num">${n}</td><td class="num">${fmtCm(r.b)}</td><td class="num">${fmtCm(r.h)}</td><td class="num">${fmt(r.b * r.h * n)}</td>` +
         `<td>${GLAS_NAMEN[r.beglazing] || ''}</td><td>${KADER_NAMEN[r.kader] || ''}</td><td>${r.rolluik ? 'ja' : 'nee'}</td></tr>`;
     });
-    html += `<tr class="tot"><td colspan="5">Totaal (${S.ramen.length} elementen)</td><td class="num">${fmt(totM2)}</td><td colspan="3"></td></tr></table>`;
+    html += `<tr class="tot"><td colspan="3">Totaal (${totAantal} element${totAantal === 1 ? '' : 'en'})</td><td class="num">${totAantal}</td><td colspan="2"></td><td class="num">${fmt(totM2)}</td><td colspan="3"></td></tr></table>`;
   } else {
     html += '<p class="kv">Geen elementen opgemeten.</p>';
   }
@@ -970,11 +1211,11 @@ function buildPrint() {
   }
   html += `<p class="kv"><b>PV-panelen</b> ${E.pv === 'ja' ? 'ja' + (E.wp ? ', ' + esc(E.wp) + ' Wp' : '') : (E.pv === 'nee' ? 'nee' : '-')}</p>`;
 
-  /* ventilatie */
+  /* ventilatie (zelfde volgorde als in de app: natte ruimtes eerst) */
   html += '<h2>Ventilatie</h2>';
   if (S.ventilatie.ruimtes.length) {
     html += '<table><tr><th>Ruimte</th><th>Ventilatie</th></tr>' +
-      S.ventilatie.ruimtes.map(r => `<tr><td>${esc(r.naam)}</td><td>${esc(r.voorziening)}</td></tr>`).join('') +
+      gesorteerdeVent().map(({ r }) => `<tr><td>${esc(r.naam)}</td><td>${esc(r.voorziening)}</td></tr>`).join('') +
       '</table>';
   } else {
     html += '<p class="kv">Geen ruimtes genoteerd.</p>';
@@ -987,7 +1228,7 @@ function buildPrint() {
 
   /* foto's */
   const fotos = [];
-  S.ramen.forEach(r => {
+  ramen.forEach(r => {
     if (r.foto) fotos.push({ src: r.foto, cap: `#${r.nr} ${ELEMENT_NAMEN[r.element]} ${GEVEL_NAMEN[r.gevel].toLowerCase()}, afstandhouder` });
   });
   S.energie.opwekkers.forEach(o => {
@@ -1000,7 +1241,7 @@ function buildPrint() {
       '</div>';
   }
 
-  $('#printview').innerHTML = html;
+  return html;
 }
 
 /* ---------- mini-zip (opslaan zonder compressie; foto's zijn al JPEG) ---------- */
@@ -1266,14 +1507,17 @@ function syncAlles() {
   $('#notities').value = S.algemeen.notities;
   segSet('#seg-gebouwtype', S.algemeen.gebouwtype);
 
-  /* ramen: formulier volgt draft */
+  /* ramen: formulier volgt draft, geen openstaande wijziging */
+  stopBewerkRaam();
   syncRaamForm();
   $('#breedte').value = '';
   $('#hoogte').value = '';
+  $('#aantal').value = draft.aantal || 1;
   updateM2Live();
   renderRamen();
 
-  /* energie: formulier volgt draftOpwek */
+  /* energie: formulier volgt draftOpwek, geen openstaande wijziging */
+  stopBewerkOpwek();
   syncOpwekForm();
   $('#opw-beschrijving').value = '';
   $('#kamer-b').value = '';

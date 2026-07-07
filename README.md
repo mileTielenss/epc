@@ -15,10 +15,10 @@ Het startscherm toont alle woningen. Tik op een woning om ze te openen, op de st
 ## Tabs
 
 - **Algemeen**: adres (met locatieknop: GPS plus OpenStreetMap, de enige externe call in de app), hoofdfoto van de woning (komt op de one-pager en in de woningenlijst), datum, gebouwtype, bouwjaar, notities.
-- **Ramen**: snelle invoer per element met gevelkompas, afmetingen in cm (komma-decimalen), beglazing, kader, rolluik en foto van de afstandhouder. Knop "Zelfde als vorige" herhaalt de laatste invoer met nieuwe afmetingen.
-- **Energie**: opwekkers toevoegen (gas, stookolie, airco, andere) met wat ze doen (radiatoren, vloerverwarming, sanitair warm water), beschrijving en kenplaatfoto. Bij airco ook kamerafmetingen in cm voor het volume. Daarnaast PV.
-- **Ventilatie**: kies geen/natuurlijk/mechanisch en tik daarna de ruimtes aan; tik op een ruimte in de lijst om te wisselen.
-- **Afronden**: one-pager naar PDF via print, woning sluiten of verwijderen.
+- **Ramen**: snelle invoer per element met gevelkompas, afmetingen in cm (komma-decimalen), aantal identieke ramen (stepper), beglazing, kader, rolluik en foto van de afstandhouder. Knop "Zelfde als vorige" herhaalt de laatste invoer met nieuwe afmetingen. Tik op een element in de lijst om het opnieuw te openen en te wijzigen. De lijst en de one-pager staan gesorteerd: eerst voor, dan achter, links en rechts.
+- **Energie**: opwekkers toevoegen (gas, stookolie, airco, andere) met wat ze doen (radiatoren, vloerverwarming, sanitair warm water), beschrijving en kenplaatfoto. Bij airco ook kamerafmetingen in cm voor het volume. Daarnaast PV. Tik op een opwekker in de lijst om ze te wijzigen of uit te breiden.
+- **Ventilatie**: kies geen/natuurlijk/mechanisch en tik daarna de ruimtes aan; tik op een ruimte in de lijst om te wisselen. "Andere ruimte" vraagt om een eigen naam. De lijst staat gesorteerd: eerst de natte ruimtes (keuken, badkamer, wc), daarna de rest alfabetisch (kamers met dezelfde naam blijven bij elkaar).
+- **Afronden**: one-pager naar PDF via print (bevat alle gegevens, ook de datum plaatsbezoek, en krijgt het adres als bestandsnaam), woning sluiten of verwijderen. In de op iOS geïnstalleerde app opent de one-pager in Safari, waar Delen → Afdrukken → Bewaar als PDF wel werkt.
 
 ## Data en backups
 
