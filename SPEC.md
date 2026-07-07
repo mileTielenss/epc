@@ -72,7 +72,7 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
   algemeen: { adres, foto (hoofdfoto, dataURL|null), datum, notities },
               // bouwjaar, gebouwtype, kelder en zolder worden NIET in de app
               // ingegeven: dat komt uit documenten of staat op de foto's
-  ruimtes: [ { naam, vent ('geen'|'natuurlijk'|'mechanisch'|'ander'),
+  ruimtes: [ { naam, vent ('geen'|'natuurlijk'|'mechanisch'|'mechanisch-permanent'|'ander'),
                ventBeschrijving, opm, afm ({b,d,h} in meter | null) } ],
   ramen:   [ { nr, ruimte, element ('raam'|'deur'|'dakraam'; legacy 'glasdeur'
                wordt bij bewerken een 'deur'),
@@ -109,7 +109,9 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 ### 4.2 Header met ruimtebalk
 
-- Groene header met terugknop, titel (adres) en savestamp.
+- Groene header met terugknop (enkel het pijltje "‹", zodat de titel ruimte krijgt),
+  titel (adres) en een compacte savestamp in twee regels boven elkaar
+  ("opgeslagen" / "HH:MM:SS"). Het adres moet leesbaar blijven.
 - Op de tabs **Details** en **Foto's** (en in het camerascherm) staat in de header de
   **ruimtebalk**: één horizontaal scrollbare rij chips
   `Living · Keuken · Badkamer · WC · Slaapkamer 1 · + Ruimte` (geen Berging:
@@ -131,8 +133,9 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
   achter elkaar, …), op volgorde van eerste voorkomen; binnen een groep oplopend
   genummerd. Een nieuwe "Badkamer 2" komt dus naast "Badkamer" te staan.
 - Bij een gekozen ruimte verschijnt eronder de **ventilatieknop**: elke tik schuift
-  door `geen → natuurlijk → mechanisch → ander`; bij "ander" wordt om een
-  beschrijving gevraagd. Daarnaast een ×-knop die de ruimte verwijdert (confirm;
+  door `geen → natuurlijk → mechanisch → mechanisch permanent → ander`; bij
+  "ander" verschijnt een **tekstveld onder de knop** (geen popup) voor de
+  beschrijving. Daarnaast een ×-knop die de ruimte verwijdert (confirm;
   gekoppelde items blijven bestaan maar verliezen hun label).
 
 ### 4.3 Tab Algemeen (de hele woning)
@@ -217,8 +220,8 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 
 ### 4.6 Tab Afronden
 
-- **Overzicht per ruimte**: ventilatie, afmetingen en opmerking (natte ruimtes
-  keuken/badkamer/wc eerst, daarna alfabetisch; nummerreeksen blijven bij elkaar).
+Bewust minimaal, géén ventilatie-overzicht (de PDF bevat die tabel al):
+
 - **"Print one-pager (PDF)"** — zie §5.
 - "Woning sluiten" (terug naar de lijst) en "Woning verwijderen" (confirm).
 

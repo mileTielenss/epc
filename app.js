@@ -248,7 +248,7 @@ async function bewaar() {
     dirty = false;
     const d = new Date();
     const p = n => String(n).padStart(2, '0');
-    $('#savestamp').textContent = `opgeslagen ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    $('#savestamp').textContent = `opgeslagen\n${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   } catch (e) {
     toast('Opslaan mislukt!');
     return;
@@ -1133,7 +1133,11 @@ $('#rvlijst').addEventListener('click', e => {
    dossierfoto's) krijgt die ruimte als label. "Algemeen" = geen specifieke ruimte.
    Per ruimte cycle je de ventilatie: geen -> natuurlijk -> mechanisch -> ander (+beschrijving). */
 
-const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch', 'ander'];
+const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch', 'mechanisch-permanent', 'ander'];
+const VENT_NAMEN = {
+  geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch',
+  'mechanisch-permanent': 'mechanisch permanent', ander: 'ander'
+};
 let selectedRuimte = ''; /* '' = Buiten (geen specifieke ruimte) */
 
 function huidigeRuimte() {
@@ -1169,8 +1173,10 @@ function renderRuimtebalk() {
   renderDossier();
   const r = huidigeRuimte();
   $('#ruimteregel').hidden = !r;
+  $('#vent-besch').hidden = !r || r.vent !== 'ander';
   if (r) {
-    $('#btn-vent').textContent = `\u{1F4A8} Ventilatie: ${r.vent}${r.vent === 'ander' && r.ventBeschrijving ? ' – ' + r.ventBeschrijving : ''}`;
+    $('#btn-vent').textContent = `\u{1F4A8} Ventilatie: ${VENT_NAMEN[r.vent] || r.vent}`;
+    if (r.vent === 'ander') $('#vent-besch').value = r.ventBeschrijving || '';
   }
 }
 
@@ -1192,7 +1198,6 @@ function voegRuimteToe(naam) {
   selectedRuimte = uniek;
   $('#ruimtekeuze').hidden = true;
   renderRuimtebalk();
-  renderVentOverzicht();
   bewaar();
   toast(`${uniek} toegevoegd`);
 }
@@ -1220,18 +1225,22 @@ $('#ruimtekeuze').addEventListener('click', e => {
   voegRuimteToe(b.dataset.v);
 });
 
-/* ventilatie van de huidige ruimte doorschuiven */
+/* ventilatie van de huidige ruimte doorschuiven; bij "ander" verschijnt een
+   tekstveld onder de knop (geen popup) */
 $('#btn-vent').addEventListener('click', () => {
   const r = huidigeRuimte();
   if (!r) return;
   r.vent = VENT_MODES[(VENT_MODES.indexOf(r.vent) + 1) % VENT_MODES.length];
-  if (r.vent === 'ander') {
-    const besch = (prompt('Beschrijving van de ventilatie?', r.ventBeschrijving || '') || '').trim();
-    r.ventBeschrijving = besch;
-  }
   renderRuimtebalk();
-  renderVentOverzicht();
+  if (r.vent === 'ander') $('#vent-besch').focus();
   bewaar();
+});
+
+$('#vent-besch').addEventListener('input', () => {
+  const r = huidigeRuimte();
+  if (!r) return;
+  r.ventBeschrijving = $('#vent-besch').value;
+  wijzig();
 });
 
 $('#btn-ruimte-del').addEventListener('click', () => {
@@ -1251,7 +1260,6 @@ $('#btn-ruimte-del').addEventListener('click', () => {
   renderRamen();
   renderOpwekkers();
   renderDossier();
-  renderVentOverzicht();
   bewaar();
 });
 
@@ -1284,24 +1292,9 @@ function gesorteerdeRuimtes() {
 }
 
 function ventTekst(r) {
-  return r.vent + (r.vent === 'ander' && r.ventBeschrijving ? ` (${r.ventBeschrijving})` : '');
+  return (VENT_NAMEN[r.vent] || r.vent) + (r.vent === 'ander' && r.ventBeschrijving ? ` (${r.ventBeschrijving})` : '');
 }
 
-/* compact overzicht op de Afronden-tab */
-function renderVentOverzicht() {
-  const ul = $('#ventoverzicht');
-  ul.innerHTML = '';
-  gesorteerdeRuimtes().forEach(r => {
-    const li = document.createElement('li');
-    li.innerHTML =
-      `<div class="info">
-         <div class="r1">${esc(r.naam)}</div>
-         <div class="r3">${esc(ventTekst(r))}${r.afm ? ' · ' + esc(afmTekst(r.afm)) : ''}${r.opm ? ' · ' + esc(r.opm) : ''}</div>
-       </div>`;
-    ul.appendChild(li);
-  });
-  if (!S.ruimtes.length) ul.innerHTML = '<li class="leeg">Geen ruimtes.</li>';
-}
 
 /* ============================== tab 5: fotodossier ============================== */
 
@@ -1821,7 +1814,6 @@ function syncAlles() {
   /* ruimtebalk: start op Algemeen */
   selectedRuimte = '';
   renderRuimtebalk();
-  renderVentOverzicht();
 
   /* fotodossier */
   renderDossier();

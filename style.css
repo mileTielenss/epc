@@ -29,11 +29,11 @@ body{
 }
 .toprij{display:flex;align-items:center;gap:10px}
 #topbar h1{margin:0;font-size:1rem;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#savestamp{font-size:.72rem;opacity:.85;flex:0 0 auto}
+#savestamp{font-size:.6rem;line-height:1.25;opacity:.85;flex:0 0 auto;text-align:right;white-space:pre-line}
 #btn-terug{
   flex:0 0 auto;border:0;background:none;color:#fff;
-  font-family:inherit;font-size:1rem;font-weight:700;
-  padding:8px 8px 8px 0;margin-left:-4px;
+  font-family:inherit;font-size:1.5rem;font-weight:700;line-height:1;
+  padding:4px 12px 6px 2px;margin-left:-6px;
 }
 
 /* ---------- ruimtebalk in de header: op elke tab behalve Algemeen/Afronden ---------- */
@@ -58,6 +58,7 @@ body{
   flex:0 0 auto;width:34px;height:34px;border-radius:10px;border:1.5px solid rgba(255,255,255,.5);
   background:transparent;color:#fff;font-size:1.2rem;font-weight:700;
 }
+#vent-besch{margin-top:6px;min-height:36px;font-size:.85rem}
 
 /* ---------- woningenlijst ---------- */
 #view-lijst{
