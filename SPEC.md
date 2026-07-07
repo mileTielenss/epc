@@ -20,7 +20,12 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 ### UI-principes
 
-- **Zo weinig mogelijk kliks**; vlot van ruimte naar ruimte kunnen wandelen.
+- **Zo weinig mogelijk kliks en knoppen**; vlot van ruimte naar ruimte kunnen wandelen.
+  Keuzes met een vaste optielijst zijn **roterende knoppen** (label links, waarde
+  rechts, draai-icoon ⟳): elke tik schuift naar de volgende optie; een lege waarde
+  toont een gedimde "—". Alleen element (raam/deur/dakraam) en gevel blijven
+  directe knoppenrijen omdat je die constant wisselt. Meerkeuze (functies van de
+  verwarming) blijft chips.
 - Elke energiedeskundige moet de app **zonder uitleg** direct begrijpen.
 - **Elk onderdeel mag leeg blijven** (een ruimte zonder ramen, geen verwarming, …).
 - **Elke verwijderknop vraagt bevestiging** (confirm), ook bij foto's; niets wordt
@@ -63,11 +68,13 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 {
   id, status ('open'|'afgewerkt'), gemaakt, gewijzigd,
   algemeen: { adres, foto (hoofdfoto, dataURL|null), datum, gebouwtype
-              ('open'|'halfopen'|'gesloten'|'appartement'), bouwjaar,
+              (''|'open'|'halfopen'|'gesloten'|'appartement'),
               kelder (''|'nee'|'ja'), zolder (''|'geen'|'binnen'|'buiten'), notities },
+              // bouwjaar wordt NIET in de app ingegeven: dat komt uit de documenten
   ruimtes: [ { naam, vent ('geen'|'natuurlijk'|'mechanisch'|'ander'),
                ventBeschrijving, opm, afm ({b,d,h} in meter | null) } ],
-  ramen:   [ { nr, ruimte, element ('raam'|'deur'|'dakraam'|'glasdeur'),
+  ramen:   [ { nr, ruimte, element ('raam'|'deur'|'dakraam'; legacy 'glasdeur'
+               wordt bij bewerken een 'deur'),
                gevel ('voor'|'achter'|'links'|'rechts'), b, h (meter),
                beglazing ('enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel'),
                kader ('pvc'|'alu'|'hout'), rolluik (bool), aantal (≥1), foto } ],
@@ -75,7 +82,8 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
                             'airco'|'kachel' = ruimtegebonden), ruimte,
                             functie (['radiatoren'|'vloer'|'sww']), beschrijving,
                             foto (kenplaat), fotoKraan } ],
-             pv (''|'ja'|'nee'), wp },
+             pvPanelen: [ { orientatie ('plat'|'voor'|'achter'|'links'|'rechts'|''), wp } ],
+             zonneboiler (''|'nee'|'ja') },
   fotodossier: [ { nr, ruimte, foto } ],
   teller, tellerOpwek, tellerDossier
 }
@@ -105,8 +113,9 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
   er **geen "Buiten"-optie** en is altijd een ruimte geselecteerd (bij het openen
   automatisch de eerste).
 - Alleen in de **foto-context** (Foto's-tab en camerascherm) staat vooraan een extra
-  chip **"Buiten"**: gevel- en dakfoto's neem je buiten en horen bij geen enkele
-  ruimte. "Buiten" is daar ook het bijschrift in de PDF.
+  chip **"Gevels"** (bewust geen "ruimte"-naam): gevel- en dakfoto's horen bij geen
+  enkele ruimte binnen het beschermd volume. "Gevels" is daar ook het bijschrift
+  in de PDF.
 - De gekozen ruimte geldt als label voor **alles wat je daarna toevoegt** (ramen,
   toestellen, dossierfoto's), tot je een andere kiest.
 - **"+ Ruimte"** opent sneltoetsen (Slaapkamer, Badkamer, WC, Bureau, Garage, Zolder,
@@ -119,42 +128,58 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 ### 4.3 Tab Algemeen (de hele woning)
 
-- Adres (+ locatieknop), datum plaatsbezoek (default vandaag), gebouwtype,
-  bouwjaar, **Kelder** (Geen/Ja), **Zolder** (Geen/Binnen BV/Buiten BV).
-- **Centrale verwarming**: type Gas/Stookolie/Andere; functies (radiatoren,
-  vloerverwarming, sanitair warm water — meerdere mogelijk); beschrijving;
-  kenplaatfoto; kranenfoto (alleen zichtbaar als "radiatoren" gekozen is).
-  "Voeg verwarming toe" + lijst; **tik op een rij om te wijzigen** (knop wordt
-  "Bewaar wijziging", annuleerknop verschijnt).
-- **PV-panelen** Ja/Nee + vermogen in Wp.
-- Notities (vrije tekst).
-- Geen aparte hoofdfoto-knop: de hoofdfoto kies je met de ★ op een dossierfoto.
+Vier duidelijk afgebakende, inklapbare secties (standaard open):
+
+1. **Woning**: adres (+ locatieknop), datum plaatsbezoek (default vandaag), en
+   roterende knoppen voor **Type woning** (—/Open/Halfopen/Gesloten/Appartement),
+   **Kelder** (—/Geen/Ja) en **Zolder** (—/Geen/Binnen BV/Buiten BV).
+   **Geen bouwjaar**: dat komt altijd uit de documenten, nooit uit de app.
+2. **Verwarming** (centraal): roterende knop Gas/Stookolie/Andere; functiechips
+   (radiatoren, vloerverwarming, sanitair warm water); beschrijving; kenplaatfoto;
+   kranenfoto (alleen bij "radiatoren"). "Voeg verwarming toe" + lijst; tik op een
+   rij om te wijzigen.
+3. **Extra installaties**: **Zonnepanelen** — meerdere installaties, elk met een
+   roterende oriëntatieknop (Plat dak/Voor/Achter/Links/Rechts) en een eigen
+   vermogen in Wp; +-knop voegt toe, lijst met ×-verwijderen (confirm).
+   **Zonneboiler** — roterende knop —/Nee/Ja.
+4. **Opmerkingen**: vrije notities.
+
+De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 
 ### 4.4 Tab Details (per gekozen ruimte)
 
-- Bovenaan: **Afmetingen ruimte (m)**
-  breed × diep × hoog met live m³ — één keer per ruimte, hoeveel toestellen er ook
-  hangen — en een **opmerkingveld** (bv. "recht achterboven in de hoek", om rare
-  indelingen later te kunnen staven).
+- Bovenaan: alleen een **opmerkingveld** per ruimte (bv. "recht achterboven in de
+  hoek", om rare indelingen later te kunnen staven).
 - Sectie **Ramen & deuren** (inklapbaar, standaard open):
-  element (Raam/Deur/Dakraam/Glasdeur), gevel als één regel (Voor/Achter/Links/Rechts),
-  afmetingen b × h in meter met live m², **aantal identieke** (− / +-stepper),
-  beglazing, kader, rolluik, foto afstandhouder.
+  element (Raam/Deur/Dakraam — glasdeur bestaat niet meer), gevel als één regel
+  (Voor/Achter/Links/Rechts), afmetingen b × h in meter met live m², **aantal
+  identieke** (− / +-stepper), roterende knoppen voor beglazing, kader en rolluik,
+  en een fotoknop: **"Foto afstandhouder"**, die bij een dakraam automatisch
+  **"Foto kenplaatje"** heet.
   Knoppen: "Voeg toe" en **"Zelfde als vorige"** (herhaalt de laatste invoer, focus op
   breedte). **Tik op een rij in de lijst om te wijzigen** (ruimtebalk springt mee naar
   de ruimte van dat raam); annuleerknop aanwezig.
   **Sortering lijst én PDF: eerst alle deuren (deur + glasdeur), daarna de rest;
   telkens op gevel voor → achter → links → rechts, dan op nr.**
   Totaalregel telt het aantal (incl. aantallen) en de totale m².
-- Sectie **Verwarming in deze ruimte** (inklapbaar): alleen **Airco of Kachel**
-  (ruimtegebonden toestellen), beschrijving, kenplaatfoto. Meerdere toestellen per
-  ruimte mogelijk; het volume komt van de ruimte-afmetingen. Lijst gesorteerd per
-  ruimte; tik om te wijzigen. Zonder gekozen ruimte toont de sectie
-  "Kies bovenaan een ruimte".
+- Sectie **Verwarming in deze ruimte** (inklapbaar, standaard dicht): roterende
+  knop **Airco/Kachel**, daaronder de **afmetingen van de ruimte** (b × d × h in
+  meter, live m³) — die staan hier omdat ze enkel nodig zijn bij een airco of
+  kachel, en je ze maar één keer per ruimte ingeeft, hoeveel toestellen er ook
+  hangen — plus beschrijving en kenplaatfoto. Meerdere toestellen per ruimte
+  mogelijk; het volume komt van de ruimte-afmetingen. Lijst gesorteerd per ruimte;
+  tik om te wijzigen. Zonder gekozen ruimte toont de sectie "Kies bovenaan een
+  ruimte".
 
 ### 4.5 Tab Foto's (fotodossier)
 
-- Minimaal gehouden: **geen categorieën**, het bijschrift is de ruimte (of "Buiten").
+- Minimaal gehouden: **geen categorieën**, het bijschrift is de ruimte (of "Gevels").
+- Een **uitklapbaar infoblok** (standaard dichtgeklapt) somt de minimaal vereiste
+  foto's uit het inspectieprotocol op: gevels (elke veilig bereikbare),
+  schildelen per hoofdtype, isolatie (type/dikte herkenbaar), beglazing/kaders
+  (opschriften leesbaar), verwarming (kenplaat, label, thermostaat, afgifte,
+  buitenvoeler), sanitair warm water, koeling, ventilatie, zonne-energie met
+  oriëntatie — telkens detail- én overzichtsfoto's.
 - **"Start camera"**: eigen camerascherm (getUserMedia, achtercamera) dat **open
   blijft**: grote sluiterknop, teller, ruimtechips bovenaan om al wandelend van
   ruimte te wisselen, **flitsknop (torch) alléén als het toestel dat via de browser
@@ -162,6 +187,11 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
   achtergrond/pagehide.
 - **"Kies foto's"**: meerdere foto's tegelijk uit de bibliotheek (zoals een
   zoekertjessite); ook het vangnet voor donkere ruimtes op iOS (native camera mét flits).
+- **Losse fotoknoppen elders in de app** (kenplaat, kranen, afstandhouder/kenplaatje)
+  openen dezelfde interne camera in **enkel-modus**: zonder ruimtechips, met
+  "Annuleer"; één tik op de sluiter en de camera sluit meteen met de foto op zijn
+  plek. Lukt de camera niet (geen toestemming), dan valt het terug op de
+  camerakiezer van het toestel zelf.
 - Raster van miniaturen, **gesorteerd per ruimte (Buiten eerst, dan ruimtevolgorde)**.
   Per foto: **★** = gebruik als hoofdfoto van de woning (confirm; foto blijft ook in
   het dossier), **⇄** = verplaats naar een andere ruimte (keuzepaneel onderaan, zodat
@@ -179,13 +209,14 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 De PDF is het volledige, blijvende dossier en bevat **alle** gegevens:
 
-- Kop: hoofdfoto, adres, **datum plaatsbezoek**, gebouwtype, bouwjaar, kelder- en
-  zolderstatus.
+- Kop: hoofdfoto, adres, **datum plaatsbezoek**, gebouwtype, kelder- en
+  zolderstatus (geen bouwjaar: dat komt uit de documenten).
 - Tabel **Ramen & deuren**: #, type, ruimte, gevel, aantal, B (m), H (m), m²
   (aantal meegerekend), beglazing, kader, rolluik; totaalregel. Deuren bovenaan,
   dan gevelvolgorde.
 - Tabel **Energie**: alle opwekkers (centraal + per ruimte) met ruimte, functies,
-  beschrijving en bij airco/kachel het ruimtevolume. Daarna PV-regel.
+  beschrijving en bij airco/kachel het ruimtevolume. Daarna een regel
+  **Zonnepanelen** (elke installatie met oriëntatie en Wp) en een regel **Zonneboiler**.
 - Tabel **Ventilatie**: per ruimte de ventilatie, afmetingen en opmerking.
 - Notities.
 - **Foto's**: afstandhouders, kenplaten, kranen met bijschrift (#nr, type, gevel/ruimte).

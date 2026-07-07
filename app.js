@@ -91,7 +91,7 @@ function leegWoning() {
     algemeen: { adres: '', foto: null, datum: vandaag(), gebouwtype: '', bouwjaar: '', kelder: '', zolder: '', notities: '' },
     ruimtes: standaardRuimtes(),
     ramen: [],
-    energie: { opwekkers: [], pv: '', wp: '' },
+    energie: { opwekkers: [], pvPanelen: [], zonneboiler: '' },
     fotodossier: [],
     teller: 0,
     tellerOpwek: 0,
@@ -191,6 +191,17 @@ function normaliseer(p) {
     r.aantal = Math.max(1, Math.round(num(r.aantal)) || 1);
     r.ruimte = r.ruimte || '';
   });
+  /* PV: oud ja/nee+Wp wordt een lijst van installaties met orientatie
+     (kijk naar pe, niet naar w: de basis vult pvPanelen altijd met []) */
+  if (!Array.isArray(pe.pvPanelen)) {
+    w.energie.pvPanelen = [];
+    if (pe.pv === 'ja') w.energie.pvPanelen.push({ orientatie: '', wp: String(pe.wp || '') });
+  }
+  w.energie.pvPanelen = w.energie.pvPanelen.map(p => ({ orientatie: p.orientatie || '', wp: String(p.wp || '') }));
+  if (typeof w.energie.zonneboiler !== 'string') w.energie.zonneboiler = '';
+  delete w.energie.pv;
+  delete w.energie.wp;
+
   w.energie.opwekkers.forEach(o => {
     o.ruimte = o.ruimte || '';
     /* migratie: kamerafmetingen verhuizen van het toestel naar de ruimte zelf */
@@ -395,16 +406,15 @@ function verkleinBestand(f, maxDim, kwaliteit) {
   });
 }
 
-/* detailfoto's klein houden (opslag), de hoofdfoto scherper: die bewaar je
-   via save-as op de pc om ze elders als gevelfoto te gebruiken */
+/* detailfoto's klein houden (opslag). Losse foto's (kenplaat, afstandhouder...)
+   openen de interne camera in enkel-modus: één tik, foto zit erin. Lukt de
+   camera niet, dan valt het terug op de gewone camerakiezer van het toestel. */
 let fotoCb = null, fotoMaxDim = 900, fotoKwaliteit = 0.7;
 function neemFoto(cb, maxDim = 900, kwaliteit = 0.7) {
   fotoCb = cb;
   fotoMaxDim = maxDim;
   fotoKwaliteit = kwaliteit;
-  const inp = $('#fotoinput');
-  inp.value = '';
-  inp.click();
+  startCamera('enkel');
 }
 $('#fotoinput').addEventListener('change', async () => {
   const f = $('#fotoinput').files[0];
@@ -471,11 +481,35 @@ $('#btn-locatie').addEventListener('click', () => {
   }, () => toast('Locatie niet beschikbaar'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 });
 bind('#datum', v => S.algemeen.datum = v);
-bind('#bouwjaar', v => S.algemeen.bouwjaar = v);
 bind('#notities', v => S.algemeen.notities = v);
-segInit('#seg-gebouwtype', v => { S.algemeen.gebouwtype = v; wijzig(); });
-segInit('#seg-kelder', v => { S.algemeen.kelder = v; wijzig(); });
-segInit('#seg-zolder', v => { S.algemeen.zolder = v; wijzig(); });
+
+const GEBOUW_KORT = { '': '—', open: 'Open', halfopen: 'Halfopen', gesloten: 'Gesloten', appartement: 'Appartement' };
+const syncCyGebouwtype = cycleInit('#cy-gebouwtype', ['', 'open', 'halfopen', 'gesloten', 'appartement'], GEBOUW_KORT,
+  () => S.algemeen.gebouwtype, v => { S.algemeen.gebouwtype = v; wijzig(); });
+const syncCyKelder = cycleInit('#cy-kelder', ['', 'nee', 'ja'], { '': '—', nee: 'Geen', ja: 'Ja' },
+  () => S.algemeen.kelder, v => { S.algemeen.kelder = v; wijzig(); });
+const syncCyZolder = cycleInit('#cy-zolder', ['', 'geen', 'binnen', 'buiten'],
+  { '': '—', geen: 'Geen', binnen: 'Binnen beschermd volume', buiten: 'Buiten beschermd volume' },
+  () => S.algemeen.zolder, v => { S.algemeen.zolder = v; wijzig(); });
+
+/* roterende knop: elke tik schuift naar de volgende optie; toont dat er meer
+   opties zijn via het draai-icoon. '' toont een gedimde — */
+function cycleInit(sel, opties, labels, get, set) {
+  const btn = $(sel);
+  const sync = () => {
+    const v = get();
+    const cv = btn.querySelector('.cv');
+    cv.textContent = labels[v] || '—';
+    cv.classList.toggle('leeg', !v);
+  };
+  btn.addEventListener('click', () => {
+    if (!S) return;
+    const i = opties.indexOf(get());
+    set(opties[(i + 1) % opties.length]);
+    sync();
+  });
+  return sync;
+}
 
 /* segmented control */
 function segInit(sel, cb) {
@@ -508,10 +542,22 @@ function chipsSet(sel, vals) {
 
 let bewerkRaamNr = null; /* nr van het raam dat je aan het wijzigen bent, of null */
 
-segInit('#seg-element', v => draft.element = v);
-segInit('#seg-beglazing', v => draft.beglazing = v);
-segInit('#seg-kader', v => draft.kader = v);
-segInit('#seg-rolluik', v => draft.rolluik = v);
+segInit('#seg-element', v => { draft.element = v; updateRaamFotoLabel(); });
+
+const syncCyBeglazing = cycleInit('#cy-beglazing',
+  ['enkel', 'dubbel', 'hr-dubbel', 'drievoudig', 'paneel'],
+  { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' },
+  () => draft.beglazing, v => draft.beglazing = v);
+const syncCyKader = cycleInit('#cy-kader', ['pvc', 'alu', 'hout'],
+  { pvc: 'PVC', alu: 'Alu', hout: 'Hout' },
+  () => draft.kader, v => draft.kader = v);
+const syncCyRolluik = cycleInit('#cy-rolluik', ['nee', 'ja'], { nee: 'Nee', ja: 'Ja' },
+  () => draft.rolluik, v => draft.rolluik = v);
+
+/* dakramen hebben meestal een kenplaatje i.p.v. een afstandhouder */
+function updateRaamFotoLabel() {
+  $('#btn-raamfoto').textContent = draft.element === 'dakraam' ? '\u{1F4F7} Foto kenplaatje' : '\u{1F4F7} Foto afstandhouder';
+}
 
 /* aantal-stepper */
 function zetAantal(n) {
@@ -606,7 +652,7 @@ function startBewerkRaam(nr) {
   const r = S.ramen.find(x => x.nr === nr);
   if (!r) return;
   bewerkRaamNr = nr;
-  draft.element = r.element;
+  draft.element = r.element === 'glasdeur' ? 'deur' : r.element;
   draft.gevel = r.gevel;
   draft.beglazing = r.beglazing;
   draft.kader = r.kader;
@@ -668,10 +714,11 @@ $('#btn-herhaal').addEventListener('click', () => {
 
 function syncRaamForm() {
   segSet('#seg-element', draft.element);
-  segSet('#seg-beglazing', draft.beglazing);
-  segSet('#seg-kader', draft.kader);
-  segSet('#seg-rolluik', draft.rolluik);
+  syncCyBeglazing();
+  syncCyKader();
+  syncCyRolluik();
   segSet('#seg-gevel', draft.gevel);
+  updateRaamFotoLabel();
   updateRaamThumb();
 }
 
@@ -738,7 +785,9 @@ let bewerkOpwekNr = null; /* nr van de opwekker die je aan het wijzigen bent, of
 
 chipsInit('#chips-opwekfunctie', vals => { draftOpwek.functie = vals; toonOpwekVelden(); });
 
-segInit('#seg-opwektype', v => { draftOpwek.type = v; toonOpwekVelden(); });
+const syncCyOpwektype = cycleInit('#cy-opwektype', ['gas', 'stookolie', 'andere'],
+  { gas: 'Gas', stookolie: 'Stookolie', andere: 'Andere' },
+  () => draftOpwek.type, v => draftOpwek.type = v);
 
 function toonOpwekVelden() {
   $('#opw-kraanfoto-rij').hidden = !draftOpwek.functie.includes('radiatoren');
@@ -773,7 +822,7 @@ $('#btn-kraanfoto-del').addEventListener('click', () => {
 });
 
 function syncOpwekForm() {
-  segSet('#seg-opwektype', draftOpwek.type);
+  syncCyOpwektype();
   chipsSet('#chips-opwekfunctie', draftOpwek.functie);
   toonOpwekVelden();
   updateOpwekThumb();
@@ -884,12 +933,51 @@ $('#opweklijst').addEventListener('click', e => {
   if (li) startBewerkOpwek(Number(li.dataset.nr));
 });
 
-segInit('#seg-pv', v => {
-  S.energie.pv = v;
-  $('#fld-wp').hidden = v !== 'ja';
-  wijzig();
+/* zonnepanelen: meerdere installaties, elk met orientatie en eigen Wp */
+const PVOR_NAMEN = { '': '—', plat: 'Plat dak', voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
+let draftPvOr = 'plat';
+const syncCyPvor = cycleInit('#cy-pvor', ['plat', 'voor', 'achter', 'links', 'rechts'], PVOR_NAMEN,
+  () => draftPvOr, v => draftPvOr = v);
+
+$('#btn-pv-voegtoe').addEventListener('click', () => {
+  if (!S) return;
+  const wp = Math.round(num($('#pv-wp').value));
+  if (!wp) { toast('Vul het vermogen in Wp in'); return; }
+  S.energie.pvPanelen.push({ orientatie: draftPvOr, wp: String(wp) });
+  $('#pv-wp').value = '';
+  renderPv();
+  bewaar();
+  toast(`Zonnepanelen ${PVOR_NAMEN[draftPvOr].toLowerCase()} toegevoegd`);
 });
-bind('#wp', v => S.energie.wp = v);
+
+function renderPv() {
+  const ul = $('#pvlijst');
+  ul.innerHTML = '';
+  S.energie.pvPanelen.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<div class="info">
+         <div class="r1">${esc(PVOR_NAMEN[p.orientatie] || '—')}</div>
+         <div class="r2">${esc(p.wp)} Wp</div>
+       </div>` +
+      `<button type="button" class="del" data-i="${i}">×</button>`;
+    ul.appendChild(li);
+  });
+}
+
+$('#pvlijst').addEventListener('click', e => {
+  const b = e.target.closest('.del');
+  if (!b || !S) return;
+  const p = S.energie.pvPanelen[Number(b.dataset.i)];
+  if (!p) return;
+  if (!confirm(`Zonnepanelen (${PVOR_NAMEN[p.orientatie] || '—'}, ${p.wp} Wp) verwijderen?`)) return;
+  S.energie.pvPanelen.splice(Number(b.dataset.i), 1);
+  renderPv();
+  bewaar();
+});
+
+const syncCyZonneboiler = cycleInit('#cy-zonneboiler', ['', 'nee', 'ja'], { '': '—', nee: 'Nee', ja: 'Ja' },
+  () => S.energie.zonneboiler, v => { S.energie.zonneboiler = v; wijzig(); });
 
 /* ============================== verwarming per ruimte (tab Details) ==============================
    airco's en kachels horen bij de gekozen ruimte; de afmetingen van de ruimte
@@ -898,7 +986,9 @@ bind('#wp', v => S.energie.wp = v);
 let draftRv = { type: 'airco', foto: null };
 let bewerkRvNr = null;
 
-segInit('#seg-rvtype', v => draftRv.type = v);
+const syncCyRvtype = cycleInit('#cy-rvtype', ['airco', 'kachel'],
+  { airco: 'Airco', kachel: 'Kachel' },
+  () => draftRv.type, v => draftRv.type = v);
 
 /* afmetingen van de gekozen ruimte: rechtstreeks op de ruimte bewaard */
 function updateRuimteM3() {
@@ -951,7 +1041,7 @@ function updateRvThumb() {
 }
 
 function syncRvForm() {
-  segSet('#seg-rvtype', draftRv.type);
+  syncCyRvtype();
   updateRvThumb();
 }
 
@@ -1085,7 +1175,7 @@ function renderRuimteChips(container, metPlus, metBuiten) {
     if (v !== '__plus') b.classList.toggle('on', selectedRuimte === v);
     container.appendChild(b);
   };
-  if (metBuiten) maak('', 'Buiten');
+  if (metBuiten) maak('', 'Gevels');
   S.ruimtes.forEach(r => maak(r.naam, r.naam));
   if (metPlus) maak('__plus', '+ Ruimte', 'plus');
   /* de actieve chip in beeld houden */
@@ -1232,9 +1322,9 @@ function voegDossierFoto(dataUrl) {
   renderDossier();
 }
 
-/* bijschrift = de ruimte waar de foto genomen is; zonder ruimte: Buiten */
+/* bijschrift = de ruimte waar de foto genomen is; zonder ruimte: Gevels (buitenfoto's) */
 function dossierCap(f) {
-  return f.ruimte || 'Buiten';
+  return f.ruimte || 'Gevels';
 }
 
 /* dossier gesorteerd per ruimte: Algemeen (gevels e.d.) eerst, dan de ruimtes
@@ -1312,7 +1402,7 @@ function openVerplaats(nr) {
     b.classList.toggle('on', f.ruimte === v);
     chips.appendChild(b);
   };
-  maak('', 'Buiten');
+  maak('', 'Gevels');
   S.ruimtes.forEach(r => maak(r.naam, r.naam));
   $('#verplaats').hidden = false;
 }
@@ -1325,7 +1415,7 @@ $('#verplaats-chips').addEventListener('click', e => {
     f.ruimte = b.dataset.v;
     renderDossier();
     bewaar();
-    toast(`Foto verplaatst naar ${b.dataset.v || 'Buiten'}`);
+    toast(`Foto verplaatst naar ${b.dataset.v || 'Gevels'}`);
   }
   verplaatsNr = null;
   $('#verplaats').hidden = true;
@@ -1364,13 +1454,12 @@ $('#dossierinput').addEventListener('change', async () => {
 
 let camStream = null;
 let camFlits = false;
+let camModus = 'dossier'; /* 'dossier' = meerdere foto's; 'enkel' = één foto, meteen dicht */
 
-async function startCamera() {
+async function startCamera(modus) {
+  camModus = modus || 'dossier';
   if (!S) return;
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    toast("Camera niet beschikbaar, kies foto's via de bibliotheek");
-    return;
-  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camFallback(); return; }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1440 } },
@@ -1378,6 +1467,8 @@ async function startCamera() {
     });
     $('#camvideo').srcObject = camStream;
     $('#camera').hidden = false;
+    $('#camruimtes').hidden = camModus === 'enkel';
+    $('#btn-camklaar').textContent = camModus === 'enkel' ? 'Annuleer' : 'Klaar';
     updateCamTeller(0);
     /* flits (torch) alleen tonen als het toestel het via de browser toelaat;
        iOS doet dat meestal niet: gebruik daar "Kies foto's" voor donkere ruimtes */
@@ -1387,6 +1478,17 @@ async function startCamera() {
     const kan = track && track.getCapabilities ? track.getCapabilities() : {};
     $('#btn-flits').hidden = !kan.torch;
   } catch (e) {
+    camFallback();
+  }
+}
+
+/* geen cameratoegang: losse foto via de toestelkiezer, dossier via de bibliotheek */
+function camFallback() {
+  if (camModus === 'enkel') {
+    const inp = $('#fotoinput');
+    inp.value = '';
+    inp.click();
+  } else {
     toast("Geen toegang tot de camera. Kies foto's via de bibliotheek.");
   }
 }
@@ -1422,17 +1524,30 @@ function updateCamTeller(n) {
   $('#camteller').textContent = n ? `${n} foto${n === 1 ? '' : "'s"}` : '';
 }
 
-$('#btn-camera').addEventListener('click', startCamera);
+$('#btn-camera').addEventListener('click', () => startCamera('dossier'));
 
 $('#btn-sluiter').addEventListener('click', () => {
   const v = $('#camvideo');
   if (!S || !camStream || !v.videoWidth) return;
+  if (camModus === 'enkel') {
+    const data = naarJpeg(v, v.videoWidth, v.videoHeight, fotoMaxDim, fotoKwaliteit);
+    const cb = fotoCb;
+    fotoCb = null;
+    stopCamera();
+    if (cb) cb(data);
+    return;
+  }
   voegDossierFoto(naarJpeg(v, v.videoWidth, v.videoHeight, DOSSIER_MAXDIM, DOSSIER_KWALITEIT));
   updateCamTeller(camSessieFotos + 1);
   flash($('#btn-sluiter'));
 });
 
 $('#btn-camklaar').addEventListener('click', () => {
+  if (camModus === 'enkel') {
+    fotoCb = null;
+    stopCamera();
+    return;
+  }
   stopCamera();
   bewaar();
   if (camSessieFotos) toast(`${camSessieFotos} foto${camSessieFotos === 1 ? '' : "'s"} toegevoegd`);
@@ -1541,7 +1656,7 @@ function printInhoudHtml() {
 
   let html = (A.foto ? `<img class="hoofdfoto" src="${A.foto}" alt="">` : '') +
     `<h1>EPC Plaatsbezoek</h1>
-    <p class="sub">${esc(A.adres || 'Adres onbekend')} · ${esc(A.datum || '')} · ${esc(GEBOUW_NAMEN[A.gebouwtype] || '')}${A.bouwjaar ? ' · bouwjaar ' + esc(A.bouwjaar) : ''}${extraSub ? ' · ' + esc(extraSub) : ''}</p>`;
+    <p class="sub">${esc(A.adres || 'Adres onbekend')} · ${esc(A.datum || '')} · ${esc(GEBOUW_NAMEN[A.gebouwtype] || '')}${extraSub ? ' · ' + esc(extraSub) : ''}</p>`;
 
   /* ramen & deuren */
   html += '<h2>Ramen &amp; deuren</h2>';
@@ -1574,7 +1689,10 @@ function printInhoudHtml() {
   } else {
     html += '<p class="kv">Geen opwekkers genoteerd.</p>';
   }
-  html += `<p class="kv"><b>PV-panelen</b> ${E.pv === 'ja' ? 'ja' + (E.wp ? ', ' + esc(E.wp) + ' Wp' : '') : (E.pv === 'nee' ? 'nee' : '-')}</p>`;
+  html += `<p class="kv"><b>Zonnepanelen</b> ${E.pvPanelen.length
+    ? E.pvPanelen.map(p => `${PVOR_NAMEN[p.orientatie] || '?'} ${esc(p.wp)} Wp`).join(' · ')
+    : '-'}</p>`;
+  html += `<p class="kv"><b>Zonneboiler</b> ${E.zonneboiler || '-'}</p>`;
 
   /* ventilatie per ruimte (natte ruimtes eerst) */
   html += '<h2>Ventilatie</h2>';
@@ -1650,11 +1768,10 @@ function syncAlles() {
   /* algemeen */
   $('#adres').value = S.algemeen.adres;
   $('#datum').value = S.algemeen.datum;
-  $('#bouwjaar').value = S.algemeen.bouwjaar;
   $('#notities').value = S.algemeen.notities;
-  segSet('#seg-gebouwtype', S.algemeen.gebouwtype);
-  segSet('#seg-kelder', S.algemeen.kelder);
-  segSet('#seg-zolder', S.algemeen.zolder);
+  syncCyGebouwtype();
+  syncCyKelder();
+  syncCyZolder();
 
   /* ramen: formulier volgt draft, geen openstaande wijziging */
   stopBewerkRaam();
@@ -1670,9 +1787,13 @@ function syncAlles() {
   syncOpwekForm();
   $('#opw-beschrijving').value = '';
   renderOpwekkers();
-  segSet('#seg-pv', S.energie.pv);
-  $('#fld-wp').hidden = S.energie.pv !== 'ja';
-  $('#wp').value = S.energie.wp;
+
+  /* extra installaties */
+  draftPvOr = 'plat';
+  syncCyPvor();
+  $('#pv-wp').value = '';
+  renderPv();
+  syncCyZonneboiler();
 
   /* verwarming per ruimte (tab Details) */
   stopBewerkRv();

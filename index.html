@@ -61,6 +61,9 @@
 
 <!-- ======================= TAB 1: ALGEMEEN ======================= -->
 <section class="tab active" id="tab-algemeen">
+
+<details class="sectie" open>
+  <summary>Woning</summary>
   <div class="fld">
     <span class="lbl">Adres</span>
     <div class="invulrij">
@@ -74,46 +77,14 @@
     <input type="date" id="datum">
   </label>
 
-  <div class="fld">
-    <span class="lbl">Type gebouw</span>
-    <div class="seg" id="seg-gebouwtype">
-      <button type="button" data-v="open">Open</button>
-      <button type="button" data-v="halfopen">Halfopen</button>
-      <button type="button" data-v="gesloten">Gesloten</button>
-      <button type="button" data-v="appartement">Appartement</button>
-    </div>
-  </div>
+  <button type="button" class="cycle" id="cy-gebouwtype"><span class="cl">Type woning</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
+  <button type="button" class="cycle" id="cy-kelder"><span class="cl">Kelder</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
+  <button type="button" class="cycle" id="cy-zolder"><span class="cl">Zolder</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
+</details>
 
-  <label class="fld">
-    <span class="lbl">Bouwjaar</span>
-    <input type="number" id="bouwjaar" inputmode="numeric" placeholder="bv. 1978">
-  </label>
-
-  <div class="fld">
-    <span class="lbl">Kelder</span>
-    <div class="seg" id="seg-kelder">
-      <button type="button" data-v="nee">Geen</button>
-      <button type="button" data-v="ja">Ja</button>
-    </div>
-  </div>
-
-  <div class="fld">
-    <span class="lbl">Zolder</span>
-    <div class="seg" id="seg-zolder">
-      <button type="button" data-v="geen">Geen</button>
-      <button type="button" data-v="binnen">Binnen BV</button>
-      <button type="button" data-v="buiten">Buiten BV</button>
-    </div>
-  </div>
-
-  <div class="fld">
-    <span class="lbl">Centrale verwarming</span>
-    <div class="seg" id="seg-opwektype">
-      <button type="button" data-v="gas">Gas</button>
-      <button type="button" data-v="stookolie">Stookolie</button>
-      <button type="button" data-v="andere">Andere</button>
-    </div>
-  </div>
+<details class="sectie" open>
+  <summary>Verwarming</summary>
+  <button type="button" class="cycle" id="cy-opwektype"><span class="cl">Opwekker</span><span class="cv">Gas</span><span class="ci">&#10227;</span></button>
 
   <div class="fld">
     <span class="lbl">Doet (meerdere mogelijk)</span>
@@ -144,41 +115,35 @@
   <button type="button" class="btn big" id="btn-opwek-voegtoe">Voeg verwarming toe</button>
   <button type="button" class="btn sec big" id="btn-annuleer-opwek" hidden>Annuleer wijziging</button>
   <ul id="opweklijst" class="lijst"></ul>
+</details>
 
-  <div class="fld">
-    <span class="lbl">PV-panelen</span>
-    <div class="seg" id="seg-pv">
-      <button type="button" data-v="nee">Nee</button>
-      <button type="button" data-v="ja">Ja</button>
-    </div>
+<details class="sectie" open>
+  <summary>Extra installaties</summary>
+  <span class="lbl">Zonnepanelen</span>
+  <button type="button" class="cycle" id="cy-pvor"><span class="cl">Ori&euml;ntatie</span><span class="cv">Plat dak</span><span class="ci">&#10227;</span></button>
+  <div class="invulrij fld">
+    <input type="text" id="pv-wp" inputmode="numeric" placeholder="vermogen in Wp, bv. 4200">
+    <button type="button" class="btn addmini" id="btn-pv-voegtoe" title="Zonnepanelen toevoegen">+</button>
   </div>
+  <ul id="pvlijst" class="lijst"></ul>
 
-  <label class="fld" id="fld-wp" hidden>
-    <span class="lbl">Vermogen (Wp)</span>
-    <input type="text" id="wp" inputmode="numeric" placeholder="bv. 4200">
-  </label>
+  <button type="button" class="cycle" id="cy-zonneboiler"><span class="cl">Zonneboiler</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
+</details>
 
+<details class="sectie" open>
+  <summary>Opmerkingen</summary>
   <label class="fld">
     <span class="lbl">Notities</span>
-    <textarea id="notities" rows="6" placeholder="Vrije notities over de woning..."></textarea>
+    <textarea id="notities" rows="5" placeholder="Vrije notities over de woning..."></textarea>
   </label>
+</details>
+
 </section>
 
 <!-- ======================= TAB 2: DETAILS (per ruimte) ======================= -->
 <section class="tab" id="tab-details">
 
 <div id="ruimte-info" hidden>
-  <div class="fld">
-    <span class="lbl">Afmetingen ruimte (m)</span>
-    <div class="dims">
-      <input type="text" id="ruimte-b" inputmode="decimal" placeholder="breed">
-      <span class="x">&times;</span>
-      <input type="text" id="ruimte-d" inputmode="decimal" placeholder="diep">
-      <span class="x">&times;</span>
-      <input type="text" id="ruimte-h" inputmode="decimal" placeholder="hoog">
-      <span class="m2live" id="ruimtem3"></span>
-    </div>
-  </div>
   <label class="fld">
     <span class="lbl">Opmerking bij deze ruimte</span>
     <input type="text" id="ruimte-opm" placeholder="bv. recht achterboven in de hoek">
@@ -193,7 +158,6 @@
       <button type="button" data-v="raam">Raam</button>
       <button type="button" data-v="deur">Deur</button>
       <button type="button" data-v="dakraam">Dakraam</button>
-      <button type="button" data-v="glasdeur">Glasdeur</button>
     </div>
   </div>
 
@@ -226,37 +190,13 @@
     </div>
   </div>
 
-  <div class="fld">
-    <span class="lbl">Beglazing</span>
-    <div class="seg" id="seg-beglazing">
-      <button type="button" data-v="enkel">Enkel</button>
-      <button type="button" data-v="dubbel">Dubbel</button>
-      <button type="button" data-v="hr-dubbel">HR dubbel</button>
-      <button type="button" data-v="drievoudig">Drievoudig</button>
-      <button type="button" data-v="paneel">Vol paneel</button>
-    </div>
-  </div>
-
-  <div class="fld">
-    <span class="lbl">Kader</span>
-    <div class="seg" id="seg-kader">
-      <button type="button" data-v="pvc">PVC</button>
-      <button type="button" data-v="alu">Alu</button>
-      <button type="button" data-v="hout">Hout</button>
-    </div>
-  </div>
-
-  <div class="fld">
-    <span class="lbl">Rolluik</span>
-    <div class="seg" id="seg-rolluik">
-      <button type="button" data-v="nee">Nee</button>
-      <button type="button" data-v="ja">Ja</button>
-    </div>
-  </div>
+  <button type="button" class="cycle" id="cy-beglazing"><span class="cl">Beglazing</span><span class="cv">Dubbel</span><span class="ci">&#10227;</span></button>
+  <button type="button" class="cycle" id="cy-kader"><span class="cl">Kader</span><span class="cv">PVC</span><span class="ci">&#10227;</span></button>
+  <button type="button" class="cycle" id="cy-rolluik"><span class="cl">Rolluik</span><span class="cv">Nee</span><span class="ci">&#10227;</span></button>
 
   <div class="fld fotorow">
     <button type="button" class="btn sec" id="btn-raamfoto">&#128247; Foto afstandhouder</button>
-    <img id="raamfoto-thumb" class="thumb" hidden alt="foto afstandhouder">
+    <img id="raamfoto-thumb" class="thumb" hidden alt="foto raam">
     <button type="button" class="thumbdel" id="btn-raamfoto-del" hidden>&times;</button>
   </div>
 
@@ -274,11 +214,17 @@
   <summary>Verwarming in deze ruimte</summary>
   <div id="rv-geen" class="totaal" hidden>Kies bovenaan een ruimte om een toestel toe te voegen.</div>
   <div id="rv-form">
+    <button type="button" class="cycle" id="cy-rvtype"><span class="cl">Toestel</span><span class="cv">Airco</span><span class="ci">&#10227;</span></button>
+
     <div class="fld">
-      <span class="lbl">Toestel</span>
-      <div class="seg" id="seg-rvtype">
-        <button type="button" data-v="airco">Airco</button>
-        <button type="button" data-v="kachel">Kachel</button>
+      <span class="lbl">Afmetingen ruimte (m) &mdash; nodig bij airco of kachel</span>
+      <div class="dims">
+        <input type="text" id="ruimte-b" inputmode="decimal" placeholder="breed">
+        <span class="x">&times;</span>
+        <input type="text" id="ruimte-d" inputmode="decimal" placeholder="diep">
+        <span class="x">&times;</span>
+        <input type="text" id="ruimte-h" inputmode="decimal" placeholder="hoog">
+        <span class="m2live" id="ruimtem3"></span>
       </div>
     </div>
 
@@ -307,6 +253,23 @@
     <button type="button" class="btn big" id="btn-camera">&#128247; Start camera</button>
     <button type="button" class="btn sec big" id="btn-fotokies">&#128443;&#65039; Kies foto's</button>
   </div>
+
+  <details id="foto-eisen">
+    <summary>&#128203; Welke foto's zijn minimaal vereist? (inspectieprotocol)</summary>
+    <p>Detail- <b>én</b> overzichtsfoto's van elke visuele vaststelling:</p>
+    <ul>
+      <li><b>Gevels</b>: overzichtsfoto van elke veilig bereikbare gevel</li>
+      <li><b>Schildelen</b>: per hoofdtype muur, dak, plafond, vloer, deur, paneel</li>
+      <li><b>Isolatie</b>: per type en dikte, materiaal herkenbaar (ook boorgat/dampscherm)</li>
+      <li><b>Beglazing/kaders</b>: opschriften leesbaar, aantal glasbladen, spouwdikte</li>
+      <li><b>Verwarming</b>: opwekker + kenplaat, energielabel, thermostaat, afgifte, buitenvoeler</li>
+      <li><b>Sanitair warm water</b>: opwekker + kenplaat per installatie</li>
+      <li><b>Koeling</b>: koudebron en afgifte</li>
+      <li><b>Ventilatie</b>: systeem, ventielen/roosters, mechanische unit</li>
+      <li><b>Zonne-energie</b>: PV-panelen / zonneboiler met ori&euml;ntatie zichtbaar</li>
+    </ul>
+    <p>Bron: inspectieprotocol EPC residenti&euml;le gebouwen (VEKA), projectdossier &mdash; 10 jaar bewaren.</p>
+  </details>
 
   <div id="dossier-totaal" class="totaal"></div>
   <div id="dossiergrid" class="fotogrid"></div>

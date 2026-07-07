@@ -185,6 +185,26 @@ textarea{resize:vertical}
 .fotorow{display:flex;align-items:center;gap:10px}
 .thumb{width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
 
+/* ---------- roterende knop: tik om door de opties te draaien ---------- */
+.cycle{
+  display:flex;align-items:center;gap:8px;width:100%;
+  min-height:42px;padding:6px 12px;margin:0 0 8px;
+  font-family:inherit;font-size:.9rem;text-align:left;
+  border:1.5px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);
+}
+.cycle .cl{flex:0 0 auto;font-size:.75rem;font-weight:700;color:var(--mut)}
+.cycle .cv{flex:1;text-align:right;font-weight:700}
+.cycle .cv.leeg{color:var(--mut);font-weight:600}
+.cycle .ci{flex:0 0 auto;color:var(--acc);font-size:1.05rem;font-weight:700}
+.cycle:active{background:var(--bg)}
+
+/* ---------- protocol-info op de foto's-tab ---------- */
+#foto-eisen{font-size:.8rem;color:var(--mut);margin:2px 0 10px}
+#foto-eisen summary{font-weight:700;color:var(--ink);min-height:38px;display:flex;align-items:center;cursor:pointer}
+#foto-eisen ul{margin:4px 0 6px;padding-left:18px}
+#foto-eisen li{margin-bottom:2px}
+#foto-eisen p{margin:0 0 4px}
+
 /* ---------- inklapbare secties op de Details-tab ---------- */
 .sectie{
   background:var(--card);border:1.5px solid var(--line);border-radius:14px;
