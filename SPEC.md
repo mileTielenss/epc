@@ -100,8 +100,10 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 - Lijst van woningen, **laatst gewijzigd bovenaan**, met hoofdfoto-miniatuur, adres, datum.
 - Per woning: statusknop **Open/Af** (toggle) en ×-verwijderknop (met confirm).
-- "+ Nieuwe woning", versieregel ("Versie vNN" + "Zoek update"), en een uitklapbare
-  uitleg over lokaal bewaren (nooit de app verwijderen zolang er woningen in staan).
+- "+ Nieuwe woning" en een uitklapbaar **"Info"**-blok (standaard dicht) met daarin:
+  hoe alles bewaard wordt (nooit de app verwijderen zolang er woningen in staan),
+  de versieregel ("Versie vNN" + knop "Zoek update") en korte uitleg over de
+  werkwijze. Versie en update zijn dus verstopt tot je ze nodig hebt.
 
 ### 4.2 Header met ruimtebalk
 
@@ -133,7 +135,8 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 ### 4.3 Tab Algemeen (de hele woning)
 
-Vier duidelijk afgebakende, inklapbare secties (standaard open):
+Vier duidelijk afgebakende, inklapbare secties. **Woning staat open** (daar begin
+je: adres en datum), de rest is **standaard dichtgeklapt**:
 
 1. **Woning**: alleen adres (+ locatieknop) en datum plaatsbezoek (default vandaag).
    **Geen bouwjaar, gebouwtype, kelder of zolder**: dat komt uit de documenten of
@@ -153,15 +156,17 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 
 ### 4.4 Tab Details (per gekozen ruimte)
 
-- Bovenaan: alleen een **opmerkingveld** per ruimte (bv. "recht achterboven in de
+- Onderaan de tab: een **opmerkingveld** per ruimte (bv. "recht achterboven in de
   hoek", om rare indelingen later te kunnen staven).
-- Sectie **Ramen & deuren** (inklapbaar, standaard open):
-  element (Raam/Deur/Dakraam — glasdeur bestaat niet meer), gevel als één regel
-  (Voor/Achter/Links/Rechts), afmetingen b × h in meter met live m², **aantal
-  identieke** (− / +-stepper), roterende knoppen voor beglazing, kader en rolluik,
-  en een fotoknop: **"Foto afstandhouder"**, die bij een dakraam automatisch
-  **"Foto kenplaatje"** heet. Geen "Zelfde als vorige"-knop: het formulier onthoudt
-  de laatste keuzes vanzelf (enkel afmetingen, aantal en foto worden leeggemaakt).
+- Sectie **Ramen & deuren** (inklapbaar, standaard open), **compact genoeg om op
+  een iPhone te typen zonder te scrollen**: element (Raam/Deur/Dakraam) en gevel
+  (Voor/Achter/Links/Rechts) als rijen zonder label, afmetingen b × h in meter met
+  live m², een **aantal-regel** (label + − / +-stepper op één rij), en beglazing,
+  kader en rolluik als **drie mini-roterende knoppen naast elkaar op één rij**.
+  Daaronder de fotoknop **"Foto afstandhouder"** (heet bij een dakraam automatisch
+  **"Foto kenplaatje"**) en "Voeg toe". Geen "Zelfde als vorige"-knop: het formulier
+  onthoudt de laatste keuzes vanzelf (enkel afmetingen, aantal en foto worden
+  leeggemaakt).
   **Tik op een rij in de lijst om te wijzigen** (ruimtebalk springt mee naar
   de ruimte van dat raam); annuleerknop aanwezig.
   **Sortering lijst én PDF: eerst alle deuren (deur + glasdeur), daarna de rest;

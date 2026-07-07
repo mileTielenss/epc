@@ -171,10 +171,11 @@ textarea{resize:vertical}
 .dims .x{font-size:1.3rem;font-weight:700;color:var(--mut)}
 .m2live{flex:0 0 auto;min-width:64px;text-align:right;font-weight:700;font-size:.95rem;color:var(--acc)}
 
-/* ---------- aantal stepper ---------- */
+/* ---------- aantal stepper (compacte rij met inline label) ---------- */
 .aantalrij{display:flex;align-items:center;gap:8px}
-.aantalrij input{flex:1;min-width:0;text-align:center;font-size:1.05rem;font-weight:700}
-.aantalknop{flex:0 0 auto;min-width:46px;font-size:1.3rem;padding:0}
+.aantalrij .lbl-inline{flex:1;font-size:.75rem;font-weight:700;color:var(--ink)}
+.aantalrij input{flex:0 0 64px;min-width:0;text-align:center;font-size:1rem;font-weight:700;min-height:36px}
+.aantalknop{flex:0 0 auto;min-width:44px;min-height:36px;font-size:1.2rem;padding:0}
 
 /* ---------- "andere ruimte" chip ---------- */
 .chips button.andere{border-style:dashed;color:var(--acc);font-weight:700}
@@ -198,6 +199,15 @@ textarea{resize:vertical}
 .cycle .cv.leeg{color:var(--mut);font-weight:600}
 .cycle .ci{flex:0 0 auto;color:var(--acc);font-size:1.05rem;font-weight:700}
 .cycle:active{background:var(--bg)}
+/* drie mini-roterende knoppen naast elkaar (beglazing/kader/rolluik) */
+.cyclerij{display:flex;gap:6px;margin:0 0 8px}
+.cycle.mini{
+  position:relative;flex:1;flex-direction:column;align-items:center;justify-content:center;
+  gap:1px;min-height:48px;margin:0;padding:5px 4px;
+}
+.cycle.mini .cl{font-size:.66rem}
+.cycle.mini .cv{flex:0 0 auto;text-align:center;font-size:.82rem;white-space:nowrap}
+.cycle.mini .ci{position:absolute;top:2px;right:5px;font-size:.75rem}
 
 /* ---------- protocol-info op de foto's-tab ---------- */
 #foto-eisen{font-size:.8rem;color:var(--mut);margin:2px 0 10px}
@@ -205,6 +215,10 @@ textarea{resize:vertical}
 #foto-eisen ul{margin:4px 0 6px;padding-left:18px}
 #foto-eisen li{margin-bottom:2px}
 #foto-eisen p{margin:0 0 4px}
+
+/* ---------- compacte invoer in de ramen-sectie ---------- */
+#sec-ramen .fld{margin-bottom:6px}
+#sec-ramen .seg button{min-height:36px;padding:5px 6px}
 
 /* ---------- inklapbare secties op de Details-tab ---------- */
 .sectie{

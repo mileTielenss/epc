@@ -48,13 +48,13 @@
   <h2>Woningen</h2>
   <ul id="woninglijst" class="lijst"></ul>
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
-  <div id="versierij"><span id="versie"></span><button type="button" id="btn-update">Zoek update</button></div>
 
   <details id="uitleg">
-    <summary>Hoe wordt alles bewaard?</summary>
-    <p>De app bewaart alles automatisch <b>elke 3 seconden op dit toestel</b>, ook zonder internet. Rechtsboven zie je telkens "opgeslagen" met het tijdstip. Je kan dagen later terugkomen en gewoon verder werken.</p>
-    <p>Klaar met een woning? Bewaar de PDF via <b>Afronden</b> en verwijder daarna de woning.</p>
-    <p>Let op: je data verdwijnt alleen als je de app van je beginscherm verwijdert of Safari-websitedata wist. Doe dat dus nooit zolang er woningen in de app staan.</p>
+    <summary>&#8505;&#65039; Info</summary>
+    <p><b>Hoe wordt alles bewaard?</b> De app bewaart alles automatisch <b>elke 3 seconden op dit toestel</b>, ook zonder internet. Rechtsboven zie je telkens "opgeslagen" met het tijdstip. Je kan dagen later terugkomen en gewoon verder werken.</p>
+    <p><b>Werkwijze:</b> gegevens verzamelen tijdens het plaatsbezoek, klaar? Bewaar de PDF via <b>Afronden</b> — dat is het blijvende dossier — en verwijder daarna de woning.</p>
+    <p><b>Let op:</b> je data verdwijnt alleen als je de app van je beginscherm verwijdert of Safari-websitedata wist. Doe dat dus nooit zolang er woningen in de app staan.</p>
+    <div id="versierij"><span id="versie"></span><button type="button" id="btn-update">Zoek update</button></div>
   </details>
 </section>
 
@@ -80,7 +80,7 @@
 
 </details>
 
-<details class="sectie" open>
+<details class="sectie">
   <summary>Verwarming</summary>
   <button type="button" class="cycle" id="cy-opwektype"><span class="cl">Opwekker</span><span class="cv">Gas</span><span class="ci">&#10227;</span></button>
 
@@ -115,7 +115,7 @@
   <ul id="opweklijst" class="lijst"></ul>
 </details>
 
-<details class="sectie" open>
+<details class="sectie">
   <summary>Extra installaties</summary>
   <span class="lbl">Zonnepanelen</span>
   <button type="button" class="cycle" id="cy-pvor"><span class="cl">Ori&euml;ntatie</span><span class="cv">Plat dak</span><span class="ci">&#10227;</span></button>
@@ -132,7 +132,7 @@
   </label>
 </details>
 
-<details class="sectie" open>
+<details class="sectie">
   <summary>Opmerkingen</summary>
   <label class="fld">
     <span class="lbl">Notities</span>
@@ -145,17 +145,9 @@
 <!-- ======================= TAB 2: DETAILS (per ruimte) ======================= -->
 <section class="tab" id="tab-details">
 
-<div id="ruimte-info" hidden>
-  <label class="fld">
-    <span class="lbl">Opmerking bij deze ruimte</span>
-    <input type="text" id="ruimte-opm" placeholder="bv. recht achterboven in de hoek">
-  </label>
-</div>
-
 <details class="sectie" id="sec-ramen" open>
   <summary>Ramen &amp; deuren</summary>
   <div class="fld">
-    <span class="lbl">Element</span>
     <div class="seg" id="seg-element">
       <button type="button" data-v="raam">Raam</button>
       <button type="button" data-v="deur">Deur</button>
@@ -164,7 +156,6 @@
   </div>
 
   <div class="fld">
-    <span class="lbl">Gevel</span>
     <div class="seg" id="seg-gevel">
       <button type="button" data-v="voor">Voor</button>
       <button type="button" data-v="achter">Achter</button>
@@ -174,27 +165,26 @@
   </div>
 
   <div class="fld">
-    <span class="lbl">Afmetingen (m)</span>
     <div class="dims">
-      <input type="text" id="breedte" inputmode="decimal" placeholder="bv. 1,335">
+      <input type="text" id="breedte" inputmode="decimal" placeholder="breedte (m)">
       <span class="x">&times;</span>
-      <input type="text" id="hoogte" inputmode="decimal" placeholder="hoogte">
+      <input type="text" id="hoogte" inputmode="decimal" placeholder="hoogte (m)">
       <span class="m2live" id="m2live"></span>
     </div>
   </div>
 
-  <div class="fld">
-    <span class="lbl">Aantal identieke</span>
-    <div class="aantalrij">
-      <button type="button" class="btn sec aantalknop" id="aantal-min">&minus;</button>
-      <input type="text" id="aantal" inputmode="numeric" value="1">
-      <button type="button" class="btn sec aantalknop" id="aantal-plus">+</button>
-    </div>
+  <div class="fld aantalrij">
+    <span class="lbl-inline">Aantal identieke</span>
+    <button type="button" class="btn sec aantalknop" id="aantal-min">&minus;</button>
+    <input type="text" id="aantal" inputmode="numeric" value="1">
+    <button type="button" class="btn sec aantalknop" id="aantal-plus">+</button>
   </div>
 
-  <button type="button" class="cycle" id="cy-beglazing"><span class="cl">Beglazing</span><span class="cv">Dubbel</span><span class="ci">&#10227;</span></button>
-  <button type="button" class="cycle" id="cy-kader"><span class="cl">Kader</span><span class="cv">PVC</span><span class="ci">&#10227;</span></button>
-  <button type="button" class="cycle" id="cy-rolluik"><span class="cl">Rolluik</span><span class="cv">Nee</span><span class="ci">&#10227;</span></button>
+  <div class="cyclerij">
+    <button type="button" class="cycle mini" id="cy-beglazing"><span class="cl">Beglazing</span><span class="cv">Dubbel</span><span class="ci">&#10227;</span></button>
+    <button type="button" class="cycle mini" id="cy-kader"><span class="cl">Kader</span><span class="cv">PVC</span><span class="ci">&#10227;</span></button>
+    <button type="button" class="cycle mini" id="cy-rolluik"><span class="cl">Rolluik</span><span class="cv">Nee</span><span class="ci">&#10227;</span></button>
+  </div>
 
   <div class="fld fotorow">
     <button type="button" class="btn sec" id="btn-raamfoto">&#128247; Foto afstandhouder</button>
@@ -243,6 +233,13 @@
   </div>
   <ul id="rvlijst" class="lijst"></ul>
 </details>
+
+<div id="ruimte-info" hidden>
+  <label class="fld">
+    <span class="lbl">Opmerking bij deze ruimte</span>
+    <input type="text" id="ruimte-opm" placeholder="bv. recht achterboven in de hoek">
+  </label>
+</div>
 
 </section>
 
