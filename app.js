@@ -567,6 +567,7 @@ $('#btn-hoofdfoto').addEventListener('click', () => neemFoto(data => {
   bewaar();
 }, 1600, 0.8));
 $('#btn-hoofdfoto-del').addEventListener('click', () => {
+  if (!confirm('Foto van de woning verwijderen?')) return;
   S.algemeen.foto = null;
   updateHoofdfotoThumb();
   bewaar();
@@ -651,6 +652,7 @@ $('#btn-raamfoto').addEventListener('click', () => neemFoto(data => {
   updateRaamThumb();
 }));
 $('#btn-raamfoto-del').addEventListener('click', () => {
+  if (!confirm('Foto afstandhouder verwijderen?')) return;
   draft.foto = null;
   updateRaamThumb();
 });
@@ -858,6 +860,7 @@ $('#btn-opwekfoto').addEventListener('click', () => neemFoto(data => {
   updateOpwekThumb();
 }));
 $('#btn-opwekfoto-del').addEventListener('click', () => {
+  if (!confirm('Foto kenplaat verwijderen?')) return;
   draftOpwek.foto = null;
   updateOpwekThumb();
 });
@@ -875,6 +878,7 @@ $('#btn-kraanfoto').addEventListener('click', () => neemFoto(data => {
   updateOpwekThumb();
 }));
 $('#btn-kraanfoto-del').addEventListener('click', () => {
+  if (!confirm('Foto radiatorkranen verwijderen?')) return;
   draftOpwek.fotoKraan = null;
   updateOpwekThumb();
 });
@@ -1077,6 +1081,8 @@ $('#ventlijst').addEventListener('click', e => {
   if (!S) return;
   const b = e.target.closest('.del');
   if (b) {
+    const r = S.ventilatie.ruimtes[Number(b.dataset.i)];
+    if (!r || !confirm(`"${r.naam}" verwijderen?`)) return;
     S.ventilatie.ruimtes.splice(Number(b.dataset.i), 1);
     renderVent();
     bewaar();
