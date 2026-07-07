@@ -1137,8 +1137,13 @@ function bouwPrintDocument() {
 
 const PRINT_DOC_CSS = `
 *{box-sizing:border-box}
-body{margin:0;background:#e9ecee;font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#000}
-.pagina{background:#fff;max-width:800px;margin:14px auto;padding:18px 22px;font-size:12px;box-shadow:0 1px 8px rgba(0,0,0,.2)}
+body{margin:0;background:#fff;font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#000}
+.pagina{max-width:800px;margin:0 auto;padding:16px;font-size:12px}
+/* op een smal scherm: brede tabellen zijdelings scrollbaar in plaats van buiten beeld */
+@media screen and (max-width:640px){
+  .pagina{padding:12px 10px;font-size:11px}
+  .pagina table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
 .pagina .hoofdfoto{float:right;width:44mm;max-height:36mm;object-fit:cover;border:1px solid #999;margin:0 0 4px 8px}
 .pagina h1{font-size:18px;margin:0 0 2px}
 .pagina .sub{font-size:12px;color:#333;margin:0 0 12px}
