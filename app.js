@@ -1126,22 +1126,18 @@ function openPrintVenster() {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-/* volledige, zelfstandige HTML-pagina van de one-pager voor het aparte printvenster */
+/* volledige, zelfstandige HTML-pagina van de one-pager voor het aparte printvenster;
+   bewust zonder knoppen: delen/opslaan doe je met de deel-knop van Safari zelf */
 function bouwPrintDocument() {
   return `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<title>${esc(pdfNaam())}</title><style>${PRINT_DOC_CSS}</style></head><body>` +
-    `<div class="balk"><button type="button" onclick="window.print()">\u{1F5A8}️ Bewaar als PDF</button>` +
-    `<span>Lukt de knop niet? Deel-knop onderaan → “Afdrukken” → knijp de voorbeeldpagina open → Deel → “Bewaar in Bestanden”.</span></div>` +
     `<div class="pagina">${printInhoudHtml()}</div></body></html>`;
 }
 
 const PRINT_DOC_CSS = `
 *{box-sizing:border-box}
 body{margin:0;background:#e9ecee;font-family:-apple-system,"Segoe UI",Arial,sans-serif;color:#000}
-.balk{position:sticky;top:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#0a6b3d;color:#fff;padding:12px 16px}
-.balk button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 18px;background:#fff;color:#0a6b3d}
-.balk span{font-size:.8rem;opacity:.95;flex:1;min-width:180px}
 .pagina{background:#fff;max-width:800px;margin:14px auto;padding:18px 22px;font-size:12px;box-shadow:0 1px 8px rgba(0,0,0,.2)}
 .pagina .hoofdfoto{float:right;width:44mm;max-height:36mm;object-fit:cover;border:1px solid #999;margin:0 0 4px 8px}
 .pagina h1{font-size:18px;margin:0 0 2px}
@@ -1160,7 +1156,6 @@ body{margin:0;background:#e9ecee;font-family:-apple-system,"Segoe UI",Arial,sans
 .pagina .foto .cap{font-size:8.5px;text-align:center}
 @media print{
   body{background:#fff}
-  .balk{display:none}
   .pagina{max-width:none;margin:0;padding:0;box-shadow:none;font-size:10px}
   .pagina .hoofdfoto{width:40mm;max-height:32mm}
   .pagina h1{font-size:15px}
