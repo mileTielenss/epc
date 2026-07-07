@@ -166,7 +166,12 @@ textarea{resize:vertical}
 
 /* ---------- uitleg op startscherm ---------- */
 #uitleg{font-size:.8rem;color:var(--mut);margin-top:auto;padding-top:12px}
-#uitleg summary{font-weight:700;color:var(--ink);min-height:38px;display:flex;align-items:center;cursor:pointer}
+#uitleg summary{
+  font-weight:600;color:var(--mut);font-size:.8rem;
+  min-height:38px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;list-style:none;
+}
+#uitleg summary::-webkit-details-marker{display:none}
 #uitleg p{margin:0 0 6px}
 
 /* ---------- dimensions row ---------- */

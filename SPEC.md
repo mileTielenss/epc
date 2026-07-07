@@ -101,7 +101,8 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 - Lijst van woningen, **laatst gewijzigd bovenaan**, met hoofdfoto-miniatuur, adres, datum.
 - Per woning: statusknop **Open/Af** (toggle) en ×-verwijderknop (met confirm).
 - "+ Nieuwe woning" en een uitklapbaar **"Info"**-blok (standaard dicht, **onderaan
-  het scherm geduwd**) met daarin: hoe alles bewaard wordt (nooit de app verwijderen
+  het scherm geduwd**, als subtiele gecentreerde grijze tekst "Info" zonder icoon of
+  pijltje) met daarin: hoe alles bewaard wordt (nooit de app verwijderen
   zolang er woningen in staan), een tip over cameratoegang (Instellingen ▸ Apps ▸
   Safari ▸ Camera), de versieregel ("Versie vNN" + knop "Zoek update") en korte
   uitleg over de werkwijze. Versie en update zijn dus verstopt tot je ze nodig hebt.
