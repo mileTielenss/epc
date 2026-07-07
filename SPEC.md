@@ -60,10 +60,13 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 ### Foto's (resolutie)
 
-- Detailfoto's (afstandhouder, kenplaat, kranen): max **900 px**, JPEG kwaliteit 0.7.
-- Dossierfoto's: max **1600 px**, kwaliteit 0.75. Hoofdfoto komt uit het dossier en is
-  dus ook 1600 px — scherp genoeg om op de pc via save-as als gevelfoto te hergebruiken.
-- Geen esthetische eisen; tekst op kenplaten moet leesbaar zijn.
+Alle foto's mogen scherp zijn zolang de bestanden klein blijven:
+
+- Detailfoto's (afstandhouder, kenplaat, kranen): max **1200 px**, JPEG kwaliteit 0.7.
+- Dossierfoto's: max **2000 px**, kwaliteit 0.7. Hoofdfoto komt uit het dossier.
+- **Algemeen-foto's (facturen/documenten): max 2600 px, kwaliteit 0.75** — tekst
+  moet leesbaar blijven. De camera vraagt daarvoor een hogere streamresolutie.
+- Geen esthetische eisen; tekst op kenplaten en facturen moet leesbaar zijn.
 
 ## 3. Datamodel (woning-record)
 
@@ -122,9 +125,11 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
   er **geen "Buiten"-optie** en is altijd een ruimte geselecteerd (bij het openen
   automatisch de eerste).
 - Alleen in de **foto-context** (Foto's-tab en camerascherm) staan vooraan twee
-  extra chips die geen ruimte zijn: **"Gevels"** (gevel- en dakfoto's) en
-  **"Algemeen"** (losse algemene foto's zoals papieren/documenten; intern
-  '__algemeen'). Ze verschijnen zo ook als titel in de PDF.
+  extra chips die geen ruimte zijn: **"Algemeen"** (eerst; losse algemene foto's
+  zoals facturen/documenten, intern '__algemeen') en **"Gevels"** (gevel- en
+  dakfoto's). Ze verschijnen zo ook als titel in de PDF; overal in de UI heten ze
+  "Algemeen"/"Gevels" (nooit de interne sentinel tonen). Op de Foto's-tab is de
+  **ventilatieregel verborgen** — ventilatie vul je op Details in.
 - De gekozen ruimte geldt als label voor **alles wat je daarna toevoegt** (ramen,
   toestellen, dossierfoto's), tot je een andere kiest.
 - **"+ Ruimte"** opent sneltoetsen (Slaapkamer, Badkamer, WC, Berging, Bureau, Garage,
@@ -141,8 +146,9 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 ### 4.3 Tab Algemeen (de hele woning)
 
-Vier duidelijk afgebakende, inklapbare secties. **Woning staat open** (daar begin
-je: adres en datum), de rest is **standaard dichtgeklapt**:
+Vier duidelijk afgebakende, inklapbare secties die als **accordeon** werken: er is
+er altijd **maximaal één open** (een sectie openen sluit de andere). **Woning staat
+open** bij het binnenkomen (daar begin je: adres en datum):
 
 1. **Woning**: alleen adres (+ locatieknop) en datum plaatsbezoek (default vandaag).
    **Geen bouwjaar, gebouwtype, kelder of zolder**: dat komt uit de documenten of
@@ -164,6 +170,10 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 
 - Onderaan de tab: een **opmerkingveld** per ruimte (bv. "recht achterboven in de
   hoek", om rare indelingen later te kunnen staven).
+De twee secties werken ook hier als **accordeon** (één tegelijk open; een raam of
+toestel bewerken opent vanzelf de juiste sectie). Na het toevoegen van een nieuwe
+ruimte licht de ventilatieknop kort op als geheugensteun.
+
 - Sectie **Ramen & deuren** (inklapbaar, standaard open), **compact genoeg om op
   een iPhone te typen zonder te scrollen**: element (Raam/Deur/Dakraam) en gevel
   (Voor/Achter/Links/Rechts) als rijen zonder label, afmetingen b × h in meter met
@@ -223,6 +233,13 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 
 Bewust minimaal, géén ventilatie-overzicht (de PDF bevat die tabel al):
 
+- **Controlelijstje** (informatief, nooit blokkerend) met groene vinkjes of rode
+  kruisjes, telkens vers berekend bij het openen van de tab:
+  1. elke ruimte minstens één foto (bij rood: welke ruimtes niet),
+  2. elke ruimte heeft ramen (bij rood: welke niet — een WC zonder raam mag,
+     maar je wil het gezien hebben),
+  3. verwarming ingevuld (minstens één opwekker of ruimtetoestel),
+  4. hoofdfoto gekozen (ster op een gevelfoto).
 - **"Print one-pager (PDF)"** — zie §5.
 - "Woning sluiten" (terug naar de lijst) en "Woning verwijderen" (confirm).
 
@@ -245,8 +262,11 @@ De PDF is het volledige, blijvende dossier en bevat **alle** gegevens:
 - Tabel **Ventilatie**: per ruimte de ventilatie, afmetingen en opmerking.
 - Notities.
 - **Fotodossier op een aparte pagina** (paginabreak): adres + datum + alle
-  dossierfoto's **gegroepeerd onder een titel per ruimte** (Gevels, Algemeen,
-  daarna de ruimtes in volgorde) — geen bijschriften of nummers per foto.
+  dossierfoto's **gegroepeerd onder een titel per ruimte** — volgorde: Gevels,
+  daarna de ruimtes, en **Algemeen altijd als laatste**. Geen bijschriften of
+  nummers per foto. De Algemeen-foto's (facturen) staan **groot, maximaal 2 per
+  pagina** zodat ze leesbaar blijven (geen landscape: gemengde pagina-oriëntatie
+  is in iOS-print niet betrouwbaar).
 - Het **printvenster** (de HTML-pagina vóór het bewaren) heeft een lightbox:
   tik op een foto om ze schermvullend te bekijken, tik opnieuw om te sluiten
   (verschijnt niet in de afdruk). In de bewaarde PDF zelf bestaat geen

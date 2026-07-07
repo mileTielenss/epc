@@ -282,6 +282,7 @@ function toonEditor() {
 
 let actieveTab = 'algemeen';
 function zetTab(naam) {
+  if (naam === 'export' && S) renderChecks();
   actieveTab = naam;
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === naam));
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + naam));
@@ -411,8 +412,8 @@ function verkleinBestand(f, maxDim, kwaliteit) {
 /* detailfoto's klein houden (opslag). Losse foto's (kenplaat, afstandhouder...)
    openen de interne camera in enkel-modus: één tik, foto zit erin. Lukt de
    camera niet, dan valt het terug op de gewone camerakiezer van het toestel. */
-let fotoCb = null, fotoMaxDim = 900, fotoKwaliteit = 0.7;
-function neemFoto(cb, maxDim = 900, kwaliteit = 0.7) {
+let fotoCb = null, fotoMaxDim = 1200, fotoKwaliteit = 0.7;
+function neemFoto(cb, maxDim = 1200, kwaliteit = 0.7) {
   fotoCb = cb;
   fotoMaxDim = maxDim;
   fotoKwaliteit = kwaliteit;
@@ -1157,7 +1158,7 @@ function renderRuimteChips(container, metPlus, metBuiten) {
     if (v !== '__plus') b.classList.toggle('on', selectedRuimte === v);
     container.appendChild(b);
   };
-  if (metBuiten) { maak('', 'Gevels'); maak(FOTO_ALGEMEEN, 'Algemeen'); }
+  if (metBuiten) { maak(FOTO_ALGEMEEN, 'Algemeen'); maak('', 'Gevels'); }
   S.ruimtes.forEach(r => maak(r.naam, r.naam));
   if (metPlus) maak('__plus', '+ Ruimte', 'plus');
   /* de actieve chip in beeld houden */
@@ -1172,8 +1173,9 @@ function renderRuimtebalk() {
   renderRv();
   renderDossier();
   const r = huidigeRuimte();
-  $('#ruimteregel').hidden = !r;
-  $('#vent-besch').hidden = !r || r.vent !== 'ander';
+  /* ventilatie vul je op Details in; op Foto's blijft de regel weg */
+  $('#ruimteregel').hidden = !r || actieveTab !== 'details';
+  $('#vent-besch').hidden = !r || r.vent !== 'ander' || actieveTab !== 'details';
   if (r) {
     $('#btn-vent').textContent = `\u{1F4A8} Ventilatie: ${VENT_NAMEN[r.vent] || r.vent}`;
     if (r.vent === 'ander') $('#vent-besch').value = r.ventBeschrijving || '';
@@ -1198,6 +1200,7 @@ function voegRuimteToe(naam) {
   selectedRuimte = uniek;
   $('#ruimtekeuze').hidden = true;
   renderRuimtebalk();
+  flash($('#btn-vent'));
   bewaar();
   toast(`${uniek} toegevoegd`);
 }
@@ -1301,9 +1304,19 @@ function ventTekst(r) {
 /* minimaal fotodossier voor het projectdossier (10 jaar bewaarplicht): veel foto's,
    snel na elkaar, met alleen een grove categorie als bijschrift in de PDF */
 
-const DOSSIER_MAXDIM = 1600, DOSSIER_KWALITEIT = 0.75;
-/* sentinel voor algemene foto's (papieren e.d.); '' blijft Gevels */
+const DOSSIER_MAXDIM = 2000, DOSSIER_KWALITEIT = 0.7;
+/* facturen/documenten moeten leesbaar blijven: hogere resolutie */
+const ALGEMEEN_MAXDIM = 2600, ALGEMEEN_KWALITEIT = 0.75;
+/* sentinel voor algemene foto's (facturen e.d.); '' blijft Gevels */
 const FOTO_ALGEMEEN = '__algemeen';
+
+/* nette naam voor een fotocontext-waarde (nooit de interne sentinel tonen) */
+function ruimteLabel(v) {
+  if (v === FOTO_ALGEMEEN) return 'Algemeen';
+  return v || 'Gevels';
+}
+function dossierDim() { return selectedRuimte === FOTO_ALGEMEEN ? ALGEMEEN_MAXDIM : DOSSIER_MAXDIM; }
+function dossierKw() { return selectedRuimte === FOTO_ALGEMEEN ? ALGEMEEN_KWALITEIT : DOSSIER_KWALITEIT; }
 
 function voegDossierFoto(dataUrl) {
   S.tellerDossier = (S.tellerDossier || 0) + 1;
@@ -1314,8 +1327,7 @@ function voegDossierFoto(dataUrl) {
 
 /* titel/bijschrift: Gevels ('' ), Algemeen (sentinel) of de ruimtenaam */
 function dossierCap(f) {
-  if (f.ruimte === FOTO_ALGEMEEN) return 'Algemeen';
-  return f.ruimte || 'Gevels';
+  return ruimteLabel(f.ruimte);
 }
 
 /* dossier gesorteerd per ruimte: Gevels eerst, dan de ruimtes in hun eigen
@@ -1323,8 +1335,8 @@ function dossierCap(f) {
 function gesorteerdDossier() {
   const orde = new Map(S.ruimtes.map((r, i) => [r.naam, i]));
   const idx = f => {
-    if (!f.ruimte) return -2;                       /* Gevels eerst */
-    if (f.ruimte === FOTO_ALGEMEEN) return -1;      /* dan Algemeen */
+    if (!f.ruimte) return -1;                       /* Gevels eerst */
+    if (f.ruimte === FOTO_ALGEMEEN) return 999;     /* Algemeen (facturen) altijd laatst */
     return orde.has(f.ruimte) ? orde.get(f.ruimte) : 98;
   };
   return [...S.fotodossier].sort((a, b) => idx(a) - idx(b) || a.nr - b.nr);
@@ -1347,7 +1359,7 @@ function renderDossier() {
       `<div class="cap">${esc(dossierCap(f))}</div>`;
     grid.appendChild(d);
   });
-  const label = selectedRuimte || 'Gevels';
+  const label = ruimteLabel(selectedRuimte);
   $('#dossier-totaal').textContent = S.fotodossier.length
     ? `${hier.length} foto${hier.length === 1 ? '' : "'s"} in ${label} · ${S.fotodossier.length} in totaal${selectedRuimte ? '' : ' · ★ = hoofdfoto'}`
     : "Nog geen foto's. Start de camera en tik ze snel na elkaar.";
@@ -1402,8 +1414,8 @@ function openVerplaats(nr) {
     b.classList.toggle('on', f.ruimte === v);
     chips.appendChild(b);
   };
-  maak('', 'Gevels');
   maak(FOTO_ALGEMEEN, 'Algemeen');
+  maak('', 'Gevels');
   S.ruimtes.forEach(r => maak(r.naam, r.naam));
   $('#verplaats').hidden = false;
 }
@@ -1443,7 +1455,7 @@ $('#dossierinput').addEventListener('change', async () => {
   let n = 0;
   for (const f of files) {
     try {
-      voegDossierFoto(await verkleinBestand(f, DOSSIER_MAXDIM, DOSSIER_KWALITEIT));
+      voegDossierFoto(await verkleinBestand(f, dossierDim(), dossierKw()));
       n++;
     } catch (e) { /* geen afbeelding: overslaan */ }
   }
@@ -1463,7 +1475,7 @@ async function startCamera(modus) {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camFallback(); return; }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1440 } },
+      video: { facingMode: 'environment', width: { ideal: 2560 }, height: { ideal: 1920 } },
       audio: false
     });
     $('#camvideo').srcObject = camStream;
@@ -1542,7 +1554,7 @@ $('#btn-sluiter').addEventListener('click', () => {
     if (cb) cb(data);
     return;
   }
-  voegDossierFoto(naarJpeg(v, v.videoWidth, v.videoHeight, DOSSIER_MAXDIM, DOSSIER_KWALITEIT));
+  voegDossierFoto(naarJpeg(v, v.videoWidth, v.videoHeight, dossierDim(), dossierKw()));
   updateCamTeller(camSessieFotos + 1);
   flash($('#btn-sluiter'));
 });
@@ -1564,6 +1576,30 @@ window.addEventListener('pagehide', () => { if (camStream) stopCamera(); });
 
 /* ============================== tab 6: afronden ============================== */
 
+
+/* ---------- controlelijstje op Afronden: informatief, nooit blokkerend ---------- */
+
+function renderChecks() {
+  const ul = $('#checklijst');
+  ul.innerHTML = '';
+  const zonderFoto = S.ruimtes.filter(r => !S.fotodossier.some(f => f.ruimte === r.naam)).map(r => r.naam);
+  const zonderRaam = S.ruimtes.filter(r => !S.ramen.some(x => x.ruimte === r.naam)).map(r => r.naam);
+  const items = [
+    { ok: !zonderFoto.length, tekst: 'Elke ruimte minstens één foto', detail: zonderFoto.join(', ') },
+    { ok: !zonderRaam.length, tekst: 'Elke ruimte heeft ramen', detail: zonderRaam.join(', ') },
+    { ok: S.energie.opwekkers.length > 0, tekst: 'Verwarming ingevuld', detail: 'nog geen opwekker of toestel' },
+    { ok: !!S.algemeen.foto, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
+  ];
+  items.forEach(i => {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<div class="info">
+         <div class="r1">${i.ok ? '\u2705' : '\u274C'} ${esc(i.tekst)}</div>
+         ${!i.ok && i.detail ? `<div class="r3">${esc(i.detail)}</div>` : ''}
+       </div>`;
+    ul.appendChild(li);
+  });
+}
 
 /* ---------- one-pager / print ---------- */
 
@@ -1641,6 +1677,9 @@ body{margin:0;background:#fff;font-family:-apple-system,"Segoe UI",Arial,sans-se
 .pagina .kv{margin:0 0 3px}
 .pagina .kv b{display:inline-block;min-width:130px}
 .pagina .fotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.pagina .fotos.groot .foto{width:100%}
+.pagina .fotos.groot .foto img{width:100%;height:auto;max-height:170mm;object-fit:contain;border:1px solid #999}
+@media print{.pagina .fotos.groot .foto{page-break-inside:avoid;break-inside:avoid}.pagina .fotos.groot .foto img{max-height:118mm}}
 .pagina .dossierkop{margin-top:20px}
 @media print{.pagina .dossierkop{page-break-before:always;break-before:page;margin-top:0}}
 .pagina .foto{width:34mm}
@@ -1757,10 +1796,13 @@ function printInhoudHtml() {
     });
     html += `<h2 class="dossierkop">Fotodossier</h2>` +
       `<p class="kv">${esc(A.adres || '')} · plaatsbezoek ${esc(A.datum || '')} · ${dossier.length} foto${dossier.length === 1 ? '' : "'s"}</p>` +
-      groepen.map(g =>
-        `<h3 class="fotokop">${esc(g.naam)}</h3><div class="fotos">` +
-        g.fotos.map(f => `<div class="foto"><img src="${f.foto}" alt=""></div>`).join('') +
-        '</div>').join('');
+      groepen.map(g => {
+        /* facturen (Algemeen) groot: max 2 per pagina, leesbaar */
+        const groot = g.fotos.length && g.fotos[0].ruimte === FOTO_ALGEMEEN;
+        return `<h3 class="fotokop">${esc(g.naam)}</h3><div class="fotos${groot ? ' groot' : ''}">` +
+          g.fotos.map(f => `<div class="foto"><img src="${f.foto}" alt=""></div>`).join('') +
+          '</div>';
+      }).join('');
   }
 
   return html;
@@ -1788,6 +1830,16 @@ $('#btn-verwijder-woning').addEventListener('click', async () => {
   await renderLijst();
   toonLijst();
   toast('Woning verwijderd');
+});
+
+/* accordeon: per tab maximaal één sectie tegelijk open */
+['#tab-algemeen', '#tab-details'].forEach(container => {
+  $$(container + ' details.sectie').forEach(d => {
+    d.addEventListener('toggle', () => {
+      if (!d.open) return;
+      $$(container + ' details.sectie').forEach(x => { if (x !== d) x.open = false; });
+    });
+  });
 });
 
 /* iOS: de vaste onderbalk springt mee met het toetsenbord; verberg hem tijdens het typen */
