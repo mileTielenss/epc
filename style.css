@@ -171,6 +171,39 @@ textarea{resize:vertical}
 .fotorow{display:flex;align-items:center;gap:10px}
 .thumb{width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
 
+/* ---------- fotodossier ---------- */
+.fotogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:10px}
+.fotogrid .dfoto{position:relative}
+.fotogrid img.thumb{width:100%;height:96px;border-radius:10px}
+.fotogrid .del{
+  position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:0;
+  background:rgba(179,38,30,.92);color:#fff;font-size:1rem;font-weight:700;line-height:1;
+}
+.fotogrid .cap{font-size:.7rem;color:var(--mut);text-align:center;margin-top:2px}
+
+/* ---------- camerascherm ---------- */
+#camera{position:fixed;inset:0;z-index:40;background:#000;display:flex}
+#camvideo{flex:1;width:100%;min-height:0;object-fit:cover}
+.camtop{
+  position:absolute;top:0;left:0;right:0;
+  padding:calc(env(safe-area-inset-top) + 10px) 10px 10px;
+  display:flex;justify-content:center;
+}
+.camtop .seg button{background:rgba(0,0,0,.5);color:#fff;border-color:rgba(255,255,255,.45)}
+.camtop .seg button.on{background:var(--acc);border-color:var(--acc)}
+.cambar{
+  position:absolute;left:0;right:0;bottom:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 24px calc(env(safe-area-inset-bottom) + 16px);
+}
+#camteller{color:#fff;font-weight:700;font-size:1rem;min-width:72px;text-shadow:0 1px 3px #000}
+#btn-sluiter{
+  width:74px;height:74px;border-radius:50%;
+  background:#fff;border:5px solid rgba(255,255,255,.45);background-clip:padding-box;
+}
+#btn-sluiter:active{background:#cfd6db}
+#btn-camklaar{min-width:72px}
+
 /* ---------- lightbox ---------- */
 #lightbox{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center}
 #lightbox img{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px}
@@ -256,6 +289,7 @@ textarea{resize:vertical}
   #printview tr.tot td{font-weight:700;background:#f5f5f5}
   #printview .kv{margin:0 0 2px}
   #printview .kv b{display:inline-block;min-width:130px}
+  #printview .dossierkop{page-break-before:always;break-before:page}
   #printview .fotos{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
   #printview .foto{width:30mm}
   #printview .foto img{width:100%;height:26mm;object-fit:cover;border:1px solid #999}

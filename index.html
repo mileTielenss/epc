@@ -279,7 +279,29 @@
   <ul id="ventlijst" class="lijst"></ul>
 </section>
 
-<!-- ======================= TAB 5: EXPORT ======================= -->
+<!-- ======================= TAB 5: FOTODOSSIER ======================= -->
+<section class="tab" id="tab-fotos">
+  <div class="fld">
+    <span class="lbl">Categorie (bijschrift in de PDF)</span>
+    <div class="seg" id="seg-fotocat">
+      <button type="button" data-v="algemeen">Algemeen</button>
+      <button type="button" data-v="gevel">Gevel</button>
+      <button type="button" data-v="isolatie">Isolatie</button>
+      <button type="button" data-v="ruimte">Ruimte</button>
+      <button type="button" data-v="techniek">Techniek</button>
+    </div>
+  </div>
+
+  <div class="knoprij">
+    <button type="button" class="btn big" id="btn-camera">&#128247; Start camera</button>
+    <button type="button" class="btn sec big" id="btn-fotokies">&#128443;&#65039; Kies foto's</button>
+  </div>
+
+  <div id="dossier-totaal" class="totaal"></div>
+  <div id="dossiergrid" class="fotogrid"></div>
+</section>
+
+<!-- ======================= TAB 6: EXPORT ======================= -->
 <section class="tab" id="tab-export">
   <button type="button" class="btn big" id="btn-print">&#128424; Print one-pager (PDF)</button>
   <button type="button" class="btn sec big" id="btn-sluiten">Woning sluiten</button>
@@ -293,11 +315,31 @@
   <button type="button" data-tab="ramen"><span class="ic">&#129695;</span>Ramen</button>
   <button type="button" data-tab="energie"><span class="ic">&#9889;</span>Energie</button>
   <button type="button" data-tab="ventilatie"><span class="ic">&#127788;&#65039;</span>Ventilatie</button>
+  <button type="button" data-tab="fotos"><span class="ic">&#128247;</span>Foto's</button>
   <button type="button" data-tab="export"><span class="ic">&#9989;</span>Afronden</button>
 </nav>
 
+<div id="camera" hidden>
+  <video id="camvideo" playsinline autoplay muted></video>
+  <div class="camtop">
+    <div class="seg" id="seg-fotocat-cam">
+      <button type="button" data-v="algemeen">Algemeen</button>
+      <button type="button" data-v="gevel">Gevel</button>
+      <button type="button" data-v="isolatie">Isolatie</button>
+      <button type="button" data-v="ruimte">Ruimte</button>
+      <button type="button" data-v="techniek">Techniek</button>
+    </div>
+  </div>
+  <div class="cambar">
+    <span id="camteller"></span>
+    <button type="button" id="btn-sluiter" aria-label="Foto nemen"></button>
+    <button type="button" class="btn" id="btn-camklaar">Klaar</button>
+  </div>
+</div>
+
 <div id="toast" hidden></div>
 <input type="file" id="fotoinput" accept="image/*" capture="environment" hidden>
+<input type="file" id="dossierinput" accept="image/*" multiple hidden>
 <input type="file" id="importinput" accept=".json,.zip,application/json,application/zip" multiple hidden>
 <div id="lightbox" hidden><img alt="foto vergroot"></div>
 <div id="printview"></div>

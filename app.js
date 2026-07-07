@@ -90,8 +90,10 @@ function leegWoning() {
     ramen: [],
     energie: { opwekkers: [], pv: '', wp: '' },
     ventilatie: { ruimtes: [] },
+    fotodossier: [],
     teller: 0,
-    tellerOpwek: 0
+    tellerOpwek: 0,
+    tellerDossier: 0
   };
 }
 
@@ -172,6 +174,11 @@ function normaliseer(p) {
     naam: r.naam, voorziening: VENT_MIGRATIE[r.voorziening] || 'geen'
   }));
   delete w.ventilatie.systeem;
+
+  /* fotodossier: teller en ontbrekende nummers herstellen */
+  if (!Array.isArray(w.fotodossier)) w.fotodossier = [];
+  w.tellerDossier = Math.max(w.tellerDossier || 0, ...w.fotodossier.map(f => f.nr || 0), 0);
+  w.fotodossier.forEach(f => { if (!f.nr) f.nr = ++w.tellerDossier; });
 
   if (!w.id) w.id = nieuwId();
   if (!w.status) w.status = 'open';
@@ -471,6 +478,30 @@ $('#btn-nieuwewoning').addEventListener('click', async () => {
 
 /* ============================== foto's ============================== */
 
+/* bron (img/video-frame) verkleind naar JPEG-dataURL */
+function naarJpeg(bron, breed, hoog, maxDim, kwaliteit) {
+  const s = Math.min(1, maxDim / Math.max(breed, hoog));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(breed * s));
+  c.height = Math.max(1, Math.round(hoog * s));
+  c.getContext('2d').drawImage(bron, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', kwaliteit);
+}
+
+function verkleinBestand(f, maxDim, kwaliteit) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onerror = rej;
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = rej;
+      img.onload = () => res(naarJpeg(img, img.width, img.height, maxDim, kwaliteit));
+      img.src = r.result;
+    };
+    r.readAsDataURL(f);
+  });
+}
+
 /* detailfoto's klein houden (backups!), de hoofdfoto scherper: die bewaar je
    via save-as op de pc om ze elders als gevelfoto te gebruiken */
 let fotoCb = null, fotoMaxDim = 900, fotoKwaliteit = 0.7;
@@ -482,25 +513,12 @@ function neemFoto(cb, maxDim = 900, kwaliteit = 0.7) {
   inp.value = '';
   inp.click();
 }
-$('#fotoinput').addEventListener('change', () => {
+$('#fotoinput').addEventListener('change', async () => {
   const f = $('#fotoinput').files[0];
   if (!f || !fotoCb) return;
   const cb = fotoCb;
   fotoCb = null;
-  const r = new FileReader();
-  r.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const s = Math.min(1, fotoMaxDim / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(img.width * s));
-      c.height = Math.max(1, Math.round(img.height * s));
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      cb(c.toDataURL('image/jpeg', fotoKwaliteit));
-    };
-    img.src = r.result;
-  };
-  r.readAsDataURL(f);
+  try { cb(await verkleinBestand(f, fotoMaxDim, fotoKwaliteit)); } catch (e) { toast('Foto laden mislukt'); }
 });
 
 /* ---------- lightbox: tik op een miniatuur om te vergroten ---------- */
@@ -1097,7 +1115,142 @@ $('#ventlijst').addEventListener('click', e => {
   bewaar();
 });
 
-/* ============================== tab 5: afronden ============================== */
+/* ============================== tab 5: fotodossier ============================== */
+
+/* minimaal fotodossier voor het projectdossier (10 jaar bewaarplicht): veel foto's,
+   snel na elkaar, met alleen een grove categorie als bijschrift in de PDF */
+
+const FOTOCAT_NAMEN = { algemeen: 'Algemeen', gevel: 'Gevel', isolatie: 'Isolatie', ruimte: 'Ruimte', techniek: 'Techniek' };
+const FOTOCAT_ORDE = ['gevel', 'isolatie', 'ruimte', 'techniek', 'algemeen'];
+const DOSSIER_MAXDIM = 1600, DOSSIER_KWALITEIT = 0.75;
+
+let fotoCat = 'algemeen';
+function zetFotoCat(v) {
+  fotoCat = v;
+  segSet('#seg-fotocat', v);
+  segSet('#seg-fotocat-cam', v);
+}
+segInit('#seg-fotocat', zetFotoCat);
+segInit('#seg-fotocat-cam', zetFotoCat);
+
+function voegDossierFoto(dataUrl) {
+  S.tellerDossier = (S.tellerDossier || 0) + 1;
+  S.fotodossier.push({ nr: S.tellerDossier, cat: fotoCat, foto: dataUrl });
+  wijzig();
+  renderDossier();
+}
+
+function renderDossier() {
+  const grid = $('#dossiergrid');
+  grid.innerHTML = '';
+  const fotos = [...S.fotodossier].sort((a, b) =>
+    FOTOCAT_ORDE.indexOf(a.cat) - FOTOCAT_ORDE.indexOf(b.cat) || a.nr - b.nr);
+  fotos.forEach(f => {
+    const d = document.createElement('div');
+    d.className = 'dfoto';
+    d.innerHTML =
+      `<img class="thumb" src="${f.foto}" alt="dossierfoto ${f.nr}">` +
+      `<button type="button" class="del" data-nr="${f.nr}">×</button>` +
+      `<div class="cap">${esc(FOTOCAT_NAMEN[f.cat] || f.cat)}</div>`;
+    grid.appendChild(d);
+  });
+  $('#dossier-totaal').textContent = S.fotodossier.length
+    ? `${S.fotodossier.length} foto${S.fotodossier.length === 1 ? '' : "'s"} in het dossier`
+    : "Nog geen foto's. Start de camera en tik ze snel na elkaar.";
+}
+
+$('#dossiergrid').addEventListener('click', e => {
+  const b = e.target.closest('.del');
+  if (!b || !S) return;
+  const nr = Number(b.dataset.nr);
+  const f = S.fotodossier.find(x => x.nr === nr);
+  if (!f) return;
+  if (!confirm(`Foto (${FOTOCAT_NAMEN[f.cat] || f.cat}) verwijderen?`)) return;
+  S.fotodossier = S.fotodossier.filter(x => x.nr !== nr);
+  renderDossier();
+  bewaar();
+});
+
+/* ---------- meerdere foto's uit de bibliotheek (zoals bij een zoekertje) ---------- */
+
+$('#btn-fotokies').addEventListener('click', () => {
+  if (!S) return;
+  $('#dossierinput').value = '';
+  $('#dossierinput').click();
+});
+$('#dossierinput').addEventListener('change', async () => {
+  const files = [...$('#dossierinput').files];
+  if (!files.length || !S) return;
+  let n = 0;
+  for (const f of files) {
+    try {
+      voegDossierFoto(await verkleinBestand(f, DOSSIER_MAXDIM, DOSSIER_KWALITEIT));
+      n++;
+    } catch (e) { /* geen afbeelding: overslaan */ }
+  }
+  bewaar();
+  toast(n ? `${n} foto${n === 1 ? '' : "'s"} toegevoegd` : 'Geen foto kunnen laden');
+});
+
+/* ---------- eigen camerascherm: blijft open, foto per tik op de sluiter ---------- */
+
+let camStream = null;
+
+async function startCamera() {
+  if (!S) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast("Camera niet beschikbaar, kies foto's via de bibliotheek");
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1440 } },
+      audio: false
+    });
+    $('#camvideo').srcObject = camStream;
+    $('#camera').hidden = false;
+    updateCamTeller(0);
+  } catch (e) {
+    toast("Geen toegang tot de camera. Kies foto's via de bibliotheek.");
+  }
+}
+
+function stopCamera() {
+  if (camStream) {
+    camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+  }
+  $('#camvideo').srcObject = null;
+  $('#camera').hidden = true;
+}
+
+let camSessieFotos = 0;
+function updateCamTeller(n) {
+  camSessieFotos = n;
+  $('#camteller').textContent = n ? `${n} foto${n === 1 ? '' : "'s"}` : '';
+}
+
+$('#btn-camera').addEventListener('click', startCamera);
+
+$('#btn-sluiter').addEventListener('click', () => {
+  const v = $('#camvideo');
+  if (!S || !camStream || !v.videoWidth) return;
+  voegDossierFoto(naarJpeg(v, v.videoWidth, v.videoHeight, DOSSIER_MAXDIM, DOSSIER_KWALITEIT));
+  updateCamTeller(camSessieFotos + 1);
+  flash($('#btn-sluiter'));
+});
+
+$('#btn-camklaar').addEventListener('click', () => {
+  stopCamera();
+  bewaar();
+  if (camSessieFotos) toast(`${camSessieFotos} foto${camSessieFotos === 1 ? '' : "'s"} toegevoegd`);
+});
+
+/* app naar de achtergrond: camera netjes loslaten (iOS stopt de stream toch) */
+document.addEventListener('visibilitychange', () => { if (document.hidden && camStream) { stopCamera(); bewaar(); } });
+window.addEventListener('pagehide', () => { if (camStream) stopCamera(); });
+
+/* ============================== tab 6: afronden ============================== */
 
 const GEBOUW_NAMEN = { open: 'Open bebouwing', halfopen: 'Halfopen bebouwing', gesloten: 'Gesloten bebouwing', appartement: 'Appartement' };
 
@@ -1167,6 +1320,8 @@ body{margin:0;background:#fff;font-family:-apple-system,"Segoe UI",Arial,sans-se
 .pagina .kv{margin:0 0 3px}
 .pagina .kv b{display:inline-block;min-width:130px}
 .pagina .fotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.pagina .dossierkop{margin-top:20px}
+@media print{.pagina .dossierkop{page-break-before:always;break-before:page;margin-top:0}}
 .pagina .foto{width:34mm}
 .pagina .foto img{width:100%;height:30mm;object-fit:cover;border:1px solid #999}
 .pagina .foto .cap{font-size:8.5px;text-align:center}
@@ -1249,6 +1404,17 @@ function printInhoudHtml() {
   if (fotos.length) {
     html += '<h2>Foto’s</h2><div class="fotos">' +
       fotos.map(f => `<div class="foto"><img src="${f.src}" alt=""><div class="cap">${esc(f.cap)}</div></div>`).join('') +
+      '</div>';
+  }
+
+  /* fotodossier: aparte pagina met alle dossierfoto's, als bewijs bij controle */
+  if (S.fotodossier.length) {
+    const dossier = [...S.fotodossier].sort((a, b) =>
+      FOTOCAT_ORDE.indexOf(a.cat) - FOTOCAT_ORDE.indexOf(b.cat) || a.nr - b.nr);
+    html += `<h2 class="dossierkop">Fotodossier</h2>` +
+      `<p class="kv">${esc(A.adres || '')} · plaatsbezoek ${esc(A.datum || '')} · ${dossier.length} foto${dossier.length === 1 ? '' : "'s"}</p>` +
+      '<div class="fotos">' +
+      dossier.map(f => `<div class="foto"><img src="${f.foto}" alt=""><div class="cap">${esc(FOTOCAT_NAMEN[f.cat] || f.cat)} ${f.nr}</div></div>`).join('') +
       '</div>';
   }
 
@@ -1366,6 +1532,9 @@ function woningFotoVelden(w) {
   ((w.energie || {}).opwekkers || []).forEach(o => {
     if (o.foto) velden.push({ obj: o, key: 'foto', naam: `opwekker-${o.nr}` });
     if (o.fotoKraan) velden.push({ obj: o, key: 'fotoKraan', naam: `opwekker-${o.nr}-radiatorkranen` });
+  });
+  (w.fotodossier || []).forEach(f => {
+    if (f.foto) velden.push({ obj: f, key: 'foto', naam: `dossier-${f.nr}-${f.cat || 'algemeen'}` });
   });
   return velden;
 }
@@ -1544,6 +1713,10 @@ function syncAlles() {
   ventMode = 'geen';
   segSet('#seg-ventmode', ventMode);
   renderVent();
+
+  /* fotodossier */
+  zetFotoCat('algemeen');
+  renderDossier();
 }
 
 /* ============================== start ============================== */
