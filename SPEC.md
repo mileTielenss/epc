@@ -33,6 +33,8 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 - Afmetingen altijd in **meter met komma-decimalen** (zoals een digitale lasermeter
   toont, bv. `1,335`); m² en m³ rekenen live mee tijdens het typen.
 - Mobile-first (iPhone), staand vergrendeld waar de browser dat toelaat.
+- Tijdens het typen (toetsenbord open) verdwijnt de onderste tabbalk, zodat hij
+  niet meespringt met het toetsenbord.
 
 ## 2. Techniek
 
@@ -67,10 +69,9 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 ```
 {
   id, status ('open'|'afgewerkt'), gemaakt, gewijzigd,
-  algemeen: { adres, foto (hoofdfoto, dataURL|null), datum, gebouwtype
-              (''|'open'|'halfopen'|'gesloten'|'appartement'),
-              kelder (''|'nee'|'ja'), zolder (''|'geen'|'binnen'|'buiten'), notities },
-              // bouwjaar wordt NIET in de app ingegeven: dat komt uit de documenten
+  algemeen: { adres, foto (hoofdfoto, dataURL|null), datum, notities },
+              // bouwjaar, gebouwtype, kelder en zolder worden NIET in de app
+              // ingegeven: dat komt uit documenten of staat op de foto's
   ruimtes: [ { naam, vent ('geen'|'natuurlijk'|'mechanisch'|'ander'),
                ventBeschrijving, opm, afm ({b,d,h} in meter | null) } ],
   ramen:   [ { nr, ruimte, element ('raam'|'deur'|'dakraam'; legacy 'glasdeur'
@@ -83,7 +84,7 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
                             functie (['radiatoren'|'vloer'|'sww']), beschrijving,
                             foto (kenplaat), fotoKraan } ],
              pvPanelen: [ { orientatie ('plat'|'voor'|'achter'|'links'|'rechts'|''), wp } ],
-             zonneboiler (''|'nee'|'ja') },
+             zonneboiler (''|'nee'|'ja'), zonneboilerM2 (m² collector, string) },
   fotodossier: [ { nr, ruimte, foto } ],
   teller, tellerOpwek, tellerDossier
 }
@@ -107,7 +108,8 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 - Groene header met terugknop, titel (adres) en savestamp.
 - Op de tabs **Details** en **Foto's** (en in het camerascherm) staat in de header de
   **ruimtebalk**: één horizontaal scrollbare rij chips
-  `Living · Keuken · Badkamer · WC · Berging · Slaapkamer 1 · + Ruimte`.
+  `Living · Keuken · Badkamer · WC · Slaapkamer 1 · + Ruimte` (geen Berging:
+  niet elk huis heeft er een — die staat bij de sneltoetsen).
 - Ruimtes zijn altijd ruimtes **binnen het beschermd volume**. Ramen en
   verwarmingstoestellen horen dus altijd bij een echte ruimte; op de Details-tab is
   er **geen "Buiten"-optie** en is altijd een ruimte geselecteerd (bij het openen
@@ -118,9 +120,12 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
   in de PDF.
 - De gekozen ruimte geldt als label voor **alles wat je daarna toevoegt** (ramen,
   toestellen, dossierfoto's), tot je een andere kiest.
-- **"+ Ruimte"** opent sneltoetsen (Slaapkamer, Badkamer, WC, Bureau, Garage, Zolder,
-  Kelder, Veranda, "Andere naam…"). Bestaande naam ⇒ **autonummering**
+- **"+ Ruimte"** opent sneltoetsen (Slaapkamer, Badkamer, WC, Berging, Bureau, Garage,
+  Zolder, Kelder, Veranda, "Andere naam…"). Bestaande naam ⇒ **autonummering**
   (Slaapkamer → Slaapkamer 2, 3, …). Nieuwe ruimte is meteen geselecteerd.
+- Ruimtes staan altijd **gegroepeerd op basisnaam** (alle wc's samen, slaapkamers
+  achter elkaar, …), op volgorde van eerste voorkomen; binnen een groep oplopend
+  genummerd. Een nieuwe "Badkamer 2" komt dus naast "Badkamer" te staan.
 - Bij een gekozen ruimte verschijnt eronder de **ventilatieknop**: elke tik schuift
   door `geen → natuurlijk → mechanisch → ander`; bij "ander" wordt om een
   beschrijving gevraagd. Daarnaast een ×-knop die de ruimte verwijdert (confirm;
@@ -130,10 +135,9 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 Vier duidelijk afgebakende, inklapbare secties (standaard open):
 
-1. **Woning**: adres (+ locatieknop), datum plaatsbezoek (default vandaag), en
-   roterende knoppen voor **Type woning** (—/Open/Halfopen/Gesloten/Appartement),
-   **Kelder** (—/Geen/Ja) en **Zolder** (—/Geen/Binnen BV/Buiten BV).
-   **Geen bouwjaar**: dat komt altijd uit de documenten, nooit uit de app.
+1. **Woning**: alleen adres (+ locatieknop) en datum plaatsbezoek (default vandaag).
+   **Geen bouwjaar, gebouwtype, kelder of zolder**: dat komt uit de documenten of
+   is op de foto's te zien.
 2. **Verwarming** (centraal): roterende knop Gas/Stookolie/Andere; functiechips
    (radiatoren, vloerverwarming, sanitair warm water); beschrijving; kenplaatfoto;
    kranenfoto (alleen bij "radiatoren"). "Voeg verwarming toe" + lijst; tik op een
@@ -141,7 +145,8 @@ Vier duidelijk afgebakende, inklapbare secties (standaard open):
 3. **Extra installaties**: **Zonnepanelen** — meerdere installaties, elk met een
    roterende oriëntatieknop (Plat dak/Voor/Achter/Links/Rechts) en een eigen
    vermogen in Wp; +-knop voegt toe, lijst met ×-verwijderen (confirm).
-   **Zonneboiler** — roterende knop —/Nee/Ja.
+   **Zonneboiler** — roterende knop —/Nee/Ja; bij "Ja" verschijnt een veld voor de
+   oppervlakte van de collector in m².
 4. **Opmerkingen**: vrije notities.
 
 De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
@@ -155,9 +160,9 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
   (Voor/Achter/Links/Rechts), afmetingen b × h in meter met live m², **aantal
   identieke** (− / +-stepper), roterende knoppen voor beglazing, kader en rolluik,
   en een fotoknop: **"Foto afstandhouder"**, die bij een dakraam automatisch
-  **"Foto kenplaatje"** heet.
-  Knoppen: "Voeg toe" en **"Zelfde als vorige"** (herhaalt de laatste invoer, focus op
-  breedte). **Tik op een rij in de lijst om te wijzigen** (ruimtebalk springt mee naar
+  **"Foto kenplaatje"** heet. Geen "Zelfde als vorige"-knop: het formulier onthoudt
+  de laatste keuzes vanzelf (enkel afmetingen, aantal en foto worden leeggemaakt).
+  **Tik op een rij in de lijst om te wijzigen** (ruimtebalk springt mee naar
   de ruimte van dat raam); annuleerknop aanwezig.
   **Sortering lijst én PDF: eerst alle deuren (deur + glasdeur), daarna de rest;
   telkens op gevel voor → achter → links → rechts, dan op nr.**
@@ -167,8 +172,8 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
   meter, live m³) — die staan hier omdat ze enkel nodig zijn bij een airco of
   kachel, en je ze maar één keer per ruimte ingeeft, hoeveel toestellen er ook
   hangen — plus beschrijving en kenplaatfoto. Meerdere toestellen per ruimte
-  mogelijk; het volume komt van de ruimte-afmetingen. Lijst gesorteerd per ruimte;
-  tik om te wijzigen. Zonder gekozen ruimte toont de sectie "Kies bovenaan een
+  mogelijk; het volume komt van de ruimte-afmetingen. De lijst toont **alleen de
+  toestellen van de geselecteerde ruimte**; tik om te wijzigen. Zonder gekozen ruimte toont de sectie "Kies bovenaan een
   ruimte".
 
 ### 4.5 Tab Foto's (fotodossier)
@@ -192,11 +197,12 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
   "Annuleer"; één tik op de sluiter en de camera sluit meteen met de foto op zijn
   plek. Lukt de camera niet (geen toestemming), dan valt het terug op de
   camerakiezer van het toestel zelf.
-- Raster van miniaturen, **gesorteerd per ruimte (Buiten eerst, dan ruimtevolgorde)**.
-  Per foto: **★** = gebruik als hoofdfoto van de woning (confirm; foto blijft ook in
-  het dossier), **⇄** = verplaats naar een andere ruimte (keuzepaneel onderaan, zodat
-  je de foto niet moet hernemen), **×** = verwijderen (confirm). Tik op de foto zelf
-  = lightbox.
+- Het raster toont **alleen de foto's van de geselecteerde ruimte** (of van
+  "Gevels"); de totaalregel vermeldt ook het totale aantal.
+  Per foto: **⇄** = verplaats naar een andere ruimte (keuzepaneel onderaan, zodat
+  je de foto niet moet hernemen), **×** = verwijderen (confirm). Alleen bij
+  **Gevels-foto's** staat een **★** om die foto als hoofdfoto van de woning te
+  kiezen (confirm; foto blijft ook in het dossier). Tik op de foto zelf = lightbox.
 
 ### 4.6 Tab Afronden
 
@@ -209,19 +215,21 @@ De hoofdfoto van de woning kies je met de ★ op een dossierfoto.
 
 De PDF is het volledige, blijvende dossier en bevat **alle** gegevens:
 
-- Kop: hoofdfoto, adres, **datum plaatsbezoek**, gebouwtype, kelder- en
-  zolderstatus (geen bouwjaar: dat komt uit de documenten).
+- Kop: hoofdfoto, adres, **datum plaatsbezoek**.
 - Tabel **Ramen & deuren**: #, type, ruimte, gevel, aantal, B (m), H (m), m²
   (aantal meegerekend), beglazing, kader, rolluik; totaalregel. Deuren bovenaan,
-  dan gevelvolgorde.
+  dan gevelvolgorde. **Direct onder de tabel** staan de bijhorende foto's
+  (afstandhouder/kenplaatje) met als bijschrift type, gevel en **ruimte** —
+  zonder nummers.
 - Tabel **Energie**: alle opwekkers (centraal + per ruimte) met ruimte, functies,
-  beschrijving en bij airco/kachel het ruimtevolume. Daarna een regel
-  **Zonnepanelen** (elke installatie met oriëntatie en Wp) en een regel **Zonneboiler**.
+  beschrijving en bij airco/kachel het ruimtevolume. **Direct onder de tabel**
+  staan de bijhorende kenplaat- en kranenfoto's met type en **ruimte** in het
+  bijschrift — zonder nummers. Daarna een regel **Zonnepanelen** (elke installatie
+  met oriëntatie en Wp) en een regel **Zonneboiler** (met m² collector).
 - Tabel **Ventilatie**: per ruimte de ventilatie, afmetingen en opmerking.
 - Notities.
-- **Foto's**: afstandhouders, kenplaten, kranen met bijschrift (#nr, type, gevel/ruimte).
 - **Fotodossier op een aparte pagina** (paginabreak): adres + datum + alle
-  dossierfoto's in een raster met de ruimte als bijschrift.
+  dossierfoto's in een raster met enkel de ruimte als bijschrift (geen nummers).
 
 Gedrag:
 

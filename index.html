@@ -28,6 +28,7 @@
       <button type="button" data-v="Slaapkamer">Slaapkamer</button>
       <button type="button" data-v="Badkamer">Badkamer</button>
       <button type="button" data-v="WC">WC</button>
+      <button type="button" data-v="Berging">Berging</button>
       <button type="button" data-v="Bureau">Bureau</button>
       <button type="button" data-v="Garage">Garage</button>
       <button type="button" data-v="Zolder">Zolder</button>
@@ -77,9 +78,6 @@
     <input type="date" id="datum">
   </label>
 
-  <button type="button" class="cycle" id="cy-gebouwtype"><span class="cl">Type woning</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
-  <button type="button" class="cycle" id="cy-kelder"><span class="cl">Kelder</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
-  <button type="button" class="cycle" id="cy-zolder"><span class="cl">Zolder</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
 </details>
 
 <details class="sectie" open>
@@ -128,6 +126,10 @@
   <ul id="pvlijst" class="lijst"></ul>
 
   <button type="button" class="cycle" id="cy-zonneboiler"><span class="cl">Zonneboiler</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
+  <label class="fld" id="fld-zbm2" hidden>
+    <span class="lbl">Oppervlakte zonnecollector (m&sup2;)</span>
+    <input type="text" id="zb-m2" inputmode="decimal" placeholder="bv. 4,6">
+  </label>
 </details>
 
 <details class="sectie" open>
@@ -200,10 +202,7 @@
     <button type="button" class="thumbdel" id="btn-raamfoto-del" hidden>&times;</button>
   </div>
 
-  <div class="knoprij">
-    <button type="button" class="btn big" id="btn-voegtoe">Voeg toe</button>
-    <button type="button" class="btn sec big" id="btn-herhaal">Zelfde als vorige</button>
-  </div>
+  <button type="button" class="btn big" id="btn-voegtoe">Voeg toe</button>
   <button type="button" class="btn sec big" id="btn-annuleer-raam" hidden>Annuleer wijziging</button>
 
   <div id="ramen-totaal" class="totaal"></div>

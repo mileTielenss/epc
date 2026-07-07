@@ -18,6 +18,7 @@ body{
   background:var(--bg);
   color:var(--ink);
   -webkit-text-size-adjust:100%;
+  overscroll-behavior-y:contain;
 }
 
 /* ---------- topbar ---------- */
@@ -337,6 +338,7 @@ textarea{resize:vertical}
 }
 #tabbar button .ic{font-size:1.05rem;line-height:1}
 #tabbar button.on{color:var(--acc)}
+#tabbar.toets{display:none}
 
 /* ---------- toast ---------- */
 #toast{
