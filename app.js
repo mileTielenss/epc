@@ -80,7 +80,7 @@ const dbGetInstelling = k => tx('instellingen', 'readonly', s => s.get(k));
 
 /* elke woning start met de standaardruimtes; extra ruimtes voeg je toe in de ruimtebalk */
 function standaardRuimtes() {
-  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1', 'Slaapkamer 2']
+  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Berging', 'Slaapkamer 1', 'Slaapkamer 2']
     .map(naam => ({ naam, vent: 'geen', ventBeschrijving: '' }));
 }
 
@@ -91,7 +91,7 @@ function leegWoning() {
     gemaakt: nu(),
     gewijzigd: nu(),
     bestand: null,
-    algemeen: { adres: '', foto: null, datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
+    algemeen: { adres: '', foto: null, datum: vandaag(), gebouwtype: '', bouwjaar: '', kelder: '', zolder: '', notities: '' },
     ruimtes: standaardRuimtes(),
     ramen: [],
     energie: { opwekkers: [], pv: '', wp: '' },
@@ -622,6 +622,8 @@ bind('#datum', v => S.algemeen.datum = v);
 bind('#bouwjaar', v => S.algemeen.bouwjaar = v);
 bind('#notities', v => S.algemeen.notities = v);
 segInit('#seg-gebouwtype', v => { S.algemeen.gebouwtype = v; wijzig(); });
+segInit('#seg-kelder', v => { S.algemeen.kelder = v; wijzig(); });
+segInit('#seg-zolder', v => { S.algemeen.zolder = v; wijzig(); });
 
 /* segmented control */
 function segInit(sel, cb) {
@@ -1205,7 +1207,6 @@ function renderVentOverzicht() {
    snel na elkaar, met alleen een grove categorie als bijschrift in de PDF */
 
 const FOTOCAT_NAMEN = { algemeen: 'Algemeen', gevel: 'Gevel', isolatie: 'Isolatie', ruimte: 'Ruimte', techniek: 'Techniek' };
-const FOTOCAT_ORDE = ['gevel', 'isolatie', 'ruimte', 'techniek', 'algemeen'];
 const DOSSIER_MAXDIM = 1600, DOSSIER_KWALITEIT = 0.75;
 
 let fotoCat = 'algemeen';
@@ -1232,28 +1233,48 @@ function dossierCap(f) {
   return delen.join(' · ') || 'Algemeen';
 }
 
+/* dossier gesorteerd per ruimte: Algemeen (gevels e.d.) eerst, dan de ruimtes
+   in hun eigen volgorde; binnen een ruimte op volgorde van nemen */
+function gesorteerdDossier() {
+  const orde = new Map(S.ruimtes.map((r, i) => [r.naam, i]));
+  const idx = f => f.ruimte && orde.has(f.ruimte) ? orde.get(f.ruimte) : -1;
+  return [...S.fotodossier].sort((a, b) => idx(a) - idx(b) || a.nr - b.nr);
+}
+
 function renderDossier() {
   const grid = $('#dossiergrid');
   grid.innerHTML = '';
-  const fotos = [...S.fotodossier].sort((a, b) =>
-    FOTOCAT_ORDE.indexOf(a.cat) - FOTOCAT_ORDE.indexOf(b.cat) || a.nr - b.nr);
-  fotos.forEach(f => {
+  gesorteerdDossier().forEach(f => {
     const d = document.createElement('div');
     d.className = 'dfoto';
     d.innerHTML =
       `<img class="thumb" src="${f.foto}" alt="dossierfoto ${f.nr}">` +
+      `<button type="button" class="ster" data-nr="${f.nr}" title="Gebruik als hoofdfoto">&#9733;</button>` +
       `<button type="button" class="del" data-nr="${f.nr}">×</button>` +
       `<div class="cap">${esc(dossierCap(f))}</div>`;
     grid.appendChild(d);
   });
   $('#dossier-totaal').textContent = S.fotodossier.length
-    ? `${S.fotodossier.length} foto${S.fotodossier.length === 1 ? '' : "'s"} in het dossier`
+    ? `${S.fotodossier.length} foto${S.fotodossier.length === 1 ? '' : "'s"} in het dossier · ★ = gebruik als hoofdfoto`
     : "Nog geen foto's. Start de camera en tik ze snel na elkaar.";
 }
 
 $('#dossiergrid').addEventListener('click', e => {
+  if (!S) return;
+  /* ster: deze foto wordt de hoofdfoto van de woning (blijft ook in het dossier) */
+  const ster = e.target.closest('.ster');
+  if (ster) {
+    const f = S.fotodossier.find(x => x.nr === Number(ster.dataset.nr));
+    if (!f) return;
+    if (!confirm(`Deze foto (${dossierCap(f)}) als hoofdfoto van de woning gebruiken?`)) return;
+    S.algemeen.foto = f.foto;
+    updateHoofdfotoThumb();
+    bewaar();
+    toast('Hoofdfoto ingesteld');
+    return;
+  }
   const b = e.target.closest('.del');
-  if (!b || !S) return;
+  if (!b) return;
   const nr = Number(b.dataset.nr);
   const f = S.fotodossier.find(x => x.nr === nr);
   if (!f) return;
@@ -1459,9 +1480,13 @@ function printInhoudHtml() {
   const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
   const totAantal = S.ramen.reduce((a, r) => a + raamAantal(r), 0);
 
+  const KELDER_NAMEN = { nee: 'geen kelder', ja: 'kelder aanwezig' };
+  const ZOLDER_NAMEN = { geen: 'geen zolder', binnen: 'zolder binnen beschermd volume', buiten: 'zolder buiten beschermd volume' };
+  const extraSub = [KELDER_NAMEN[A.kelder], ZOLDER_NAMEN[A.zolder]].filter(Boolean).join(' · ');
+
   let html = (A.foto ? `<img class="hoofdfoto" src="${A.foto}" alt="">` : '') +
     `<h1>EPC Plaatsbezoek</h1>
-    <p class="sub">${esc(A.adres || 'Adres onbekend')} · ${esc(A.datum || '')} · ${esc(GEBOUW_NAMEN[A.gebouwtype] || '')}${A.bouwjaar ? ' · bouwjaar ' + esc(A.bouwjaar) : ''}</p>`;
+    <p class="sub">${esc(A.adres || 'Adres onbekend')} · ${esc(A.datum || '')} · ${esc(GEBOUW_NAMEN[A.gebouwtype] || '')}${A.bouwjaar ? ' · bouwjaar ' + esc(A.bouwjaar) : ''}${extraSub ? ' · ' + esc(extraSub) : ''}</p>`;
 
   /* ramen & deuren */
   html += '<h2>Ramen &amp; deuren</h2>';
@@ -1525,8 +1550,7 @@ function printInhoudHtml() {
 
   /* fotodossier: aparte pagina met alle dossierfoto's, als bewijs bij controle */
   if (S.fotodossier.length) {
-    const dossier = [...S.fotodossier].sort((a, b) =>
-      FOTOCAT_ORDE.indexOf(a.cat) - FOTOCAT_ORDE.indexOf(b.cat) || a.nr - b.nr);
+    const dossier = gesorteerdDossier();
     html += `<h2 class="dossierkop">Fotodossier</h2>` +
       `<p class="kv">${esc(A.adres || '')} · plaatsbezoek ${esc(A.datum || '')} · ${dossier.length} foto${dossier.length === 1 ? '' : "'s"}</p>` +
       '<div class="fotos">' +
@@ -1802,6 +1826,8 @@ function syncAlles() {
   $('#bouwjaar').value = S.algemeen.bouwjaar;
   $('#notities').value = S.algemeen.notities;
   segSet('#seg-gebouwtype', S.algemeen.gebouwtype);
+  segSet('#seg-kelder', S.algemeen.kelder);
+  segSet('#seg-zolder', S.algemeen.zolder);
 
   /* ramen: formulier volgt draft, geen openstaande wijziging */
   stopBewerkRaam();

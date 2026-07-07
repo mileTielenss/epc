@@ -175,6 +175,9 @@ textarea{resize:vertical}
 #ruimtebalk{
   max-width:640px;margin:0 auto;padding:8px 10px 0;
 }
+/* één scrollbare rij, zodat veel ruimtes de invoer niet naar beneden duwen */
+#ruimtebalk .chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+#ruimtebalk .chips button{flex:0 0 auto;white-space:nowrap}
 #ruimtebalk .chips button.plus{border-style:dashed;color:var(--acc);font-weight:700}
 .ruimteregel{display:flex;align-items:center;gap:8px;margin-top:6px}
 #btn-vent{
@@ -195,6 +198,10 @@ textarea{resize:vertical}
 .fotogrid .del{
   position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:0;
   background:rgba(179,38,30,.92);color:#fff;font-size:1rem;font-weight:700;line-height:1;
+}
+.fotogrid .ster{
+  position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;border:0;
+  background:rgba(16,20,24,.6);color:#f5c518;font-size:1rem;line-height:1;
 }
 .fotogrid .cap{font-size:.7rem;color:var(--mut);text-align:center;margin-top:2px}
 

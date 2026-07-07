@@ -92,6 +92,23 @@
     <input type="number" id="bouwjaar" inputmode="numeric" placeholder="bv. 1978">
   </label>
 
+  <div class="fld">
+    <span class="lbl">Kelder</span>
+    <div class="seg" id="seg-kelder">
+      <button type="button" data-v="nee">Geen</button>
+      <button type="button" data-v="ja">Ja</button>
+    </div>
+  </div>
+
+  <div class="fld">
+    <span class="lbl">Zolder</span>
+    <div class="seg" id="seg-zolder">
+      <button type="button" data-v="geen">Geen</button>
+      <button type="button" data-v="binnen">Binnen BV</button>
+      <button type="button" data-v="buiten">Buiten BV</button>
+    </div>
+  </div>
+
   <label class="fld">
     <span class="lbl">Notities</span>
     <textarea id="notities" rows="6" placeholder="Vrije notities over de woning..."></textarea>
