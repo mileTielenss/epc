@@ -47,6 +47,15 @@
 
 <main id="app" hidden>
 
+<!-- ======================= RUIMTEBALK (ramen/energie/foto's) ======================= -->
+<div id="ruimtebalk" hidden>
+  <div class="chips" id="ruimtechips"></div>
+  <div class="ruimteregel" id="ruimteregel" hidden>
+    <button type="button" id="btn-vent">&#128168; geen</button>
+    <button type="button" class="del" id="btn-ruimte-del">&times;</button>
+  </div>
+</div>
+
 <!-- ======================= TAB 1: ALGEMEEN ======================= -->
 <section class="tab active" id="tab-algemeen">
   <div class="fld">
@@ -122,9 +131,9 @@
   </div>
 
   <div class="fld">
-    <span class="lbl">Afmetingen (cm)</span>
+    <span class="lbl">Afmetingen (m)</span>
     <div class="dims">
-      <input type="text" id="breedte" inputmode="decimal" placeholder="breedte">
+      <input type="text" id="breedte" inputmode="decimal" placeholder="bv. 1,335">
       <span class="x">&times;</span>
       <input type="text" id="hoogte" inputmode="decimal" placeholder="hoogte">
       <span class="m2live" id="m2live"></span>
@@ -206,7 +215,7 @@
   </div>
 
   <div class="fld" id="opw-kamer" hidden>
-    <span class="lbl">Kamer (cm)</span>
+    <span class="lbl">Kamer (m)</span>
     <div class="dims">
       <input type="text" id="kamer-b" inputmode="decimal" placeholder="breed">
       <span class="x">&times;</span>
@@ -252,34 +261,7 @@
   </label>
 </section>
 
-<!-- ======================= TAB 4: VENTILATIE ======================= -->
-<section class="tab" id="tab-ventilatie">
-  <div class="fld">
-    <span class="lbl">Ventilatie</span>
-    <div class="seg" id="seg-ventmode">
-      <button type="button" data-v="geen">Geen</button>
-      <button type="button" data-v="natuurlijk">Natuurlijk</button>
-      <button type="button" data-v="mechanisch">Mechanisch</button>
-    </div>
-  </div>
-
-  <div class="fld">
-    <span class="lbl">Tik de ruimtes aan</span>
-    <div class="chips" id="vent-chips">
-      <button type="button" data-v="Keuken">Keuken</button>
-      <button type="button" data-v="Badkamer">Badkamer</button>
-      <button type="button" data-v="WC">WC</button>
-      <button type="button" data-v="Living">Living</button>
-      <button type="button" data-v="Slaapkamer">Slaapkamer</button>
-      <button type="button" data-v="Berging">Berging</button>
-      <button type="button" data-v="__andere" class="andere">+ Andere ruimte</button>
-    </div>
-  </div>
-
-  <ul id="ventlijst" class="lijst"></ul>
-</section>
-
-<!-- ======================= TAB 5: FOTODOSSIER ======================= -->
+<!-- ======================= TAB 4: FOTODOSSIER ======================= -->
 <section class="tab" id="tab-fotos">
   <div class="fld">
     <span class="lbl">Categorie (bijschrift in de PDF)</span>
@@ -301,8 +283,12 @@
   <div id="dossiergrid" class="fotogrid"></div>
 </section>
 
-<!-- ======================= TAB 6: EXPORT ======================= -->
+<!-- ======================= TAB 5: EXPORT ======================= -->
 <section class="tab" id="tab-export">
+  <div class="fld">
+    <span class="lbl">Ventilatie per ruimte</span>
+    <ul id="ventoverzicht" class="lijst"></ul>
+  </div>
   <button type="button" class="btn big" id="btn-print">&#128424; Print one-pager (PDF)</button>
   <button type="button" class="btn sec big" id="btn-sluiten">Woning sluiten</button>
   <button type="button" class="btn danger big" id="btn-verwijder-woning">Woning verwijderen</button>
@@ -314,7 +300,6 @@
   <button type="button" class="on" data-tab="algemeen"><span class="ic">&#127968;</span>Algemeen</button>
   <button type="button" data-tab="ramen"><span class="ic">&#129695;</span>Ramen</button>
   <button type="button" data-tab="energie"><span class="ic">&#9889;</span>Energie</button>
-  <button type="button" data-tab="ventilatie"><span class="ic">&#127788;&#65039;</span>Ventilatie</button>
   <button type="button" data-tab="fotos"><span class="ic">&#128247;</span>Foto's</button>
   <button type="button" data-tab="export"><span class="ic">&#9989;</span>Afronden</button>
 </nav>
@@ -329,6 +314,7 @@
       <button type="button" data-v="ruimte">Ruimte</button>
       <button type="button" data-v="techniek">Techniek</button>
     </div>
+    <button type="button" id="btn-flits" hidden>&#128294;</button>
   </div>
   <div class="cambar">
     <span id="camteller"></span>

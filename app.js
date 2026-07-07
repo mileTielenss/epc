@@ -18,10 +18,9 @@ function num(s) {
   return isFinite(v) && v > 0 ? v : 0;
 }
 function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
-/* meters (intern model) tonen als cm, zonder onnodige decimalen */
-function fmtCm(m) {
-  const c = Math.round(m * 1000) / 10;
-  return (Number.isInteger(c) ? String(c) : c.toFixed(1)).replace('.', ',');
+/* meters tonen zoals de digitale meter: komma, zonder onnodige nullen (bv. 1,335 of 2,4) */
+function fmtM(m) {
+  return String(Math.round(m * 1000) / 1000).replace('.', ',');
 }
 function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -79,6 +78,12 @@ const dbGetInstelling = k => tx('instellingen', 'readonly', s => s.get(k));
 
 /* ============================== woningmodel ============================== */
 
+/* elke woning start met de standaardruimtes; extra ruimtes voeg je toe in de ruimtebalk */
+function standaardRuimtes() {
+  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1', 'Slaapkamer 2']
+    .map(naam => ({ naam, vent: 'geen', ventBeschrijving: '' }));
+}
+
 function leegWoning() {
   return {
     id: nieuwId(),
@@ -87,9 +92,9 @@ function leegWoning() {
     gewijzigd: nu(),
     bestand: null,
     algemeen: { adres: '', foto: null, datum: vandaag(), gebouwtype: '', bouwjaar: '', notities: '' },
+    ruimtes: standaardRuimtes(),
     ramen: [],
     energie: { opwekkers: [], pv: '', wp: '' },
-    ventilatie: { ruimtes: [] },
     fotodossier: [],
     teller: 0,
     tellerOpwek: 0,
@@ -126,10 +131,24 @@ function normaliseer(p) {
   const w = {
     ...basis, ...p,
     algemeen: { ...basis.algemeen, ...(p.algemeen || {}) },
-    energie: { ...basis.energie, ...pe },
-    ventilatie: { ...basis.ventilatie, ...(p.ventilatie || {}) }
+    energie: { ...basis.energie, ...pe }
   };
   if (!Array.isArray(w.energie.opwekkers)) w.energie.opwekkers = [];
+
+  /* ruimtes: migratie vanuit de oude ventilatie-lijst, anders de standaardset
+     (kijk naar p, niet naar w: de basis vult ruimtes altijd met de standaardset) */
+  if (!Array.isArray(p.ruimtes) || !p.ruimtes.length) {
+    const oud = (p.ventilatie || {}).ruimtes;
+    w.ruimtes = Array.isArray(oud) && oud.length
+      ? oud.map(r => ({ naam: r.naam, vent: VENT_MIGRATIE[r.voorziening] || r.vent || 'geen', ventBeschrijving: '' }))
+      : standaardRuimtes();
+  }
+  w.ruimtes = w.ruimtes.map(r => ({
+    naam: String(r.naam || 'Ruimte'),
+    vent: VENT_MODES.includes(r.vent) ? r.vent : 'geen',
+    ventBeschrijving: r.ventBeschrijving || ''
+  }));
+  delete w.ventilatie;
 
   /* migratie: oudste energiemodel (opwek-chips + ketel/wp/airco-panelen) naar opwekkerslijst */
   if (!w.energie.opwekkers.length && Array.isArray(pe.opwek) && pe.opwek.length) {
@@ -168,17 +187,19 @@ function normaliseer(p) {
   if (!Array.isArray(w.ramen)) w.ramen = [];
   w.teller = Math.max(w.teller || 0, ...w.ramen.map(r => r.nr || 0), 0);
   w.ramen.forEach(r => { if (!r.nr) r.nr = ++w.teller; });
-  w.ramen.forEach(r => { r.aantal = Math.max(1, Math.round(num(r.aantal)) || 1); });
-
-  w.ventilatie.ruimtes = (w.ventilatie.ruimtes || []).map(r => ({
-    naam: r.naam, voorziening: VENT_MIGRATIE[r.voorziening] || 'geen'
-  }));
-  delete w.ventilatie.systeem;
+  w.ramen.forEach(r => {
+    r.aantal = Math.max(1, Math.round(num(r.aantal)) || 1);
+    r.ruimte = r.ruimte || '';
+  });
+  w.energie.opwekkers.forEach(o => { o.ruimte = o.ruimte || ''; });
 
   /* fotodossier: teller en ontbrekende nummers herstellen */
   if (!Array.isArray(w.fotodossier)) w.fotodossier = [];
   w.tellerDossier = Math.max(w.tellerDossier || 0, ...w.fotodossier.map(f => f.nr || 0), 0);
-  w.fotodossier.forEach(f => { if (!f.nr) f.nr = ++w.tellerDossier; });
+  w.fotodossier.forEach(f => {
+    if (!f.nr) f.nr = ++w.tellerDossier;
+    f.ruimte = f.ruimte || '';
+  });
 
   if (!w.id) w.id = nieuwId();
   if (!w.status) w.status = 'open';
@@ -384,6 +405,7 @@ function toonEditor() {
 function zetTab(naam) {
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === naam));
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + naam));
+  $('#ruimtebalk').hidden = !['ramen', 'energie', 'fotos'].includes(naam);
   window.scrollTo(0, 0);
 }
 
@@ -659,7 +681,7 @@ function kompasSet(v) {
 }
 
 function updateM2Live() {
-  const b = num($('#breedte').value) / 100, h = num($('#hoogte').value) / 100;
+  const b = num($('#breedte').value), h = num($('#hoogte').value);
   $('#m2live').textContent = (b && h) ? fmt(b * h) + ' m²' : '';
 }
 $('#breedte').addEventListener('input', updateM2Live);
@@ -695,12 +717,13 @@ const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', 'alu-thermisch': 'Al
 
 $('#btn-voegtoe').addEventListener('click', () => {
   if (!S) return;
-  const b = num($('#breedte').value) / 100, h = num($('#hoogte').value) / 100;
-  if (!b || !h) { toast('Vul breedte en hoogte in (cm)'); return; }
+  const b = num($('#breedte').value), h = num($('#hoogte').value);
+  if (!b || !h) { toast('Vul breedte en hoogte in (m)'); return; }
   const aantal = Math.max(1, Math.round(num($('#aantal').value)) || 1);
   const velden = {
     element: draft.element,
     gevel: draft.gevel,
+    ruimte: selectedRuimte,
     b, h,
     beglazing: draft.beglazing,
     kader: draft.kader,
@@ -741,9 +764,12 @@ function startBewerkRaam(nr) {
   draft.rolluik = r.rolluik ? 'ja' : 'nee';
   draft.foto = r.foto || null;
   draft.aantal = raamAantal(r);
+  /* de ruimtebalk springt mee naar de ruimte van dit raam */
+  selectedRuimte = r.ruimte && S.ruimtes.some(x => x.naam === r.ruimte) ? r.ruimte : '';
+  renderRuimtebalk();
   syncRaamForm();
-  $('#breedte').value = fmtCm(r.b);
-  $('#hoogte').value = fmtCm(r.h);
+  $('#breedte').value = fmtM(r.b);
+  $('#hoogte').value = fmtM(r.h);
   $('#aantal').value = draft.aantal;
   updateM2Live();
   $('#btn-voegtoe').textContent = 'Bewaar wijziging';
@@ -809,10 +835,11 @@ function renderRamen() {
     const n = raamAantal(r);
     const tags = [GLAS_NAMEN[r.beglazing] || r.beglazing, KADER_NAMEN[r.kader] || r.kader];
     if (r.rolluik) tags.push('rolluik');
+    if (r.ruimte) tags.unshift(r.ruimte);
     li.innerHTML =
       `<div class="info">
          <div class="r1">#${r.nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''}</div>
-         <div class="r2">${fmtCm(r.b)} × ${fmtCm(r.h)} cm = ${fmt(r.b * r.h)} m²${n > 1 ? ` (${fmt(r.b * r.h * n)} m² totaal)` : ''}</div>
+         <div class="r2">${fmtM(r.b)} × ${fmtM(r.h)} m = ${fmt(r.b * r.h)} m²${n > 1 ? ` (${fmt(r.b * r.h * n)} m² totaal)` : ''}</div>
          <div class="r3">${esc(tags.join(' · '))} · tik om te wijzigen</div>
        </div>` +
       (r.foto ? `<img class="thumb" src="${r.foto}" alt="foto #${r.nr}">` : '') +
@@ -834,7 +861,7 @@ $('#ramenlijst').addEventListener('click', e => {
     const nr = Number(del.dataset.nr);
     const r = S.ramen.find(x => x.nr === nr);
     if (!r) return;
-    if (!confirm(`#${nr} ${ELEMENT_NAMEN[r.element]} (${fmtCm(r.b)} × ${fmtCm(r.h)} cm) verwijderen?`)) return;
+    if (!confirm(`#${nr} ${ELEMENT_NAMEN[r.element]} (${fmtM(r.b)} × ${fmtM(r.h)} m) verwijderen?`)) return;
     if (bewerkRaamNr === nr) stopBewerkRaam();
     S.ramen = S.ramen.filter(x => x.nr !== nr);
     renderRamen();
@@ -866,7 +893,7 @@ function toonOpwekVelden() {
 }
 
 function updateM3Live() {
-  const b = num($('#kamer-b').value) / 100, d = num($('#kamer-d').value) / 100, h = num($('#kamer-h').value) / 100;
+  const b = num($('#kamer-b').value), d = num($('#kamer-d').value), h = num($('#kamer-h').value);
   $('#m3live').textContent = (b && d && h) ? fmt(b * d * h, 1) + ' m³' : '';
 }
 $('#kamer-b').addEventListener('input', updateM3Live);
@@ -912,11 +939,12 @@ $('#btn-opwek-voegtoe').addEventListener('click', () => {
   if (!S) return;
   let kamer = null;
   if (draftOpwek.type === 'airco') {
-    const b = num($('#kamer-b').value) / 100, d = num($('#kamer-d').value) / 100, h = num($('#kamer-h').value) / 100;
+    const b = num($('#kamer-b').value), d = num($('#kamer-d').value), h = num($('#kamer-h').value);
     if (b && d && h) kamer = { b, d, h };
   }
   const velden = {
     type: draftOpwek.type,
+    ruimte: selectedRuimte,
     functie: [...draftOpwek.functie],
     beschrijving: $('#opw-beschrijving').value.trim(),
     foto: draftOpwek.foto,
@@ -956,11 +984,14 @@ function startBewerkOpwek(nr) {
     foto: o.foto || null,
     fotoKraan: o.fotoKraan || null
   };
+  /* de ruimtebalk springt mee naar de ruimte van deze opwekker */
+  selectedRuimte = o.ruimte && S.ruimtes.some(x => x.naam === o.ruimte) ? o.ruimte : '';
+  renderRuimtebalk();
   syncOpwekForm();
   $('#opw-beschrijving').value = o.beschrijving || '';
-  $('#kamer-b').value = o.kamer ? fmtCm(o.kamer.b) : '';
-  $('#kamer-d').value = o.kamer ? fmtCm(o.kamer.d) : '';
-  $('#kamer-h').value = o.kamer ? fmtCm(o.kamer.h) : '';
+  $('#kamer-b').value = o.kamer ? fmtM(o.kamer.b) : '';
+  $('#kamer-d').value = o.kamer ? fmtM(o.kamer.d) : '';
+  $('#kamer-h').value = o.kamer ? fmtM(o.kamer.h) : '';
   updateM3Live();
   $('#btn-opwek-voegtoe').textContent = 'Bewaar wijziging';
   $('#btn-annuleer-opwek').hidden = false;
@@ -987,7 +1018,7 @@ $('#btn-annuleer-opwek').addEventListener('click', () => {
 });
 
 function kamerTekst(k) {
-  return `kamer ${fmtCm(k.b)} × ${fmtCm(k.d)} × ${fmtCm(k.h)} cm = ${fmt(k.b * k.d * k.h, 1)} m³`;
+  return `kamer ${fmtM(k.b)} × ${fmtM(k.d)} × ${fmtM(k.h)} m = ${fmt(k.b * k.d * k.h, 1)} m³`;
 }
 
 function renderOpwekkers() {
@@ -997,7 +1028,7 @@ function renderOpwekkers() {
     const li = document.createElement('li');
     if (o.nr === bewerkOpwekNr) li.className = 'bewerk';
     li.dataset.nr = o.nr;
-    const det = [o.beschrijving, o.kamer ? kamerTekst(o.kamer) : ''].filter(Boolean);
+    const det = [o.ruimte, o.beschrijving, o.kamer ? kamerTekst(o.kamer) : ''].filter(Boolean);
     li.innerHTML =
       `<div class="info">
          <div class="r1">#${o.nr} ${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
@@ -1037,83 +1068,136 @@ segInit('#seg-pv', v => {
 });
 bind('#wp', v => S.energie.wp = v);
 
-/* ============================== tab 4: ventilatie ============================== */
+/* ============================== ruimtebalk (ramen/energie/foto's) ==============================
+   kies bovenaan in welke ruimte je staat: alles wat je daarna toevoegt (ramen, opwekkers,
+   dossierfoto's) krijgt die ruimte als label. "Algemeen" = geen specifieke ruimte.
+   Per ruimte cycle je de ventilatie: geen -> natuurlijk -> mechanisch -> ander (+beschrijving). */
 
-/* gekozen modus geldt voor elke ruimte die je daarna aantikt */
-const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch'];
-let ventMode = 'geen';
+const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch', 'ander'];
+let selectedRuimte = ''; /* '' = Algemeen */
 
-segInit('#seg-ventmode', v => { ventMode = v; });
+function huidigeRuimte() {
+  return S.ruimtes.find(r => r.naam === selectedRuimte) || null;
+}
 
-/* natte ruimtes komen eerst, in deze volgorde; daarna de rest alfabetisch (kamers met
-   hetzelfde begin, bv. Slaapkamer 1/2/3, blijven zo vanzelf bij elkaar) */
+function renderRuimtebalk() {
+  const chips = $('#ruimtechips');
+  chips.innerHTML = '';
+  const alg = document.createElement('button');
+  alg.type = 'button';
+  alg.dataset.v = '';
+  alg.textContent = 'Algemeen';
+  alg.classList.toggle('on', selectedRuimte === '');
+  chips.appendChild(alg);
+  S.ruimtes.forEach(r => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.v = r.naam;
+    b.textContent = r.naam;
+    b.classList.toggle('on', selectedRuimte === r.naam);
+    chips.appendChild(b);
+  });
+  const plus = document.createElement('button');
+  plus.type = 'button';
+  plus.dataset.v = '__plus';
+  plus.className = 'plus';
+  plus.textContent = '+ Ruimte';
+  chips.appendChild(plus);
+
+  const r = huidigeRuimte();
+  $('#ruimteregel').hidden = !r;
+  if (r) {
+    $('#btn-vent').textContent = `\u{1F4A8} Ventilatie: ${r.vent}${r.vent === 'ander' && r.ventBeschrijving ? ' – ' + r.ventBeschrijving : ''}`;
+  }
+}
+
+$('#ruimtechips').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || !S) return;
+  if (b.dataset.v === '__plus') {
+    const naam = (prompt('Naam van de nieuwe ruimte?') || '').trim();
+    if (!naam) return;
+    const zelfde = S.ruimtes.filter(r => r.naam === naam || r.naam.startsWith(naam + ' ')).length;
+    const uniek = zelfde ? `${naam} ${zelfde + 1}` : naam;
+    S.ruimtes.push({ naam: uniek, vent: 'geen', ventBeschrijving: '' });
+    selectedRuimte = uniek;
+    renderRuimtebalk();
+    renderVentOverzicht();
+    bewaar();
+    return;
+  }
+  selectedRuimte = b.dataset.v;
+  renderRuimtebalk();
+});
+
+/* ventilatie van de huidige ruimte doorschuiven */
+$('#btn-vent').addEventListener('click', () => {
+  const r = huidigeRuimte();
+  if (!r) return;
+  r.vent = VENT_MODES[(VENT_MODES.indexOf(r.vent) + 1) % VENT_MODES.length];
+  if (r.vent === 'ander') {
+    const besch = (prompt('Beschrijving van de ventilatie?', r.ventBeschrijving || '') || '').trim();
+    r.ventBeschrijving = besch;
+  }
+  renderRuimtebalk();
+  renderVentOverzicht();
+  bewaar();
+});
+
+$('#btn-ruimte-del').addEventListener('click', () => {
+  const r = huidigeRuimte();
+  if (!r) return;
+  const gebruikt =
+    S.ramen.filter(x => x.ruimte === r.naam).length +
+    S.energie.opwekkers.filter(x => x.ruimte === r.naam).length +
+    S.fotodossier.filter(x => x.ruimte === r.naam).length;
+  if (!confirm(`Ruimte "${r.naam}" verwijderen?${gebruikt ? ` ${gebruikt} item(s) verliezen dit label (blijven zelf bestaan).` : ''}`)) return;
+  S.ruimtes = S.ruimtes.filter(x => x.naam !== r.naam);
+  S.ramen.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
+  S.energie.opwekkers.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
+  S.fotodossier.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
+  selectedRuimte = '';
+  renderRuimtebalk();
+  renderRamen();
+  renderOpwekkers();
+  renderDossier();
+  renderVentOverzicht();
+  bewaar();
+});
+
+/* natte ruimtes eerst (keuken, badkamer, wc), daarna de rest alfabetisch;
+   Slaapkamer 1/2/3 blijft zo vanzelf bij elkaar */
 const VENT_NAT = ['keuken', 'badkamer', 'wc'];
-function ventBasis(naam) { return String(naam).toLowerCase().replace(/\s*\d+\s*$/, '').trim(); }
-function gesorteerdeVent() {
-  return S.ventilatie.ruimtes.map((r, i) => ({ r, i })).sort((a, b) => {
-    const na = VENT_NAT.indexOf(ventBasis(a.r.naam)), nb = VENT_NAT.indexOf(ventBasis(b.r.naam));
+function ruimteBasis(naam) { return String(naam).toLowerCase().replace(/\s*\d+\s*$/, '').trim(); }
+function gesorteerdeRuimtes() {
+  return [...S.ruimtes].sort((a, b) => {
+    const na = VENT_NAT.indexOf(ruimteBasis(a.naam)), nb = VENT_NAT.indexOf(ruimteBasis(b.naam));
     const ca = na >= 0 ? 0 : 1, cb = nb >= 0 ? 0 : 1;
     if (ca !== cb) return ca - cb;
     if (ca === 0 && na !== nb) return na - nb;
-    return String(a.r.naam).localeCompare(String(b.r.naam), 'nl', { numeric: true });
+    return String(a.naam).localeCompare(String(b.naam), 'nl', { numeric: true });
   });
 }
 
-function voegVentRuimteToe(basis) {
-  const zelfde = S.ventilatie.ruimtes.filter(r => r.naam === basis || r.naam.startsWith(basis + ' ')).length;
-  const naam = zelfde ? `${basis} ${zelfde + 1}` : basis;
-  S.ventilatie.ruimtes.push({ naam, voorziening: ventMode });
-  renderVent();
-  bewaar();
-  toast(`${naam}: ${ventMode}`);
+function ventTekst(r) {
+  return r.vent + (r.vent === 'ander' && r.ventBeschrijving ? ` (${r.ventBeschrijving})` : '');
 }
 
-$('#vent-chips').addEventListener('click', e => {
-  const b = e.target.closest('button');
-  if (!b || !S) return;
-  if (b.dataset.v === '__andere') {
-    const naam = (prompt('Naam van de ruimte?') || '').trim();
-    if (naam) voegVentRuimteToe(naam);
-    return;
-  }
-  voegVentRuimteToe(b.dataset.v);
-});
-
-function renderVent() {
-  const ul = $('#ventlijst');
+/* compact overzicht op de Afronden-tab */
+function renderVentOverzicht() {
+  const ul = $('#ventoverzicht');
   ul.innerHTML = '';
-  gesorteerdeVent().forEach(({ r, i }) => {
+  gesorteerdeRuimtes().forEach(r => {
     const li = document.createElement('li');
     li.innerHTML =
       `<div class="info">
          <div class="r1">${esc(r.naam)}</div>
-         <div class="r3">${esc(r.voorziening)} · tik om te wisselen</div>
-       </div>` +
-      `<button type="button" class="del" data-i="${i}">×</button>`;
-    li.dataset.i = i;
+         <div class="r3">${esc(ventTekst(r))}</div>
+       </div>`;
     ul.appendChild(li);
   });
+  if (!S.ruimtes.length) ul.innerHTML = '<li class="leeg">Geen ruimtes.</li>';
 }
-
-$('#ventlijst').addEventListener('click', e => {
-  if (!S) return;
-  const b = e.target.closest('.del');
-  if (b) {
-    const r = S.ventilatie.ruimtes[Number(b.dataset.i)];
-    if (!r || !confirm(`"${r.naam}" verwijderen?`)) return;
-    S.ventilatie.ruimtes.splice(Number(b.dataset.i), 1);
-    renderVent();
-    bewaar();
-    return;
-  }
-  /* tik op de ruimte zelf: wissel geen -> natuurlijk -> mechanisch */
-  const li = e.target.closest('li');
-  if (!li) return;
-  const r = S.ventilatie.ruimtes[Number(li.dataset.i)];
-  r.voorziening = VENT_MODES[(VENT_MODES.indexOf(r.voorziening) + 1) % VENT_MODES.length];
-  renderVent();
-  bewaar();
-});
 
 /* ============================== tab 5: fotodossier ============================== */
 
@@ -1135,9 +1219,17 @@ segInit('#seg-fotocat-cam', zetFotoCat);
 
 function voegDossierFoto(dataUrl) {
   S.tellerDossier = (S.tellerDossier || 0) + 1;
-  S.fotodossier.push({ nr: S.tellerDossier, cat: fotoCat, foto: dataUrl });
+  S.fotodossier.push({ nr: S.tellerDossier, cat: fotoCat, ruimte: selectedRuimte, foto: dataUrl });
   wijzig();
   renderDossier();
+}
+
+/* bijschrift: ruimte en/of categorie, zonder dubbel "Algemeen" */
+function dossierCap(f) {
+  const delen = [];
+  if (f.ruimte) delen.push(f.ruimte);
+  if (f.cat && f.cat !== 'algemeen') delen.push(FOTOCAT_NAMEN[f.cat] || f.cat);
+  return delen.join(' · ') || 'Algemeen';
 }
 
 function renderDossier() {
@@ -1151,7 +1243,7 @@ function renderDossier() {
     d.innerHTML =
       `<img class="thumb" src="${f.foto}" alt="dossierfoto ${f.nr}">` +
       `<button type="button" class="del" data-nr="${f.nr}">×</button>` +
-      `<div class="cap">${esc(FOTOCAT_NAMEN[f.cat] || f.cat)}</div>`;
+      `<div class="cap">${esc(dossierCap(f))}</div>`;
     grid.appendChild(d);
   });
   $('#dossier-totaal').textContent = S.fotodossier.length
@@ -1165,7 +1257,7 @@ $('#dossiergrid').addEventListener('click', e => {
   const nr = Number(b.dataset.nr);
   const f = S.fotodossier.find(x => x.nr === nr);
   if (!f) return;
-  if (!confirm(`Foto (${FOTOCAT_NAMEN[f.cat] || f.cat}) verwijderen?`)) return;
+  if (!confirm(`Foto (${dossierCap(f)}) verwijderen?`)) return;
   S.fotodossier = S.fotodossier.filter(x => x.nr !== nr);
   renderDossier();
   bewaar();
@@ -1195,6 +1287,7 @@ $('#dossierinput').addEventListener('change', async () => {
 /* ---------- eigen camerascherm: blijft open, foto per tik op de sluiter ---------- */
 
 let camStream = null;
+let camFlits = false;
 
 async function startCamera() {
   if (!S) return;
@@ -1210,16 +1303,39 @@ async function startCamera() {
     $('#camvideo').srcObject = camStream;
     $('#camera').hidden = false;
     updateCamTeller(0);
+    /* flits (torch) alleen tonen als het toestel het via de browser toelaat;
+       iOS doet dat meestal niet: gebruik daar "Kies foto's" voor donkere ruimtes */
+    camFlits = false;
+    $('#btn-flits').classList.remove('on');
+    const track = camStream.getVideoTracks()[0];
+    const kan = track && track.getCapabilities ? track.getCapabilities() : {};
+    $('#btn-flits').hidden = !kan.torch;
   } catch (e) {
     toast("Geen toegang tot de camera. Kies foto's via de bibliotheek.");
   }
 }
+
+$('#btn-flits').addEventListener('click', async () => {
+  if (!camStream) return;
+  const track = camStream.getVideoTracks()[0];
+  try {
+    camFlits = !camFlits;
+    await track.applyConstraints({ advanced: [{ torch: camFlits }] });
+    $('#btn-flits').classList.toggle('on', camFlits);
+  } catch (e) {
+    camFlits = false;
+    $('#btn-flits').classList.remove('on');
+    toast('Flits niet beschikbaar op dit toestel');
+  }
+});
 
 function stopCamera() {
   if (camStream) {
     camStream.getTracks().forEach(t => t.stop());
     camStream = null;
   }
+  camFlits = false;
+  $('#btn-flits').classList.remove('on');
   $('#camvideo').srcObject = null;
   $('#camera').hidden = true;
 }
@@ -1350,14 +1466,14 @@ function printInhoudHtml() {
   /* ramen & deuren */
   html += '<h2>Ramen &amp; deuren</h2>';
   if (ramen.length) {
-    html += `<table><tr><th>#</th><th>Type</th><th>Gevel</th><th class="num">Aantal</th><th class="num">B (cm)</th><th class="num">H (cm)</th><th class="num">m²</th><th>Beglazing</th><th>Kader</th><th>Rolluik</th></tr>`;
+    html += `<table><tr><th>#</th><th>Type</th><th>Ruimte</th><th>Gevel</th><th class="num">Aantal</th><th class="num">B (m)</th><th class="num">H (m)</th><th class="num">m²</th><th>Beglazing</th><th>Kader</th><th>Rolluik</th></tr>`;
     ramen.forEach(r => {
       const n = raamAantal(r);
-      html += `<tr><td>${r.nr}</td><td>${ELEMENT_NAMEN[r.element] || ''}</td><td>${GEVEL_NAMEN[r.gevel] || ''}</td>` +
-        `<td class="num">${n}</td><td class="num">${fmtCm(r.b)}</td><td class="num">${fmtCm(r.h)}</td><td class="num">${fmt(r.b * r.h * n)}</td>` +
+      html += `<tr><td>${r.nr}</td><td>${ELEMENT_NAMEN[r.element] || ''}</td><td>${esc(r.ruimte || '')}</td><td>${GEVEL_NAMEN[r.gevel] || ''}</td>` +
+        `<td class="num">${n}</td><td class="num">${fmtM(r.b)}</td><td class="num">${fmtM(r.h)}</td><td class="num">${fmt(r.b * r.h * n)}</td>` +
         `<td>${GLAS_NAMEN[r.beglazing] || ''}</td><td>${KADER_NAMEN[r.kader] || ''}</td><td>${r.rolluik ? 'ja' : 'nee'}</td></tr>`;
     });
-    html += `<tr class="tot"><td colspan="3">Totaal (${totAantal} element${totAantal === 1 ? '' : 'en'})</td><td class="num">${totAantal}</td><td colspan="2"></td><td class="num">${fmt(totM2)}</td><td colspan="3"></td></tr></table>`;
+    html += `<tr class="tot"><td colspan="4">Totaal (${totAantal} element${totAantal === 1 ? '' : 'en'})</td><td class="num">${totAantal}</td><td colspan="2"></td><td class="num">${fmt(totM2)}</td><td colspan="3"></td></tr></table>`;
   } else {
     html += '<p class="kv">Geen elementen opgemeten.</p>';
   }
@@ -1366,9 +1482,9 @@ function printInhoudHtml() {
   html += '<h2>Energie</h2>';
   const E = S.energie;
   if (E.opwekkers.length) {
-    html += '<table><tr><th>#</th><th>Opwekker</th><th>Doet</th><th>Beschrijving</th></tr>' +
+    html += '<table><tr><th>#</th><th>Opwekker</th><th>Ruimte</th><th>Doet</th><th>Beschrijving</th></tr>' +
       E.opwekkers.map(o =>
-        `<tr><td>${o.nr}</td><td>${OPWEK_NAMEN[o.type] || esc(o.type)}</td>` +
+        `<tr><td>${o.nr}</td><td>${OPWEK_NAMEN[o.type] || esc(o.type)}</td><td>${esc(o.ruimte || '')}</td>` +
         `<td>${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + '))}</td>` +
         `<td>${esc([o.beschrijving, o.kamer ? kamerTekst(o.kamer) : ''].filter(Boolean).join(' · '))}</td></tr>`).join('') +
       '</table>';
@@ -1377,11 +1493,11 @@ function printInhoudHtml() {
   }
   html += `<p class="kv"><b>PV-panelen</b> ${E.pv === 'ja' ? 'ja' + (E.wp ? ', ' + esc(E.wp) + ' Wp' : '') : (E.pv === 'nee' ? 'nee' : '-')}</p>`;
 
-  /* ventilatie (zelfde volgorde als in de app: natte ruimtes eerst) */
+  /* ventilatie per ruimte (natte ruimtes eerst) */
   html += '<h2>Ventilatie</h2>';
-  if (S.ventilatie.ruimtes.length) {
+  if (S.ruimtes.length) {
     html += '<table><tr><th>Ruimte</th><th>Ventilatie</th></tr>' +
-      gesorteerdeVent().map(({ r }) => `<tr><td>${esc(r.naam)}</td><td>${esc(r.voorziening)}</td></tr>`).join('') +
+      gesorteerdeRuimtes().map(r => `<tr><td>${esc(r.naam)}</td><td>${esc(ventTekst(r))}</td></tr>`).join('') +
       '</table>';
   } else {
     html += '<p class="kv">Geen ruimtes genoteerd.</p>';
@@ -1395,7 +1511,7 @@ function printInhoudHtml() {
   /* foto's */
   const fotos = [];
   ramen.forEach(r => {
-    if (r.foto) fotos.push({ src: r.foto, cap: `#${r.nr} ${ELEMENT_NAMEN[r.element]} ${GEVEL_NAMEN[r.gevel].toLowerCase()}, afstandhouder` });
+    if (r.foto) fotos.push({ src: r.foto, cap: `#${r.nr} ${ELEMENT_NAMEN[r.element]} ${GEVEL_NAMEN[r.gevel].toLowerCase()}${r.ruimte ? ' (' + r.ruimte + ')' : ''}, afstandhouder` });
   });
   S.energie.opwekkers.forEach(o => {
     if (o.foto) fotos.push({ src: o.foto, cap: `#${o.nr} ${OPWEK_NAMEN[o.type] || o.type}, kenplaat` });
@@ -1414,7 +1530,7 @@ function printInhoudHtml() {
     html += `<h2 class="dossierkop">Fotodossier</h2>` +
       `<p class="kv">${esc(A.adres || '')} · plaatsbezoek ${esc(A.datum || '')} · ${dossier.length} foto${dossier.length === 1 ? '' : "'s"}</p>` +
       '<div class="fotos">' +
-      dossier.map(f => `<div class="foto"><img src="${f.foto}" alt=""><div class="cap">${esc(FOTOCAT_NAMEN[f.cat] || f.cat)} ${f.nr}</div></div>`).join('') +
+      dossier.map(f => `<div class="foto"><img src="${f.foto}" alt=""><div class="cap">${esc(dossierCap(f))} (${f.nr})</div></div>`).join('') +
       '</div>';
   }
 
@@ -1709,10 +1825,10 @@ function syncAlles() {
   $('#fld-wp').hidden = S.energie.pv !== 'ja';
   $('#wp').value = S.energie.wp;
 
-  /* ventilatie: modus terug naar geen */
-  ventMode = 'geen';
-  segSet('#seg-ventmode', ventMode);
-  renderVent();
+  /* ruimtebalk: start op Algemeen */
+  selectedRuimte = '';
+  renderRuimtebalk();
+  renderVentOverzicht();
 
   /* fotodossier */
   zetFotoCat('algemeen');

@@ -171,6 +171,23 @@ textarea{resize:vertical}
 .fotorow{display:flex;align-items:center;gap:10px}
 .thumb{width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
 
+/* ---------- ruimtebalk ---------- */
+#ruimtebalk{
+  max-width:640px;margin:0 auto;padding:8px 10px 0;
+}
+#ruimtebalk .chips button.plus{border-style:dashed;color:var(--acc);font-weight:700}
+.ruimteregel{display:flex;align-items:center;gap:8px;margin-top:6px}
+#btn-vent{
+  flex:1;min-height:38px;text-align:left;
+  font-family:inherit;font-size:.85rem;font-weight:600;
+  border:1.5px solid var(--line);border-radius:10px;
+  background:var(--card);color:var(--ink);padding:6px 11px;
+}
+.ruimteregel .del{
+  flex:0 0 auto;width:38px;height:38px;border-radius:10px;border:0;
+  background:#f3e0df;color:var(--warn);font-size:1.25rem;font-weight:700;
+}
+
 /* ---------- fotodossier ---------- */
 .fotogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:10px}
 .fotogrid .dfoto{position:relative}
@@ -187,10 +204,16 @@ textarea{resize:vertical}
 .camtop{
   position:absolute;top:0;left:0;right:0;
   padding:calc(env(safe-area-inset-top) + 10px) 10px 10px;
-  display:flex;justify-content:center;
+  display:flex;justify-content:center;gap:8px;align-items:flex-start;
 }
+.camtop .seg{flex:1;justify-content:center}
 .camtop .seg button{background:rgba(0,0,0,.5);color:#fff;border-color:rgba(255,255,255,.45)}
 .camtop .seg button.on{background:var(--acc);border-color:var(--acc)}
+#btn-flits{
+  flex:0 0 auto;width:44px;height:44px;border-radius:50%;font-size:1.2rem;
+  background:rgba(0,0,0,.5);border:1.5px solid rgba(255,255,255,.45);
+}
+#btn-flits.on{background:#f5c518;border-color:#f5c518}
 .cambar{
   position:absolute;left:0;right:0;bottom:0;
   display:flex;align-items:center;justify-content:space-between;

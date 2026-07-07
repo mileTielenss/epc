@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'epc-v22';
+const CACHE = 'epc-v23';
 const ASSETS = [
   './',
   './index.html',
