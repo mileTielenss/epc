@@ -267,10 +267,18 @@ function toonEditor() {
   zetTitel();
 }
 
+let actieveTab = 'algemeen';
 function zetTab(naam) {
+  actieveTab = naam;
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === naam));
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + naam));
   $('#ruimtebalk').hidden = !['details', 'fotos'].includes(naam);
+  /* ramen en toestellen horen altijd bij een echte ruimte (binnen het beschermd
+     volume): op Details bestaat "Buiten" niet en is altijd een ruimte gekozen */
+  if (naam === 'details' && S && !huidigeRuimte() && S.ruimtes.length) {
+    selectedRuimte = S.ruimtes[0].naam;
+  }
+  if (S) renderRuimtebalk();
   window.scrollTo(0, 0);
 }
 
@@ -557,6 +565,7 @@ const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', 'alu-thermisch': 'Al
 
 $('#btn-voegtoe').addEventListener('click', () => {
   if (!S) return;
+  if (!huidigeRuimte()) { toast('Kies eerst een ruimte bovenaan'); return; }
   const b = num($('#breedte').value), h = num($('#hoogte').value);
   if (!b || !h) { toast('Vul breedte en hoogte in (m)'); return; }
   const aantal = Math.max(1, Math.round(num($('#aantal').value)) || 1);
@@ -605,7 +614,7 @@ function startBewerkRaam(nr) {
   draft.foto = r.foto || null;
   draft.aantal = raamAantal(r);
   /* de ruimtebalk springt mee naar de ruimte van dit raam */
-  selectedRuimte = r.ruimte && S.ruimtes.some(x => x.naam === r.ruimte) ? r.ruimte : '';
+  if (r.ruimte && S.ruimtes.some(x => x.naam === r.ruimte)) selectedRuimte = r.ruimte;
   renderRuimtebalk();
   syncRaamForm();
   $('#breedte').value = fmtM(r.b);
@@ -1063,8 +1072,9 @@ function huidigeRuimte() {
   return S.ruimtes.find(r => r.naam === selectedRuimte) || null;
 }
 
-/* dezelfde ruimtechips in de header en in het camerascherm; '' = Buiten */
-function renderRuimteChips(container, metPlus) {
+/* dezelfde ruimtechips in de header en in het camerascherm; "Buiten" ('' ) bestaat
+   alleen in de foto-context (gevelfoto's), nooit op de Details-tab */
+function renderRuimteChips(container, metPlus, metBuiten) {
   container.innerHTML = '';
   const maak = (v, tekst, extraClass) => {
     const b = document.createElement('button');
@@ -1075,7 +1085,7 @@ function renderRuimteChips(container, metPlus) {
     if (v !== '__plus') b.classList.toggle('on', selectedRuimte === v);
     container.appendChild(b);
   };
-  maak('', 'Buiten');
+  if (metBuiten) maak('', 'Buiten');
   S.ruimtes.forEach(r => maak(r.naam, r.naam));
   if (metPlus) maak('__plus', '+ Ruimte', 'plus');
   /* de actieve chip in beeld houden */
@@ -1084,8 +1094,8 @@ function renderRuimteChips(container, metPlus) {
 }
 
 function renderRuimtebalk() {
-  renderRuimteChips($('#ruimtechips'), true);
-  renderRuimteChips($('#camruimtes'), false);
+  renderRuimteChips($('#ruimtechips'), true, actieveTab !== 'details');
+  renderRuimteChips($('#camruimtes'), false, true);
   syncRuimteAfm();
   const r = huidigeRuimte();
   $('#ruimteregel').hidden = !r;
@@ -1165,7 +1175,7 @@ $('#btn-ruimte-del').addEventListener('click', () => {
   S.ramen.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
   S.energie.opwekkers.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
   S.fotodossier.forEach(x => { if (x.ruimte === r.naam) x.ruimte = ''; });
-  selectedRuimte = '';
+  selectedRuimte = actieveTab === 'details' && S.ruimtes.length ? S.ruimtes[0].naam : '';
   renderRuimtebalk();
   renderRamen();
   renderOpwekkers();

@@ -99,10 +99,16 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 - Groene header met terugknop, titel (adres) en savestamp.
 - Op de tabs **Details** en **Foto's** (en in het camerascherm) staat in de header de
   **ruimtebalk**: één horizontaal scrollbare rij chips
-  `Buiten · Living · Keuken · Badkamer · WC · Berging · Slaapkamer 1 · + Ruimte`.
-- **"Buiten"** = geen specifieke ruimte (default; gevelfoto's e.d.).
+  `Living · Keuken · Badkamer · WC · Berging · Slaapkamer 1 · + Ruimte`.
+- Ruimtes zijn altijd ruimtes **binnen het beschermd volume**. Ramen en
+  verwarmingstoestellen horen dus altijd bij een echte ruimte; op de Details-tab is
+  er **geen "Buiten"-optie** en is altijd een ruimte geselecteerd (bij het openen
+  automatisch de eerste).
+- Alleen in de **foto-context** (Foto's-tab en camerascherm) staat vooraan een extra
+  chip **"Buiten"**: gevel- en dakfoto's neem je buiten en horen bij geen enkele
+  ruimte. "Buiten" is daar ook het bijschrift in de PDF.
 - De gekozen ruimte geldt als label voor **alles wat je daarna toevoegt** (ramen,
-  toestellen, dossierfoto's), op elke tab, tot je een andere kiest.
+  toestellen, dossierfoto's), tot je een andere kiest.
 - **"+ Ruimte"** opent sneltoetsen (Slaapkamer, Badkamer, WC, Bureau, Garage, Zolder,
   Kelder, Veranda, "Andere naam…"). Bestaande naam ⇒ **autonummering**
   (Slaapkamer → Slaapkamer 2, 3, …). Nieuwe ruimte is meteen geselecteerd.
@@ -126,7 +132,7 @@ Het effectief invoeren in de certificatiesoftware gebeurt later, uitsluitend op 
 
 ### 4.4 Tab Details (per gekozen ruimte)
 
-- Bovenaan (alleen bij een echte ruimte, niet bij Buiten): **Afmetingen ruimte (m)**
+- Bovenaan: **Afmetingen ruimte (m)**
   breed × diep × hoog met live m³ — één keer per ruimte, hoeveel toestellen er ook
   hangen — en een **opmerkingveld** (bv. "recht achterboven in de hoek", om rare
   indelingen later te kunnen staven).
