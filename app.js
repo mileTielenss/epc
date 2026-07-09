@@ -226,13 +226,16 @@ function normaliseer(p) {
 let S = null;            /* actieve woning, null = lijstscherm */
 let dirty = false;
 let bewaarTimer = null;  /* debounce 500 ms */
-let bewaarBeurt = 0;     /* generatieteller: wijziging tijdens een write blijft dirty */
+let wijzigStand = 0;     /* generatieteller: een wijziging tijdens een lopende
+                            write blijft dirty (IDB kloont bij put, dus die
+                            wijziging zit niet in de weggeschreven kopie) */
 let retryTimer = null;   /* rode balk: retry elke 5 s */
 let volgTeller = 0;      /* volgorde voor nieuwe dossierfoto's */
 
 function wijzig() {
   if (!S) return;
   dirty = true;
+  wijzigStand++;
   clearTimeout(bewaarTimer);
   bewaarTimer = setTimeout(bewaar, 500);
 }
@@ -240,11 +243,11 @@ function wijzig() {
 async function bewaar() {
   if (!S || !dirty) return;
   clearTimeout(bewaarTimer);
-  const beurt = ++bewaarBeurt;
+  const stand = wijzigStand;
   S.gewijzigd = nu();
   try {
     await DB.putWoning(S);
-    if (beurt === bewaarBeurt) dirty = false;
+    if (stand === wijzigStand) dirty = false;
     wisRodeBalk();
     stopRetry();
     toonBolletje();

@@ -328,9 +328,22 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
 - `confirm()` en `prompt()` blijven, behalve bij foto's (undo).
 - Netwerk: uitsluitend Nominatim, uitsluitend op een tik.
 ## 11. Testen
-- **Playwright op WebKit** (niet Chromium), iPhone-viewport ~393×852, camera met
-  `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream` +
-  context-permissie `camera`. WebKit ≠ mobile Safari.
+De volledige suite staat in `tests/` (eigen `package.json`; enkel test-tooling,
+de app zelf blijft dependency-vrij). Draaien vanuit `tests/`: `npm install`,
+dan `npm run unit`, `npm run flows`, `npm run camera` en `npm run dekking`.
+- **100% regeldekking, afgedwongen**: `node tests/dekking.mjs` meet de
+  V8-regeldekking van `app.js`, `db.js`, `maakpdf.js`, `pdfworker.js` en `sw.js`
+  (Node-dekking voor generator/worker/SW, Chromium-dekking voor app en db —
+  WebKit heeft geen coverage-API) en **faalt onder de 100%**. Elke fout- en
+  fallbacktak wordt daarvoor met mocks aangeraakt: share-weigeringen,
+  workerfouten, quota, geblokkeerde en te nieuwe databanken, camera- en
+  EXIF-fallbacks, afgebroken transacties.
+- **Playwright op WebKit** (niet Chromium) voor de gedragsflows, iPhone-viewport
+  ~393×852; camera met `--use-fake-ui-for-media-stream
+  --use-fake-device-for-media-stream` + context-permissie `camera` — die vlaggen
+  bestaan enkel in Chromium, dus de cameraflows draaien daar. WebKit ≠ mobile
+  Safari. WebKit op Linux bewaart geen Blobs in IndexedDB in een tijdelijk
+  profiel: de flows gebruiken een persistent profiel per test.
 - **Handmatige checklist op de iPhone 15 Pro per release**: `navigator.share`, het
   gebaarprobleem, cameratoegang, torch, EXIF-oriëntatie van een liggende
   bibliotheekfoto. Niets daarvan is geautomatiseerd testbaar.

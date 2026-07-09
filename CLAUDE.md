@@ -27,13 +27,16 @@ daarin is **bewust gekozen** door de gebruiker. Daarom:
   kent geen versie.
 - Destructieve acties gebruiken `confirm()`/`prompt()`, **behalve foto's**: die
   krijgen een undo-toast van 6 s (SPEC.md §1).
-- Testen vóór elke push (SPEC.md §11):
+- Testen vóór elke push (SPEC.md §11) — de suite staat in `tests/`:
   - `node --check` op `app.js`, `db.js`, `maakpdf.js`, `pdfworker.js`, `sw.js`.
-  - Unit-tests van `maakpdf.js` in Node (AFM-waarden, DeviceGray, progressive-fout).
+  - `npm run unit` (maakpdf/pdfworker/sw in Node), `npm run flows` (WebKit),
+    `npm run camera` (Chromium) en `npm run dekking` — die laatste **eist 100%
+    regeldekking** op de vijf app-bestanden en faalt eronder. Nieuwe code zonder
+    bijbehorende test haalt de release dus niet.
   - Playwright-klikflows op iPhone-viewport (393×852), bij voorkeur WebKit
     (WebKit ≠ mobile Safari); camera met
-    `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`.
-    Na `page.fill` is de tabbalk verborgen: eerst blurren.
+    `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`
+    (Chromium-vlaggen). Na `page.fill` is de tabbalk verborgen: eerst blurren.
   - PDF valideren: `qpdf --check`, dan pypdf (tekst, paginaformaten), dan
     `pdftoppm` op drie pagina's.
   - Failsafes: geïnjecteerde `QuotaExceededError` → rode balk; verwijderen

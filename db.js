@@ -73,7 +73,8 @@ const DB = (() => {
       let t;
       try { t = transactie(stores, 'readwrite'); } catch (e) { meldFout(e); rej(e); return; }
       t.oncomplete = () => res();
-      t.onerror = () => { meldFout(t.error); rej(t.error); };
+      /* bij een request-fout is t.error hier vaak nog null: de echte fout zit op de request */
+      t.onerror = e => { const fout = (e.target && e.target.error) || t.error; meldFout(fout); rej(fout); };
       t.onabort = () => { meldFout(t.error); rej(t.error); };
       try { fn(t, null); } catch (e) { try { t.abort(); } catch (x) { } meldFout(e); rej(e); }
     });
@@ -85,7 +86,7 @@ const DB = (() => {
       const t = db.transaction(store, 'readonly');
       const r = fn(t.objectStore(store), null);
       t.oncomplete = () => res(r && 'result' in r ? r.result : undefined);
-      t.onerror = () => rej(t.error);
+      t.onerror = e => rej((e.target && e.target.error) || t.error);
       t.onabort = () => rej(t.error);
     });
   }
