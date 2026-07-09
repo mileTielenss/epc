@@ -77,11 +77,6 @@ function wisRodeBalk() {
   $('#foutbalk').hidden = true;
 }
 
-function zetGeleBalk(tekst) {
-  $('#opslagbalk').textContent = tekst;
-  $('#opslagbalk').hidden = false;
-}
-
 /* ============================== woningmodel ============================== */
 
 const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch', 'mechanisch-permanent', 'ander'];
@@ -1961,22 +1956,11 @@ function syncAlles() {
     zetRodeBalk(`NIET OPGESLAGEN — databank niet beschikbaar (${(e && e.name) || 'fout'})`);
   }
 
-  /* opslag: persist() aanvragen en estimate() controleren, in een try (§6) */
+  /* persistente opslag aanvragen tegen eviction, in een try (§6); geen banner:
+     echte quotaproblemen melden zich via de rode balk bij een gefaalde write */
   try {
-    let persisted = null;
-    if (navigator.storage && navigator.storage.persist) persisted = await navigator.storage.persist();
-    let est = null;
-    if (navigator.storage && navigator.storage.estimate) est = await navigator.storage.estimate();
-    const mb = b => `${Math.round(b / 1048576)} MB`;
-    const vol = est && est.quota ? est.usage / est.quota : 0;
-    if (persisted === false || vol > 0.8) {
-      const cijfers = est && est.quota ? `${mb(est.usage)} van ${mb(est.quota)} gebruikt. ` : '';
-      zetGeleBalk(
-        (vol > 0.8 ? 'Opslag bijna vol: ' : 'Opslag: ') + cijfers +
-        (persisted === false ? 'Niet persistent: de browser kan gegevens wissen.' : '')
-      );
-    }
-  } catch (e) { /* geen storage-API: geen balk */ }
+    if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+  } catch (e) { /* geen storage-API */ }
 
   await renderLijst();
   toonLijst();

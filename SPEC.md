@@ -24,7 +24,7 @@ Vanilla HTML/CSS/JS. Nul dependencies, geen build-stap.
 |---|---|
 | `index.html` | één pagina, alle views |
 | `app.js` | UI en applicatielogica |
-| `db.js` | IndexedDB: open, migratie, CRUD, blob-URL-cache, foutkanaal |
+| `db.js` | IndexedDB: open, CRUD, blob-URL-cache, foutkanaal |
 | `maakpdf.js` | PDF-generator, `bouwPdf(woning, fotos) → Blob` (was `pdf.js`) |
 | `pdfworker.js` | `new Worker`, importeert `maakpdf.js`, postMessage voortgang |
 | `style.css` | opmaak, CSS-variabelen in `:root` |
@@ -58,7 +58,10 @@ Kleuren: accent `#0a6b3d`, accent-donker `#07522e`, inkt `#101418`, gedempt
   de eigen cache komt en dus bij de draaiende versie hoort) en leest de constante
   eruit. SW-updates gebeuren buiten de fetch-handler om, dus dit blokkeert niets.
 ## 5. Datamodel
-IndexedDB `epc-db`, versie 2.
+IndexedDB `epc-db`, versie 3. Geen upgradepad: `onupgradeneeded` maakt de stores
+aan en maakt een databank van een oudere versie **leeg** (bewuste keuze — clean
+start; records in het oude formaat zijn onbruikbaar en zouden anders
+onverwijderbaar blijven omdat verwijderen een geslaagde PDF vereist).
 | Store | keyPath | Index | Inhoud |
 |---|---|---|---|
 | `woningen` | `id` | — | woningrecord, **zonder beeldbytes** |
@@ -114,19 +117,7 @@ voorgevel, beschermd volume. Die komen uit documenten, plannen of de VEKA-softwa
   Stil corrigeren is verboden.
 - Weesfotosweep bij app-start (op idle, faalt stil): foto's zonder bestaande woning of
   zonder verwijzing.
-### 5.2 Migratie v1 → v2 (eenmalig)
-In `onupgradeneeded`, synchroon:
-1. `fotos`-store + index `woningId`.
-2. Elke dataURL via `atob` → `Uint8Array` → `Blob`, wegschrijven als fotorecord.
-   Afmetingen uit de JPEG-header. `groep` overnemen (`''`→`gevels`,
-   `'__algemeen'`→`algemeen`, naam→`ruimteId`). Veld vervangen door `fotoId`.
-3. `ruimtes` krijgen ids; namen in `ramen` en `opwekkers` → `ruimteId`, geen match →
-   `null` + log in `problemen[]`.
-4. `nr`, `teller*`, `fotodossier`, `status` weg. `pdfBewaardOp = null`, tenzij
-   `status === 'afgewerkt'`, dan `gewijzigd`.
-Zodra het toestel gemigreerd is: deze code én deze paragraaf schrappen, DB naar
-versie 3 zonder upgradepad.
-### 5.3 Blob-URLs
+### 5.2 Blob-URLs
 `db.js` houdt `Map<fotoId, objectURL>`. Lui aanmaken, revoken bij het sluiten van de
 woning en bij `pagehide`. Nooit een objectURL per render.
 ## 6. Failsafes
@@ -142,8 +133,9 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - `QuotaExceededError` → "Opslag vol — bewaar de PDF en verwijder een afgewerkte woning".
 - **Foto's**: verklein → `put` in `fotos` → pas dán `fotoId` in het woningrecord en
   tegel tonen. Faalt de `put`: "Foto niet bewaard", geen dode verwijzing.
-- **Opslag**: bij start `navigator.storage.persist()` en `.estimate()` in een `try`.
-  `persisted === false` of `usage/quota > 0.8` → gele balk met de cijfers.
+- **Opslag**: bij start `navigator.storage.persist()` in een `try`, tegen eviction.
+  Geen opslagbanner: quotaproblemen melden zich via de rode balk zodra een write
+  echt faalt (`QuotaExceededError`).
 - **DB open faalt**: niets wissen. Rode balk + read-only geheugenmodus waarin enkel
   "Bewaar PDF" nog werkt.
 - **Verwijderen**: uitgeschakeld zolang `pdfBewaardOp === null` (knop toont "Bewaar
@@ -160,7 +152,7 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - "+ Nieuwe woning" maakt en opent een record.
 - Geen Info-blok, geen versielabel, geen updateknop.
 ### 7.2 Header (editor)
-- Groene sticky balk: terugpijl `‹`, adres (ellipsis), save-bolletje. Rode/gele balk
+- Groene sticky balk: terugpijl `‹`, adres (ellipsis), save-bolletje. Rode balk
   daarboven.
 - Tabs: Algemeen · Details · Foto's · Afronden.
 - Op **Details** en **Foto's**: ruimtebalk, horizontaal scrollbare chip-rij

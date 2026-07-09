@@ -41,8 +41,8 @@ body{
   background:#4cd97b;box-shadow:0 0 6px #4cd97b;
 }
 
-/* ---------- rode balk (niet opgeslagen) en gele balk (opslag), boven de groene balk ----------
-   de bovenste zichtbare balk draagt de safe-area-inset (notch) */
+/* ---------- rode balk (niet opgeslagen), boven de groene balk ----------
+   als hij zichtbaar is, draagt hij de safe-area-inset (notch) */
 #foutbalk{
   display:flex;align-items:center;gap:10px;
   padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;
@@ -54,13 +54,7 @@ body{
   border:0;border-radius:8px;background:#fff;color:var(--warn);
   min-height:34px;padding:4px 10px;
 }
-#opslagbalk{
-  padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;
-  background:#f5c518;color:#3a3000;font-size:.82rem;font-weight:700;
-}
-#topbar:has(#foutbalk:not([hidden])) #opslagbalk{padding-top:8px}
-#topbar:has(#foutbalk:not([hidden])) .toprij,
-#topbar:has(#opslagbalk:not([hidden])) .toprij{padding-top:8px}
+#topbar:has(#foutbalk:not([hidden])) .toprij{padding-top:8px}
 
 /* ---------- ruimtebalk in de header: op elke tab behalve Algemeen/Afronden ---------- */
 #ruimtebalk{margin-top:8px;padding:0 14px}
