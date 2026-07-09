@@ -27,8 +27,9 @@ daarin is **bewust gekozen** door de gebruiker. Daarom:
 - **Test vóór elke push** met Playwright in de meegeleverde Chromium
   (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`; camera met
   `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`):
-  volledige klikflows op iPhone-viewport (390×844), PDF-inhoud (`bouwPrintDocument()`),
-  en persistentie na een reload. Plus `node --check` op alle JS.
+  volledige klikflows op iPhone-viewport (393×852), persistentie na een reload,
+  en de PDF via `bouwPdf()` gevalideerd met pypdf (paginaformaten, tekst,
+  JPEG-integriteit). Plus `node --check` op alle JS.
 - Verifieer na de deploy dat `https://miletielenss.github.io/epc/sw.js` de nieuwe
   versie serveert.
 - `normaliseer()` vult defaults aan en herstelt tellers; legacy-migraties zijn
