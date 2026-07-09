@@ -1970,9 +1970,10 @@ function syncAlles() {
     const mb = b => `${Math.round(b / 1048576)} MB`;
     const vol = est && est.quota ? est.usage / est.quota : 0;
     if (persisted === false || vol > 0.8) {
+      const cijfers = est && est.quota ? `${mb(est.usage)} van ${mb(est.quota)} gebruikt. ` : '';
       zetGeleBalk(
-        (vol > 0.8 ? `Opslag bijna vol: ${mb(est.usage)} van ${mb(est.quota)} gebruikt. ` : '') +
-        (persisted === false ? 'Opslag is niet persistent: de browser kan gegevens wissen.' : '')
+        (vol > 0.8 ? 'Opslag bijna vol: ' : 'Opslag: ') + cijfers +
+        (persisted === false ? 'Niet persistent: de browser kan gegevens wissen.' : '')
       );
     }
   } catch (e) { /* geen storage-API: geen balk */ }
