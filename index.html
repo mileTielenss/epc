@@ -17,10 +17,15 @@
 <body>
 
 <header id="topbar">
+  <div id="foutbalk" hidden>
+    <span id="foutbalk-tekst"></span>
+    <button type="button" id="btn-noodpdf">Bewaar PDF nu</button>
+  </div>
+  <div id="opslagbalk" hidden></div>
   <div class="toprij">
     <button type="button" id="btn-terug" hidden aria-label="Terug naar woningen">&#8249;</button>
     <h1 id="titel">EPC Plaatsbezoek</h1>
-    <span id="savestamp"></span>
+    <span id="bolletje" hidden aria-label="Opgeslagen"></span>
   </div>
   <div id="ruimtebalk" hidden>
     <div class="chips" id="ruimtechips"></div>
@@ -44,15 +49,6 @@
   <h2>Woningen</h2>
   <ul id="woninglijst" class="lijst"></ul>
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
-
-  <details id="uitleg">
-    <summary>Info</summary>
-    <p><b>Hoe wordt alles bewaard?</b> De app bewaart alles automatisch <b>elke 3 seconden op dit toestel</b>, ook zonder internet. Rechtsboven zie je telkens "opgeslagen" met het tijdstip. Je kan dagen later terugkomen en gewoon verder werken.</p>
-    <p><b>Werkwijze:</b> gegevens verzamelen tijdens het plaatsbezoek, klaar? Bewaar de PDF via <b>Afronden</b> — dat is het blijvende dossier — en verwijder daarna de woning.</p>
-    <p><b>Let op:</b> je data verdwijnt alleen als je de app van je beginscherm verwijdert of Safari-websitedata wist. Doe dat dus nooit zolang er woningen in de app staan.</p>
-    <p><b>Camera werkt niet?</b> Zet op je iPhone Instellingen &#9656; Apps &#9656; Safari &#9656; Camera op "Vraag" of "Sta toe" en herstart de app.</p>
-    <div id="versierij"><span id="versie"></span><button type="button" id="btn-update">Zoek update</button></div>
-  </details>
 </section>
 
 <main id="app" hidden>
@@ -122,7 +118,7 @@
   </div>
   <ul id="pvlijst" class="lijst"></ul>
 
-  <button type="button" class="cycle" id="cy-zonneboiler"><span class="cl">Zonneboiler</span><span class="cv">&mdash;</span><span class="ci">&#10227;</span></button>
+  <button type="button" class="cycle" id="cy-zonneboiler"><span class="cl">Zonneboiler</span><span class="cv">Nee</span><span class="ci">&#10227;</span></button>
   <label class="fld" id="fld-zbm2" hidden>
     <span class="lbl">Oppervlakte zonnecollector (m&sup2;)</span>
     <input type="text" id="zb-m2" inputmode="decimal" placeholder="bv. 4,6">
@@ -245,6 +241,7 @@
     <span class="lbl">Opmerking bij deze ruimte</span>
     <input type="text" id="ruimte-opm" placeholder="bv. recht achterboven in de hoek">
   </label>
+  <button type="button" class="btn sec big" id="btn-ruimte-weg" hidden>Ruimte verwijderen</button>
 </div>
 
 </section>
@@ -277,13 +274,16 @@
   <div id="dossiergrid" class="fotogrid"></div>
 </section>
 
-<!-- ======================= TAB 5: EXPORT ======================= -->
-<section class="tab" id="tab-export">
+<!-- ======================= TAB 4: AFRONDEN ======================= -->
+<section class="tab" id="tab-afronden">
   <div class="fld">
     <span class="lbl">Controle (informatief, geen verplichting)</span>
     <ul id="checklijst" class="lijst"></ul>
   </div>
   <button type="button" class="btn big" id="btn-print">&#128190; Bewaar PDF</button>
+  <button type="button" class="btn big" id="btn-deel" hidden>Deel PDF</button>
+  <progress id="pdf-voortgang" max="1" value="0" hidden></progress>
+  <div id="pdf-bewaard" class="totaal grijs" hidden></div>
   <button type="button" class="btn sec big" id="btn-sluiten">Woning sluiten</button>
   <button type="button" class="btn danger big" id="btn-verwijder-woning">Woning verwijderen</button>
 </section>
@@ -294,7 +294,7 @@
   <button type="button" class="on" data-tab="algemeen"><span class="ic">&#127968;</span>Algemeen</button>
   <button type="button" data-tab="details"><span class="ic">&#128203;</span>Details</button>
   <button type="button" data-tab="fotos"><span class="ic">&#128247;</span>Foto's</button>
-  <button type="button" data-tab="export"><span class="ic">&#9989;</span>Afronden</button>
+  <button type="button" data-tab="afronden"><span class="ic">&#9989;</span>Afronden</button>
 </nav>
 
 <div id="verplaats" hidden>
@@ -319,11 +319,16 @@
 </div>
 
 <div id="toast" hidden></div>
+<div id="undotoast" hidden>
+  <span>Foto verwijderd</span>
+  <button type="button" id="btn-undo">Herstel</button>
+</div>
 <input type="file" id="fotoinput" accept="image/*" capture="environment" hidden>
 <input type="file" id="dossierinput" accept="image/*" multiple hidden>
 <div id="lightbox" hidden><img alt="foto vergroot"></div>
 
-<script src="pdf.js"></script>
+<script src="maakpdf.js"></script>
+<script src="db.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

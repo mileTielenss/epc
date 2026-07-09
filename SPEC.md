@@ -1,423 +1,364 @@
 # SPEC — EPC Plaatsbezoek
-
-**Dit bestand is de bron van waarheid**, integraal afgeleid uit de code (v41).
-Een nieuwe ontwikkelaar (of Claude) moet uit dit document alléén exact dezelfde
-app kunnen herbouwen. Wijzigingen aan de app beginnen in dit bestand; code die
-afwijkt van deze spec is een bug.
-
----
-
-## 1. Wat is dit
-
-Een **mobile-first offline webapp** waarmee één energiedeskundige type A
-(Vlaanderen) tijdens een EPC-plaatsbezoek alle gegevens en foto's verzamelt.
-De workflow is bewust minimaal:
-
-1. Nieuwe woning starten; al wandelend per ruimte gegevens en foto's invoeren.
-2. Dagen later mag alles nog aangevuld worden (alles staat lokaal op het toestel).
-3. Op het einde: **"Bewaar PDF"** — de app genereert zelf een PDF-bestand, dat is
-   het blijvende dossier (bewijs voor het projectdossier, 10 jaar bewaarplicht).
-4. Daarna wordt de woning uit de app verwijderd.
-
-Er is **geen backup, export of import**. De PDF is het archief. Het invoeren in
-de certificatiesoftware gebeurt later, uitsluitend op basis van de PDF.
-
-**Taal: alles Nederlands** — UI, code-commentaar, commits, deze spec.
-
+Bron van waarheid. Code die afwijkt is een bug. Wijzigingen beginnen hier.
+Geen versienummers of regelaantallen in dit bestand.
+## 1. Doel
+Mobile-first offline PWA voor één energiedeskundige type A (Vlaanderen), op één
+iPhone. Verzamelt tijdens het plaatsbezoek gegevens en foto's per ruimte.
+- Nieuwe woning starten, al wandelend invullen. Dagen later aanvullen kan.
+- Op het einde "Bewaar PDF". Die PDF is het dossier (10 jaar bewaarplicht).
+- Na oplevering wordt de woning verwijderd. Verwijderen kan pas ná een geslaagde PDF.
+- Geen backup, export of import. Geen JSON in de PDF: invoer in de VEKA-software
+  gebeurt manueel, door een mens, op basis van de PDF.
+- Eén gebruiker: geen accounts, geen instellingen, geen hulpteksten, geen updateknop.
+- Alles Nederlands: UI, commentaar, commits, spec.
 ### UI-principes
-
-- Zo weinig mogelijk knoppen en kliks; vlot van ruimte naar ruimte wandelen.
-- Elke deskundige moet de app zonder uitleg begrijpen.
-- Elk onderdeel mag leeg blijven (ruimte zonder ramen, geen verwarming, ...).
-- **Elke verwijderactie vraagt bevestiging** via `confirm()` — ook foto's.
-- Afmetingen in **meter met komma-decimalen** (zoals een digitale lasermeter,
-  bv. `1,335`); m² en m³ rekenen live mee tijdens het typen.
-- Staand vergrendeld waar de browser dat toelaat (`screen.orientation.lock`).
-- Tijdens het typen (focus op input/textarea) verdwijnt de onderste tabbalk
-  (klasse `toets`), zodat hij niet meespringt met het iOS-toetsenbord;
-  bij focusout (na 60 ms controle) komt hij terug.
-
----
-
-## 2. Techstack en bestanden
-
-**Vanilla HTML/CSS/JS. Nul dependencies, geen build-stap, geen framework.**
-
+- Minimum aan kliks. Elke sectie mag leeg blijven.
+- Meter met komma-decimalen (`1,335`); m² en m³ rekenen live mee tijdens typen.
+- Destructief = `confirm()`, behalve foto's: die krijgen een undo-toast van 6 s
+  (blob wordt pas gewist als de toast verloopt).
+- Bij focus op input/textarea verdwijnt de tabbalk (klasse `toets`); bij focusout na
+  60 ms controle komt hij terug.
+## 2. Bestanden
+Vanilla HTML/CSS/JS. Nul dependencies, geen build-stap.
 | Bestand | Rol |
 |---|---|
-| `index.html` | één pagina: alle views/secties, `<script src="pdf.js">` dan `app.js` |
-| `app.js` | alle applicatielogica (~1.100 regels); begint met `const APP_VERSIE = 'epc-vNN'` |
-| `pdf.js` | zelfstandige PDF-generator (~420 regels), functie `bouwPdf(S) → Promise<Blob>` |
-| `style.css` | alle opmaak; CSS-variabelen in `:root` |
-| `sw.js` | service worker; `const CACHE = 'epc-vNN'` (zelfde NN als APP_VERSIE) |
-| `manifest.json` | PWA-manifest (naam "EPC Plaatsbezoek", standalone, portrait, thema `#0a6b3d`) |
-| `icon-180/192/512.png` | iconen; regenereerbaar met `node tools/make-icons.js` |
-| `.github/workflows/deploy.yml` | GitHub Pages deploy bij push naar `main` |
-| `SPEC.md`, `CLAUDE.md` | deze spec + werkafspraken voor AI-sessies |
-
-Kleuren (`:root`): accent `#0a6b3d` (donkergroen), accent-donker `#07522e`,
-inkt `#101418`, gedempt `#5a6570`, achtergrond `#eef1f3`, kaart `#ffffff`,
-lijn `#c9d1d8`, waarschuwing `#b3261e`. Basisfont: systeemfont
-(`-apple-system, ...`), `html{font-size:14px}`.
-
----
-
-## 3. Hosting, deploy en versiebeheer
-
-- **GitHub Pages** op `https://miletielenss.github.io/epc/`, repo `mileTielenss/epc`.
-- Workflow: push naar `main` → upload-pages-artifact → deploy-pages
-  (aparte build/deploy-jobs, `concurrency: pages` zonder cancel).
-- Er wordt **direct op `main`** gewerkt. Branch `v1` is een historisch
-  checkpoint — nooit op verderbouwen.
-- **Release = beide versies samen bumpen**: `CACHE` in `sw.js` én `APP_VERSIE`
-  in `app.js` (zelfde `epc-vNN`-waarde), anders blijft het zelfherstel herladen.
-- Na deploy controleren dat `https://miletielenss.github.io/epc/sw.js` de
-  nieuwe versie serveert.
-
----
-
-## 4. Offline, service worker en updates
-
-- **PWA**: op het iPhone-beginscherm gezet werkt de app volledig offline.
-- `sw.js` cachet bij install alle assets (`./`, index, css, app.js, pdf.js,
-  manifest, iconen) in cache `epc-vNN`, doet `skipWaiting`; bij activate worden
-  alle andere caches verwijderd + `clients.claim()`.
-- **Fetch-strategie**: cache-first, maar **uitsluitend uit de eigen cache**
-  (`caches.open(CACHE).match(...)`, `ignoreSearch: true`) — een nieuwe SW mag
-  nooit bestanden van een oude versie serveren. Cache-miss → netwerk; gelukte
-  same-origin-responses worden bijgecachet. Offline navigatie valt terug op
-  `./index.html` uit de eigen cache.
-- **Berichten**: SW beantwoordt `'versie'` met `{versie: CACHE}` en `'skip'`
-  met `skipWaiting()`.
-- **App-kant** (init): registratie met `updateViaCache:'none'`; `reg.update()`
-  bij start en bij elke terugkeer (visibilitychange). Bij `controllerchange`:
-  eerst `bewaar()` indien nodig, dan `location.reload()` — behalve bij de
-  allereerste installatie.
-- **Zelfherstel**: meldt de SW een andere versie dan `APP_VERSIE`, dan draait
-  de pagina op verouderde bestanden → eenmalige `location.reload()`
-  (sessionStorage-vlag `herlaadpoging` voorkomt lussen; vlag wordt gewist
-  zodra versies kloppen).
-- **Handmatig**: knop "Zoek update" (in het Info-blok) doet `reg.update()` met
-  guard tegen dubbelklikken; feedback via toast ("Je hebt al de nieuwste
-  versie" / "Update gevonden, app herlaadt zo…"); een wachtende SW krijgt
-  `'skip'`. Het versielabel toont de écht draaiende versie (via SW-message).
-
----
-
-## 5. Opslag en datamodel
-
-- **IndexedDB** `epc-db`, versie 1, stores: `woningen` (keyPath `id`) en
-  `instellingen` (ongebruikt maar aanwezig in het schema).
-- `navigator.storage.persist()` wordt bij start gevraagd (tegen eviction).
-- **Autosave**: dirty-vlag + interval elke 3 s, plus bij `pagehide` en bij
-  `visibilitychange` (verbergen). Savestamp rechtsboven: twee regels
-  "opgeslagen" / "HH:MM:SS".
-- Data verdwijnt alleen als de gebruiker de app van het beginscherm verwijdert
-  of Safari-websitedata wist (staat zo in het Info-blok).
-
-### Woningrecord
-
+| `index.html` | één pagina, alle views |
+| `app.js` | UI en applicatielogica |
+| `db.js` | IndexedDB: open, migratie, CRUD, blob-URL-cache, foutkanaal |
+| `maakpdf.js` | PDF-generator, `bouwPdf(woning, fotos) → Blob` (was `pdf.js`) |
+| `pdfworker.js` | `new Worker`, importeert `maakpdf.js`, postMessage voortgang |
+| `style.css` | opmaak, CSS-variabelen in `:root` |
+| `sw.js` | service worker, **enige** versieconstante `const VERSIE = 'epc-vNN'` |
+| `manifest.json` | "EPC Plaatsbezoek", standalone, portrait, `#0a6b3d` |
+| `icon-180/192/512.png` | `node tools/make-icons.js` |
+| `.github/workflows/deploy.yml` | Pages-deploy bij push naar `main` |
+`maakpdf.js` importeert niets. Input: woningobject +
+`Map<fotoId, {bytes:Uint8Array, breedte, hoogte, groep, volgorde}>` (groep en
+volgorde omdat het woningrecord geen fotolijst heeft, §5). Los testbaar in Node.
+Kleuren: accent `#0a6b3d`, accent-donker `#07522e`, inkt `#101418`, gedempt
+`#5a6570`, achtergrond `#eef1f3`, kaart `#ffffff`, lijn `#c9d1d8`, waarschuwing
+`#b3261e`. Systeemfont, `html{font-size:14px}`.
+## 3. Deploy
+- GitHub Pages, `https://miletielenss.github.io/epc/`, repo `mileTielenss/epc`.
+- Push naar `main` → upload-pages-artifact → deploy-pages. Direct op `main` werken.
+- Eén versieconstante: `VERSIE` in `sw.js`. `app.js` kent geen versie.
+## 4. Service worker
+- Install: cachet alle assets in cache `VERSIE`. **Geen `skipWaiting()`.**
+- Activate: verwijdert alle andere caches, dan `clients.claim()`.
+- Fetch: cache-first, **uitsluitend uit de eigen cache**
+  (`caches.open(VERSIE).match(req, {ignoreSearch:true})`). Miss → netwerk, gelukte
+  same-origin-responses bijcachen. Offline navigatie → `./index.html` uit eigen cache.
+- Geen `message`-handler.
+- App-kant: `register(..., {updateViaCache:'none'})`, `reg.update()` bij start en bij
+  visibilitychange. Verder niets.
+- De nieuwe versie draait zodra de app uit de app-switcher geveegd en heropend wordt.
+  Geen `controllerchange`-reload: een reload middenin een camerasessie is dataverlies.
+- `VERSIE` wordt doorgegeven aan de generator en komt in `/Producer` van de PDF.
+  `sw.js` staat daarvoor mee in de asset-cache: de app fetcht `./sw.js` (die uit
+  de eigen cache komt en dus bij de draaiende versie hoort) en leest de constante
+  eruit. SW-updates gebeuren buiten de fetch-handler om, dus dit blokkeert niets.
+## 5. Datamodel
+IndexedDB `epc-db`, versie 2.
+| Store | keyPath | Index | Inhoud |
+|---|---|---|---|
+| `woningen` | `id` | — | woningrecord, **zonder beeldbytes** |
+| `fotos` | `id` | `woningId` | `{id, woningId, blob, breedte, hoogte, groep, volgorde, gemaakt}` |
+- Geen `instellingen`-store.
+- Foto's zijn Blobs, geen dataURLs. Een woningrecord is enkele kB; een foto wordt één
+  keer geschreven, bij de opname.
+- `groep` = `'gevels' | 'algemeen' | ruimteId`. De fotostore is de enige waarheid over
+  foto's; het woningrecord heeft geen `fotodossier`-array.
+- Foto's die aan een element hangen (raam-afstandhouder, kenplaat, kranen) staan in
+  dezelfde store maar met `groep: null`: ze horen niet bij het dossier en worden enkel
+  via hun `fotoId` bereikt.
+- Ids overal, nooit namen. Geen `nr`/`teller`-velden: volgnummers worden afgeleid uit
+  de sorteervolgorde (§7.4), zodat lijst en PDF niet kunnen verschillen.
 ```
-{
+woning = {
   id: base36-timestamp + '-' + random5,
-  status: 'open' | 'afgewerkt',
-  gemaakt, gewijzigd: ISO-strings,
-  algemeen: { adres, foto (hoofdfoto dataURL|null), datum (YYYY-MM-DD,
-              default vandaag), notities },
-  ruimtes: [ { naam, vent: 'geen'|'natuurlijk'|'mechanisch'|
-               'mechanisch-permanent'|'ander', ventBeschrijving, opm,
-               afm: {b,d,h} in meter | null } ],
-  ramen: [ { nr, ruimte (naam), element: 'raam'|'deur'|'dakraam',
-             gevel: 'voor'|'achter'|'links'|'rechts', b, h (meter),
+  gemaakt, gewijzigd,          // ISO
+  pdfBewaardOp: ISO | null,    // enige statusbron
+  algemeen: { adres, datum (YYYY-MM-DD, default vandaag), notities,
+              hoofdFotoId | null },   // moet een foto met groep 'gevels' zijn
+  ruimtes: [ { id, naam,
+               vent: 'geen'|'natuurlijk'|'mechanisch'|'mechanisch-permanent'|'ander',
+               ventBeschrijving, opm,
+               afm: {b,d,h} | null } ],   // enkel bij eigen toestel, zie §7.4
+  ramen: [ { id, ruimteId,
+             element: 'raam'|'deur'|'dakraam',
+             gevel: 'voor'|'achter'|'links'|'rechts',
+             b, h, aantal (>=1),
              beglazing: 'enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel',
-             kader: 'pvc'|'alu'|'hout', rolluik (bool), aantal (>=1),
-             foto (dataURL|null) } ],
+             kader: 'pvc'|'alu'|'hout', rolluik (bool),
+             fotoId | null } ],
   energie: {
-    opwekkers: [ { nr, type: 'gas'|'stookolie'|'andere' (centraal, ruimte='')
-                   | 'airco'|'kachel'|'ruimte-andere' (ruimtegebonden),
-                   ruimte, functie: ['radiatoren'|'vloer'|'sww'],
-                   beschrijving, foto (kenplaat), fotoKraan } ],
-    pvPanelen: [ { orientatie: 'plat'|'voor'|'achter'|'links'|'rechts'|'', wp } ],
-    zonneboiler: 'nee'|'ja', zonneboilerM2: string },
-  fotodossier: [ { nr, ruimte ('' = Gevels, '__algemeen' = Algemeen, of
-                   ruimtenaam), foto } ],
-  teller, tellerOpwek, tellerDossier: hoogste uitgereikte nrs
+    opwekkers: [ { id,
+                   type: 'gas'|'stookolie'|'andere'         // centraal, ruimteId=null
+                       | 'airco'|'kachel'|'ruimte-andere',  // ruimtegebonden
+                   ruimteId | null,
+                   functie: ['radiatoren'|'vloer'|'sww'],
+                   beschrijving, fotoId, fotoKraanId } ],
+    pvPanelen: [ { id, orientatie: 'plat'|'voor'|'achter'|'links'|'rechts'|'', wp } ],
+    zonneboiler: 'nee'|'ja', zonneboilerM2
+  }
 }
 ```
-
-- Nieuwe woning start met ruimtes **Living, Keuken, Badkamer, WC, Slaapkamer 1**.
-- `normaliseer()` (bij elke load) vult ontbrekende velden met defaults,
-  valideert enums, herstelt tellers/ontbrekende nrs en groepeert de ruimtes.
-  **Geen legacy-migraties** — pas toevoegen als een modelwijziging échte data
-  in omloop raakt.
-- Bouwjaar, gebouwtype, kelder, zolder worden **bewust niet** ingevoerd:
-  dat komt uit documenten of staat op de foto's.
-
----
-
-## 6. UI-bouwstenen (overal hergebruikt)
-
-- **Roterende knop** (`cycleInit`): volle-breedte knop met label links, vette
-  waarde rechts, draai-icoon ⟳; elke tik = volgende optie (cyclisch); lege
-  waarde toont gedimde "—". Mini-variant (`.cycle.mini`): drie naast elkaar,
-  label boven waarde, icoontje in de hoek.
-- **Segmented rij** (`segInit`): directe keuze-knoppen naast elkaar; alleen
-  voor element (Raam/Deur/Dakraam) en gevel (Voor/Achter/Links/Rechts) omdat
-  je die bij elk raam wisselt.
-- **Chips** (`chipsInit`): meerkeuze (alleen de verwarmingsfuncties).
-- **Accordeonsecties** (`<details class="sectie">`): kaart met samenvattings-
-  balk (▸ die meedraait); per tab is er **maximaal één open** — openen sluit
-  de broertjes (toggle-listener).
-- **Lijstitems**: kaartjes met 1–3 tekstregels, mini-thumb (40px, tik =
-  lightbox), ×-verwijderknop; **tik op de rij = bewerken** (formulier vult
-  zich, knop wordt "Bewaar wijziging", annuleerknop verschijnt, rij krijgt
-  groene rand `bewerk`, de ruimtebalk springt mee naar de ruimte van het item).
-- **Toast**: zwart meldingsblokje onderaan, 1,8 s.
-- **Lightbox**: elke `img.thumb` opent fullscreen op tik; tik sluit.
-- Verwijder-knoppen bij foto-thumbs: ronde rode `thumbdel`-knop.
-
----
-
+Nieuwe woning start met Living, Keuken, Badkamer, WC, Slaapkamer 1.
+Bewust niet ingevoerd: bouwjaar, gebouwtype, kelder, zolder, oriëntatie van de
+voorgevel, beschermd volume. Die komen uit documenten, plannen of de VEKA-software.
+### 5.1 `normaliseer()` bij elke load
+- Ontbrekende velden → defaults. Enum buiten de set → default.
+- Dode `ruimteId`/`fotoId` → `null`, item blijft bestaan.
+- `hoofdFotoId` dat geen `gevels`-foto meer is → `null`.
+- Elke correctie in `woning.problemen[]`, één toast "N gegevens hersteld".
+  Stil corrigeren is verboden.
+- Weesfotosweep bij app-start (op idle, faalt stil): foto's zonder bestaande woning of
+  zonder verwijzing.
+### 5.2 Migratie v1 → v2 (eenmalig)
+In `onupgradeneeded`, synchroon:
+1. `fotos`-store + index `woningId`.
+2. Elke dataURL via `atob` → `Uint8Array` → `Blob`, wegschrijven als fotorecord.
+   Afmetingen uit de JPEG-header. `groep` overnemen (`''`→`gevels`,
+   `'__algemeen'`→`algemeen`, naam→`ruimteId`). Veld vervangen door `fotoId`.
+3. `ruimtes` krijgen ids; namen in `ramen` en `opwekkers` → `ruimteId`, geen match →
+   `null` + log in `problemen[]`.
+4. `nr`, `teller*`, `fotodossier`, `status` weg. `pdfBewaardOp = null`, tenzij
+   `status === 'afgewerkt'`, dan `gewijzigd`.
+Zodra het toestel gemigreerd is: deze code én deze paragraaf schrappen, DB naar
+versie 3 zonder upgradepad.
+### 5.3 Blob-URLs
+`db.js` houdt `Map<fotoId, objectURL>`. Lui aanmaken, revoken bij het sluiten van de
+woning en bij `pagehide`. Nooit een objectURL per render.
+## 6. Failsafes
+De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
+- **Autosave**: dirty-vlag + debounce 500 ms, plus `pagehide` en `visibilitychange`
+  (verborgen). Geen interval. `{durability:'strict'}` in een `try`.
+- Geslaagd = `tx.oncomplete`, niet `request.onsuccess`.
+- **Succes**: geen ruis, alleen een groen bolletje van 400 ms rechtsboven.
+- **Falen**: permanente rode balk "NIET OPGESLAGEN — <foutnaam>". Dirty-vlag blijft,
+  retry elke 5 s, balk verdwijnt enkel bij een geslaagde write. De oude savestamp
+  toonde altijd "opgeslagen", ook wanneer het niet zo was.
+- De rode balk bevat één knop: **"Bewaar PDF nu"** (noodklep, werkt op het geheugen).
+- `QuotaExceededError` → "Opslag vol — bewaar de PDF en verwijder een afgewerkte woning".
+- **Foto's**: verklein → `put` in `fotos` → pas dán `fotoId` in het woningrecord en
+  tegel tonen. Faalt de `put`: "Foto niet bewaard", geen dode verwijzing.
+- **Opslag**: bij start `navigator.storage.persist()` en `.estimate()` in een `try`.
+  `persisted === false` of `usage/quota > 0.8` → gele balk met de cijfers.
+- **DB open faalt**: niets wissen. Rode balk + read-only geheugenmodus waarin enkel
+  "Bewaar PDF" nog werkt.
+- **Verwijderen**: uitgeschakeld zolang `pdfBewaardOp === null` (knop toont "Bewaar
+  eerst de PDF"). Anders confirm met datum en uur. Wist woning + alle `fotos` met die
+  `woningId` in één transactie.
+- `pdfBewaardOp` wordt enkel gezet nadat `share()` of de download **resolved** heeft.
+  `AbortError` zet niets.
 ## 7. Schermen
-
-### 7.1 Woningenlijst (startscherm)
-
-- Titelbalk "EPC Plaatsbezoek". Lijst gesorteerd op **laatst gewijzigd eerst**;
-  per rij: hoofdfoto-thumb (indien aanwezig), adres ("Zonder adres"),
-  datum, statusknop **Open/Af** (pill; toggle, bewaart meteen) en × (confirm).
-  Leeg: gestippelde placeholder "Nog geen woningen...".
-- "+ Nieuwe woning" maakt en opent direct een nieuw record.
-- Onderaan (naar de schermvoet geduwd via flex + `margin-top:auto`): subtiel
-  gecentreerd grijs **"Info"** (details zonder marker/icoon) met daarin:
-  hoe alles bewaard wordt, de werkwijze, de waarschuwing (app nooit
-  verwijderen zolang er woningen in staan), de cameratip
-  (Instellingen ▸ Apps ▸ Safari ▸ Camera → "Vraag"/"Sta toe") en de
-  **versieregel** ("Versie vNN" + knop "Zoek update").
-
+### 7.1 Woningenlijst
+- Titelbalk "EPC Plaatsbezoek". Gesorteerd op laatst gewijzigd.
+- Per rij: hoofdfoto-thumb, adres ("Zonder adres"), datum, statuspill afgeleid uit
+  `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen knop**).
+- Verwijderen kan niet vanuit de lijst, enkel op de tab Afronden.
+- "+ Nieuwe woning" maakt en opent een record.
+- Geen Info-blok, geen versielabel, geen updateknop.
 ### 7.2 Header (editor)
-
-- Groene sticky balk: terugpijl **‹** (alleen het pijltje), titel = adres
-  (ellipsis), compacte savestamp in twee regels.
-- Op de tabs **Details** en **Foto's**: de **ruimtebalk** — één horizontaal
-  scrollbare chip-rij (witte outline-chips, actieve = wit gevuld).
-  - Op Details: alleen echte ruimtes + "+ Ruimte". Er is **altijd** een ruimte
-    geselecteerd (bij binnenkomen automatisch de eerste).
-  - Op Foto's (en in het camerascherm): vooraan twee extra chips die geen
-    ruimte zijn: **"Algemeen"** (facturen/documenten; interne waarde
-    `'__algemeen'` — nooit tonen) en **"Gevels"** (waarde `''`).
-  - **"+ Ruimte"** klapt een keuzepaneel open met sneltoetsen: Slaapkamer,
-    Badkamer, WC, Berging, Bureau, Garage, Zolder, Kelder, Veranda,
-    "Andere naam…" (prompt). Bestaande naam → **autonummering** ("Slaapkamer"
-    → "Slaapkamer 2"). Nieuwe ruimte wordt geselecteerd en de
-    **Ventilatie-sectie klapt open**.
-  - Ruimtes worden altijd **gegroepeerd op basisnaam** (naam zonder eindcijfer),
-    volgorde van eerste voorkomen; binnen een groep numeriek gesorteerd —
-    alle slaapkamers staan dus bij elkaar. **Ruimtes verwijderen bestaat niet.**
-  - De actieve chip scrollt zichzelf in beeld (`scrollIntoView`).
-- De geselecteerde ruimte is het label voor alles wat je daarna toevoegt.
-
-### 7.3 Tab Algemeen — vier accordeonsecties, alleen **Woning** start open
-
-1. **Woning**: adres + 📍-locatieknop (geolocation → Nominatim reverse
-   geocoding `accept-language=nl&zoom=18`, straat+nr en gemeente; offline of
-   mislukt → coördinaten "lat, lon"; enige externe call van de app);
-   datum plaatsbezoek (date-input, default vandaag).
-2. **Verwarming** (centraal, `ruimte:''`): cycle Gas/Stookolie/Andere;
-   functie-chips Radiatoren/Vloerverwarming/Sanitair warm water (meerdere);
-   beschrijving; 📷 Foto kenplaat; 📷 Foto radiatorkranen (rij alleen
-   zichtbaar als "radiatoren" aangevinkt; bij bewaren wordt fotoKraan genuld
-   als radiatoren niet gekozen is); "Voeg verwarming toe" + lijst (nieuwste
-   eerst, tik = bewerken, × = confirm-delete).
-3. **Extra installaties**: **Zonnepanelen** — cycle oriëntatie (Plat dak/Voor/
-   Achter/Links/Rechts) + Wp-invulveld + ronde "+"-knop; lijstje met ×
-   (confirm; geen bewerken — verwijderen en opnieuw). **Zonneboiler** — cycle
-   Nee/Ja (default Nee); bij Ja verschijnt veld "Oppervlakte zonnecollector (m²)".
-4. **Opmerkingen**: vrije notities (textarea).
-
-### 7.4 Tab Details — per geselecteerde ruimte; drie accordeonsecties
-
-Volgorde: **Ventilatie (start open) → Verwarming in deze ruimte → Ramen & deuren.**
-
-- **Ventilatie**: cycle `geen → natuurlijk → mechanisch → mechanisch permanent
-  → ander`; bij "ander" verschijnt een beschrijvingsveld onder de knop
-  (met focus), geen popup. Waarde hoort bij de ruimte.
-- **Verwarming in deze ruimte**: cycle Airco/Kachel/Andere (`'ruimte-andere'`);
-  **Afmetingen ruimte (m)** breed × diep × hoog met live m³ — opgeslagen op de
-  ruimte zelf (één keer per ruimte, hoeveel toestellen er ook hangen; leeg
-  veld = afm null); beschrijving; 📷 Foto kenplaat; "Voeg toestel toe".
-  De lijst toont **alleen de toestellen van de geselecteerde ruimte**
-  (met volume uit de ruimte-afm); tik = bewerken (springt mee van ruimte).
-- **Ramen & deuren** — compact genoeg om op een iPhone te typen zonder
-  scrollen: element-rij en gevel-rij **zonder label**; afmetingenrij
-  b × h (placeholders "breedte (m)"/"hoogte (m)") met live m²; regel
-  "Aantal identieke" met inline −/1/+ stepper (minimum 1); daarna **drie
-  mini-cycles naast elkaar**: Beglazing (Enkel/Dubbel/HR dubbel/Drievoudig/
-  Vol paneel), Kader (PVC/Alu/Hout), Rolluik (Nee/Ja); fotoknop
-  **"📷 Foto afstandhouder"** die bij element=dakraam automatisch
-  **"📷 Foto kenplaatje"** heet; "Voeg toe".
-  - Na toevoegen onthoudt het formulier de keuzes; alleen afmetingen, aantal
-    en foto worden leeggemaakt (er is bewust géén "zelfde als vorige"-knop).
+- Groene sticky balk: terugpijl `‹`, adres (ellipsis), save-bolletje. Rode/gele balk
+  daarboven.
+- Tabs: Algemeen · Details · Foto's · Afronden.
+- Op **Details** en **Foto's**: ruimtebalk, horizontaal scrollbare chip-rij
+  (outline-chips, actieve gevuld). Actieve chip scrollt in beeld.
+  - Details: enkel echte ruimtes + "+ Ruimte". Altijd één geselecteerd.
+  - Foto's en camerascherm: vooraan "Algemeen" (`algemeen`) en "Gevels" (`gevels`).
+- "+ Ruimte": Slaapkamer, Badkamer, WC, Berging, Bureau, Garage, Zolder, Kelder,
+  Veranda, "Andere naam…" (`prompt()`). Bestaande naam → autonummering
+  ("Slaapkamer 2"). Nieuwe ruimte wordt geselecteerd, Ventilatie klapt open.
+- **Hernoemen**: lang indrukken op de chip → `prompt()`. Naam is geen sleutel meer.
+- **Verwijderen**: enkel als de ruimte geen ramen, toestellen of foto's heeft. Anders
+  is de optie afwezig. De knop "Ruimte verwijderen" staat onderaan de Details-tab,
+  onder de opmerking, en vraagt een `confirm()`.
+- Groepering: op basisnaam (naam zonder eindcijfer), volgorde van eerste voorkomen,
+  binnen een groep numeriek.
+### 7.3 Tab Algemeen — vier accordeons, alleen **Woning** open
+1. **Woning**: adres + 📍 (geolocation → Nominatim reverse geocoding,
+   `accept-language=nl&zoom=18`; mislukt → "lat, lon"). Enige externe call, alleen op
+   een tik. Datum plaatsbezoek (date-input, default vandaag).
+2. **Verwarming** (centraal, `ruimteId: null`): cycle Gas/Stookolie/Andere; chips
+   Radiatoren/Vloerverwarming/Sanitair warm water (meerkeuze); beschrijving;
+   📷 Foto kenplaat; 📷 Foto radiatorkranen (rij enkel zichtbaar bij "radiatoren"; bij
+   bewaren wordt `fotoKraanId` genuld en de blob gewist als radiatoren weg is);
+   "Voeg verwarming toe" + lijst (nieuwste eerst, tik = bewerken, × = confirm).
+3. **Extra installaties**: Zonnepanelen (cycle Plat dak/Voor/Achter/Links/Rechts +
+   Wp-veld + ronde "+", lijst met ×, geen bewerken). Zonneboiler (cycle Nee/Ja,
+   default Nee; bij Ja veld "Oppervlakte zonnecollector (m²)").
+4. **Opmerkingen**: textarea.
+### 7.4 Tab Details — per geselecteerde ruimte, drie accordeons
+Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.**
+- **Ventilatie**: cycle `geen → natuurlijk → mechanisch → mechanisch permanent →
+  ander`. Bij "ander" een beschrijvingsveld onder de knop, met focus, geen popup.
+- **Verwarming in deze ruimte**: cycle Airco/Kachel/Andere (`ruimte-andere`);
+  **Afmetingen ruimte (m)** b × d × h met live m³, opgeslagen op de ruimte (één keer
+  per ruimte; leeg = `afm: null`); beschrijving; 📷 Foto kenplaat; "Voeg toestel toe".
+  Lijst toont enkel de toestellen van deze ruimte, met volume. Tik = bewerken.
+  - Afmetingen zijn enkel nodig voor ruimtes met een eigen toestel: die vormen een
+    aparte ruimtecluster die van het totale volume afgetrokken wordt. Ruimtes zonder
+    eigen toestel horen bij de algemene cluster; het totale volume komt uit de
+    tekening in de VEKA-software.
+- **Ramen & deuren**: element-rij en gevel-rij zonder label; b × h met live m²
+  (placeholders "breedte (m)"/"hoogte (m)"); "Aantal identieke" met inline −/1/+
+  (min. 1); drie mini-cycles naast elkaar: Beglazing (Enkel/Dubbel/HR dubbel/
+  Drievoudig/Vol paneel), Kader (PVC/Alu/Hout), Rolluik (Nee/Ja);
+  **"📷 Foto afstandhouder"**, bij element=dakraam automatisch **"📷 Foto kenplaatje"**;
+  "Voeg toe".
+  - Na toevoegen blijven de keuzes staan; afmetingen, aantal en foto worden geleegd.
   - Zonder geldige b én h: toast "Vul breedte en hoogte in (m)".
-  - **Lijst + PDF gesorteerd**: eerst alle deuren, dan de rest; telkens op
-    gevel voor→achter→links→rechts, dan op nr. Rij toont "#nr Element ·
-    Gevel · n×", "b × h m = x m² (totaal)", tags (ruimte · beglazing · kader ·
-    rolluik). Totaalregel: aantal elementen (aantallen meegeteld) + totale m².
-- Onderaan de tab (buiten de secties): **"Opmerking bij deze ruimte"**
-  (vrij tekstveld op de ruimte, bv. "recht achterboven in de hoek").
-
-### 7.5 Tab Foto's (fotodossier)
-
-- Twee knoppen: **"📷 Start camera"** en **"🖼 Kies foto's"** (bestandkiezer
-  met `multiple`, elk bestand door de verklein-pijplijn).
-- Daaronder een dichtgeklapt infoblok **"📋 Welke foto's zijn minimaal
-  vereist? (inspectieprotocol)"**: gevels (elke veilig bereikbare),
-  schildelen per hoofdtype, isolatie (type/dikte herkenbaar), beglazing/kaders
-  (opschriften leesbaar), verwarming (kenplaat/label/thermostaat/afgifte/
-  buitenvoeler), sanitair warm water, koeling, ventilatie, zonne-energie met
-  oriëntatie — telkens detail- én overzichtsfoto's; bron VEKA, 10 jaar bewaren.
-- **Raster toont alleen de foto's van de geselecteerde chip**; totaalregel
-  "N foto's in <label> · M in totaal". Per tegel: **⇄** verplaats naar andere
-  ruimte (bottom-sheet met chips Algemeen/Gevels/ruimtes; huidige gemarkeerd),
-  **×** verwijderen (confirm), en **alléén op Gevels-foto's een ★**:
-  wit = kiesbaar, geel = huidige hoofdfoto; tik + confirm zet
-  `algemeen.foto` (foto blijft ook in het dossier). Tik op de foto = lightbox.
-
-### 7.6 Camerascherm (in-app, fullscreen overlay)
-
+  - Een dakraam behoudt gevel voor/achter/links/rechts. "Vol paneel" blijft een
+    beglazingswaarde: het wordt in de VEKA-software als raam ingevoerd.
+- **Sorteervolgorde** (één functie, gebruikt door lijst, PDF en nummering): eerst alle
+  deuren, dan de rest; binnen elk blok gevel voor → achter → links → rechts; dan
+  aanmaakvolgorde. `#nr` = 1-gebaseerde index in die volgorde.
+- Rij toont "#nr Element · Gevel · n×", "b × h m = x m² (totaal)", tags (ruimte ·
+  beglazing · kader · rolluik). Totaalregel: aantal elementen (aantallen meegeteld) +
+  totale m².
+- Onderaan de tab, buiten de secties: **"Opmerking bij deze ruimte"** (textarea).
+### 7.5 Tab Foto's
+- **"📷 Start camera"** en **"🖼 Kies foto's"** (`multiple`, elk bestand door §8).
+- Dichtgeklapt blok **"📋 Welke foto's zijn minimaal vereist? (inspectieprotocol)"**:
+  gevels (elke veilig bereikbare), schildelen per hoofdtype, isolatie (type en dikte
+  herkenbaar), beglazing en kaders (opschriften leesbaar), verwarming (kenplaat,
+  label, thermostaat, afgifte, buitenvoeler), sanitair warm water, koeling,
+  ventilatie, zonne-energie met oriëntatie; telkens detail én overzicht. Bron VEKA,
+  10 jaar bewaren. Blijft: werkinstrument, geen app-uitleg.
+- Raster toont enkel de foto's van de geselecteerde chip. Totaalregel "N foto's in
+  <label> · M in totaal".
+- Per tegel: **⇄** verplaats naar andere groep (bottom-sheet met chips, huidige
+  gemarkeerd), **×** verwijderen (undo-toast), en op `gevels`-foto's een **★**
+  (wit = kiesbaar, geel = hoofdfoto; tik zet `hoofdFotoId`, geen confirm).
+  Tik op de foto = lightbox.
+- Verplaats je de hoofdfoto weg uit `gevels`, dan wordt `hoofdFotoId` gewist.
+### 7.6 Camerascherm (fullscreen overlay)
 - `getUserMedia` achtercamera, ideal 2560×1920; `<video playsinline autoplay muted>`.
-- **Dossier-modus** (via "Start camera"): bovenaan de ruimtechips (wisselen
-  zonder sluiten), rechtsboven een **flitsknop 🔦 alleen als het toestel
-  torch via `getCapabilities()` ondersteunt** (toggle via
-  `applyConstraints({advanced:[{torch}]})`; geel als aan); onderaan teller
-  ("N foto's"), grote witte sluiterknop, "Klaar". Elke sluitertik: frame →
-  JPEG → dossier van de geselecteerde chip.
-- **Enkel-modus** (via de losse fotoknoppen: kenplaat, kranen, afstandhouder,
-  toestel): geen chips, knop heet "Annuleer"; één sluitertik → foto op zijn
-  plek en camera meteen dicht.
-- **Fallbacks zonder cameratoegang**: enkel-modus → verborgen
-  `<input type="file" accept="image/*" capture="environment">`; dossier-modus
-  → toast met foutnaam + instellingentip en de bibliotheekkiezer opent.
-- Camera stopt netjes (tracks stoppen) bij "Klaar"/"Annuleer", bij
-  visibilitychange (met save) en pagehide.
-
+- **Dossier-modus** ("Start camera"): ruimtechips bovenaan (wisselen zonder sluiten),
+  flitsknop 🔦 rechtsboven **enkel als `getCapabilities()` torch meldt** (toggle via
+  `applyConstraints({advanced:[{torch}]})`, geel als aan); onderaan teller "N foto's",
+  witte sluiterknop, "Klaar". Elke tik: frame → JPEG → foto in de actieve groep.
+- **Enkel-modus** (kenplaat, kranen, afstandhouder, toestel): geen chips, knop
+  "Annuleer", één tik → foto op zijn plek, camera dicht.
+- **Fallbacks**: enkel-modus → verborgen `<input type="file" accept="image/*"
+  capture="environment">`; dossier-modus → toast met foutnaam, bibliotheekkiezer opent.
+- Tracks stoppen bij Klaar/Annuleer, visibilitychange (met save) en pagehide.
 ### 7.7 Tab Afronden
-
-- **Controlelijstje** (informatief, nooit blokkerend; vers berekend bij het
-  openen van de tab): ✅/❌ voor (1) elke ruimte minstens één foto — bij rood
-  de namen van de ruimtes zonder, (2) verwarming ingevuld (≥1 opwekker of
-  toestel), (3) hoofdfoto gekozen (ster op een gevelfoto).
-- **"💾 Bewaar PDF"**, "Woning sluiten", "Woning verwijderen" (rood, confirm).
-
----
-
-## 8. Foto-pijplijn en resoluties
-
-Alle foto's worden via canvas verkleind naar JPEG-dataURLs (opslag in het
-woningrecord zelf). Scherp mag, zolang de bestanden klein blijven:
-
-| Soort | max langste zijde | JPEG-kwaliteit |
-|---|---|---|
-| Detailfoto's (afstandhouder, kenplaat, kranen) | 1200 px | 0,7 |
-| Dossierfoto's (ruimtes, gevels) | 2000 px | 0,7 |
-| **Algemeen-foto's (facturen/documenten)** | **2600 px** | **0,75** |
-
-De hoofdfoto is een dossierfoto (gekozen via ★).
-
----
-
-## 9. Het PDF-bestand (`pdf.js`)
-
-**De app schrijft zelf een volledig PDF-document** — geen print-dialoog, geen
-Safari-omweg, geen library.
-
-### Generator (technisch)
-
-- PDF 1.4; objecten + xref-tabel met correcte byte-offsets; alles latin-1.
-- Tekst: base-14 fonts **Helvetica** (F1) en **Helvetica-Bold** (F2) met
-  **WinAnsiEncoding**; tekens >255 → "?", met mappings ’→', –→0x96, €→0x80;
-  `(`, `)`, `\` ge-escaped. Tekstbreedte/afbreking gemeten via een canvas-
-  context met hetzelfde font (woordgrenzen-wrap).
-- Foto's: JPEG-bytes rechtstreeks als Image-XObject met **DCTDecode**
-  (DeviceRGB/8bit); **identieke dataURLs worden gededupliceerd** (één object,
-  meermaals getekend). Natuurlijke afmetingen via een `Image`-load.
-- Pagina's: A4 staand 595,28×841,89 pt of liggend (omgewisseld); marge 40 pt;
-  cursor loopt van boven naar onder (y wordt omgerekend naar PDF-coördinaten);
-  automatische paginabreuk zodra inhoud niet meer past.
-
-### Indeling
-
-1. **Kop**: klein grijs "EPC Plaatsbezoek", adres (vet, 15pt, gewrapt),
-   "Datum plaatsbezoek: ..."; hoofdfoto rechtsboven (130 pt breed, max 100 pt).
-2. **RAMEN & DEUREN** (sectiekop: hoofdletters + lijn): tabel
-   #, Type, Ruimte, Gevel, Aant., B (m), H (m), m² (aantal meegerekend),
-   Beglazing, Kader, Rolluik — 7,5 pt, celranden, tekstwrap per cel,
-   getallen rechts uitgelijnd; totaalregel vet. Daaronder de raamfoto's:
-   **4 per rij**, cel 82 pt hoog, contain + gecentreerd, grijs bijschrift
-   6,5 pt "Element gevel – ruimte, afstandhouder/kenplaatje" (zonder nummers).
-3. **ENERGIE**: tabel #, Opwekker, Ruimte, Doet, Beschrijving (bij
-   airco/kachel met "ruimte b × d × h m = x m³"); daaronder kenplaat-/kranen-
-   foto's (zelfde raster, bijschrift "Type – ruimte, kenplaat/radiatorkranen");
-   dan regel **Zonnepanelen** ("Plat dak 4200 Wp - Voor 2000 Wp" of "-") en
-   — alleen bij ja — **Zonneboiler** ("ja, 4,6 m2").
-4. **VENTILATIE**: tabel Ruimte, Ventilatie (+"(beschrijving)" bij ander),
-   Afmetingen, Opmerking — natte ruimtes (keuken/badkamer/wc) eerst, rest
+- **Controlelijstje** (informatief, nooit blokkerend, vers berekend bij openen):
+  ✅/❌ voor (1) elke ruimte minstens één foto (bij ❌ de namen), (2) verwarming
+  ingevuld (≥1 opwekker of toestel), (3) hoofdfoto gekozen.
+- **"💾 Bewaar PDF"** met voortgangsbalk uit de worker.
+- Grijze regel "PDF bewaard op <datum en uur>" indien `pdfBewaardOp`.
+- "Woning sluiten" (navigeert terug, wijzigt niets).
+- "Woning verwijderen" (rood, gedrag volgens §6).
+## 8. Foto-pijplijn
+Alles wordt via canvas hergecodeerd naar JPEG en als Blob opgeslagen. Originele bytes
+worden nooit hergebruikt.
+| Soort | Groep | Max langste zijde | Kwaliteit |
+|---|---|---|---|
+| `document` | `algemeen` (facturen, moeten leesbaar zijn) | 2400 px | 0,80 |
+| `foto` | alle andere (ruimtes, gevels, kenplaten, isolatie, detail) | 1600 px | 0,70 |
+- Bij tekst weegt de kwaliteitsfactor zwaarder dan de resolutie; 2400 px op een
+  paginavullende liggende A4 is ruim 350 dpi.
+- **EXIF**: importeren met `createImageBitmap(file, {imageOrientation:'from-image'})`;
+  gooit dat, dan `<img>` met `style.imageOrientation='from-image'` na `decode()`.
+  Door het hercoderen zit de oriëntatie daarna in de pixels en bevat de opgeslagen
+  JPEG geen EXIF. Hier steunt `maakpdf.js` op.
+- `breedte` en `hoogte` worden meegeschreven, zodat de generator niets hoeft te
+  decoderen om te layouten.
+- Hoofdfoto is altijd een foto met groep `gevels`.
+## 9. `maakpdf.js`
+Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
+### 9.1 Technisch
+- Draait in `pdfworker.js`, niet op de main thread. Voortgang via `postMessage`.
+- Uitvoer = array van `Uint8Array`-chunks met lopende byte-offset, op het einde
+  `new Blob(chunks, {type:'application/pdf'})`. Nooit één grote string, nooit base64.
+- PDF 1.4. Xref-tabel met exacte byte-offsets, `/ID` in de trailer, `/Info` met
+  `/Title` (adres), `/Producer` ("EPC Plaatsbezoek <VERSIE>") en `/CreationDate`.
+- **Encoding = WinAnsiEncoding (CP1252), niet Latin-1.** Volledige tabel voor
+  0x80–0x9F: `€`80 `‚`82 `ƒ`83 `„`84 `…`85 `†`86 `‡`87 `ˆ`88 `‰`89 `Š`8A `‹`8B `Œ`8C
+  `Ž`8E `'`91 `'`92 `"`93 `"`94 `•`95 `–`96 `—`97 `˜`98 `™`99 `š`9A `›`9B `œ`9C `ž`9E
+  `Ÿ`9F. 0xA0–0xFF rechtstreeks. NBSP → spatie. Rest → `?`. `(`, `)` en `\` escapen.
+- **Tekstbreedte** uit twee `Uint16Array(256)`-tabellen met de advance widths (1/1000
+  em) van Helvetica (F1) en Helvetica-Bold (F2), Adobe Core14 AFM, geïndexeerd op
+  WinAnsi-code. Geen canvas-metingen: de browser substitueert Arial voor "Helvetica",
+  waardoor de layout per platform verschilde.
+- **Afbeeldingen**: JPEG-bytes rechtstreeks als Image-XObject met DCTDecode. Lees de
+  SOF-marker: 1 component → `/DeviceGray`, 3 → `/DeviceRGB`, anders (of een andere
+  marker dan `0xFFC0`, dus progressive) → **fout gooien**. Geen `Image`-load nodig.
+- **Dedupe op `fotoId`**: één XObject, meermaals getekend.
+- A4 staand 595,28 × 841,89 pt of liggend (omgewisseld). Marge 40 pt. Cursor van boven
+  naar onder, automatische paginabreuk.
+- **Geen PDF/A**: base-14 fonts worden niet ingebed. Bewust; embedding vraagt een
+  fontbestand en een build-stap.
+### 9.2 Indeling
+1. **Kop**: klein grijs "EPC Plaatsbezoek", adres (vet 15 pt, gewrapt), "Datum
+   plaatsbezoek: …". Hoofdfoto rechtsboven, 130 pt breed, max 100 pt hoog.
+2. **RAMEN & DEUREN** (hoofdletters + lijn): tabel #, Type, Ruimte, Gevel, Aant.,
+   B (m), H (m), m² (aantal meegerekend), Beglazing, Kader, Rolluik. 7,5 pt, celranden,
+   wrap per cel, getallen rechts, totaalregel vet. Sortering en nummering exact als
+   §7.4. Daaronder de raamfoto's: 4 per rij, cel 82 pt, contain, gecentreerd, grijs
+   bijschrift 6,5 pt "Element gevel – ruimte, afstandhouder/kenplaatje".
+3. **ENERGIE**: tabel #, Opwekker, Ruimte, Doet, Beschrijving (bij airco/kachel met
+   "ruimte b × d × h m = x m³"). Daaronder kenplaat- en kranenfoto's, zelfde raster,
+   bijschrift "Type – ruimte, kenplaat/radiatorkranen". Dan **Zonnepanelen**
+   ("Plat dak 4200 Wp · Voor 2000 Wp" of "—") en, alleen bij ja, **Zonneboiler**
+   ("ja, 4,6 m²").
+4. **VENTILATIE**: tabel Ruimte, Ventilatie (+ "(beschrijving)" bij ander),
+   Afmetingen, Opmerking. Natte ruimtes (keuken, badkamer, wc) eerst, rest
    alfabetisch-numeriek.
-5. **NOTITIES** (alleen indien ingevuld), gewone alinea's.
-6. **FOTODOSSIER** vanaf een nieuwe pagina: koptekst + "adres - plaatsbezoek
-   datum - N foto's". Per groep een titel in hoofdletters; volgorde **Gevels,
-   dan de ruimtes (ruimtevolgorde), Algemeen laatst**. Gewone groepen:
-   raster **4 per rij**, cel 95 pt, geen bijschriften; een groepstitel komt
-   nooit alleen onderaan (titel + eerste rij verhuizen samen).
-   **Algemeen (facturen): eigen liggende pagina's, 2 foto's per pagina,
-   paginavullend** (contain).
-7. **Voetregel op elke pagina**: "adres - pagina X/Y", 7 pt grijs, gecentreerd.
-
-### Bewaren
-
-Knop "Bewaar PDF": toast "PDF maken…" → `bouwPdf(S)` → `File`
-**`<slug(adres)>.pdf`** (fallback `epc.pdf`) → `navigator.share({files})`
-(iPhone: deelmenu → Bewaar in Bestanden; AbortError = stil annuleren) →
-zonder share-ondersteuning: download via tijdelijke `<a download>`.
-Fout → toast "PDF maken mislukt (naam)".
-
----
-
-## 10. Bewuste keuzes en iOS-realiteit
-
-- Geen bouwjaar/gebouwtype/kelder/zolder-invoer (documenten/foto's).
-- Geen backup/export/import; geen ruimtes verwijderen; geen bewerken van
-  PV-installaties (verwijderen + opnieuw toevoegen).
-- Torch werkt in iOS-Safari meestal niet → knop verschijnt alleen bij echte
-  ondersteuning; donkere ruimtes: "Kies foto's" → native camera mét flits.
-- Camerapermissie kan door iOS geweigerd blijven → fallbacks + tip in Info.
-- `screen.orientation.lock` faalt stil waar niet ondersteund.
-- Externe netwerktoegang: uitsluitend Nominatim bij de locatieknop.
-
----
-
+5. **NOTITIES**: alleen indien ingevuld.
+6. **FOTODOSSIER**, nieuwe pagina: koptekst + "adres · plaatsbezoek datum · N foto's".
+   Groepstitel in hoofdletters. Volgorde: Gevels, dan de ruimtes in ruimtevolgorde,
+   Algemeen laatst. Gewone groepen: 4 per rij, cel 95 pt, geen bijschriften; een
+   groepstitel staat nooit alleen onderaan (titel + eerste rij verhuizen samen).
+   **Algemeen: eigen liggende pagina's, 2 foto's per pagina, paginavullend** (contain).
+7. **Voetregel** op elke pagina: "adres · pagina X/Y", 7 pt grijs, gecentreerd.
+### 9.3 Bewaren
+1. Toast "PDF maken…", worker start, voortgangsbalk.
+2. Blobs uit `fotos` → `arrayBuffer()` → `bouwPdf(woning, fotos)`.
+3. `File` met naam `<slug(adres)>.pdf` (fallback `epc.pdf`) → `navigator.share({files})`.
+4. **`NotAllowedError`** (iOS eist een user gesture, de bouw zit ertussen): de Blob
+   blijft in het geheugen, op de plaats van de knop verschijnt **"Deel PDF"** die
+   `share()` rechtstreeks vanuit een tik aanroept.
+5. Geen share-ondersteuning → download via tijdelijke `<a download>`.
+6. Resolve → `pdfBewaardOp = now`, meteen bewaren. `AbortError` → toast "Niet bewaard".
+   Andere fout → toast "PDF maken mislukt (naam)".
+7. Blob > 150 MB → eerst confirm "Grote PDF, delen kan mislukken".
+## 10. Bewuste keuzes
+- Geen bouwjaar, gebouwtype, kelder, zolder, oriëntatie voorgevel, beschermd volume.
+- Geen backup, export, import, JSON-bijlage. Geen bewerken van PV-installaties.
+- Geen updateknop, versielabel, Info-blok, `skipWaiting`, automatische reload.
+- Geen `screen.orientation.lock` (bestaat niet op iOS). Manifest zet `portrait`.
+- Torch werkt zelden in iOS-Safari → knop enkel bij echte ondersteuning; donkere
+  ruimtes via "Kies foto's" en de native camera met flits.
+- `confirm()` en `prompt()` blijven, behalve bij foto's (undo).
+- Netwerk: uitsluitend Nominatim, uitsluitend op een tik.
 ## 11. Testen
-
-- **Playwright** headless in de meegeleverde Chromium
-  (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`), iPhone-viewport
-  (~393×852), camera met
-  `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`
-  (+ context-permissie `camera`).
-- Dek per wijziging: volledige klikflows (woning → ruimtes → ramen/toestellen/
-  foto's → afronden), persistentie na `page.reload()`, en de accordeon/
-  ruimtebalk-interacties. Let op: na `page.fill` op een input is de tabbalk
-  verborgen (toetsenbord-gedrag) — eerst blurren.
-- **PDF valideren met pypdf** (Python): paginaformaten (staand + liggend),
-  tekstextractie (adres, tabelwaarden, groepstitels, paginanummers) en
-  JPEG-integriteit/decodeerbaarheid van de ingebedde beelden.
-- `node --check` op `app.js`, `pdf.js`, `sw.js` vóór elke commit.
-
----
-
-## 12. Release-procedure
-
-1. Wijziging eerst in deze spec (of dezelfde commit).
-2. `node --check` + Playwright-flows + pypdf-validatie groen.
-3. `sw.js` CACHE én `app.js` APP_VERSIE samen bumpen naar `epc-vN+1`.
-4. Commit in het Nederlands, push naar `main`.
-5. Wachten op de Pages-deploy en verifiëren dat de live `sw.js` de nieuwe
-   versie toont; in de app: Info ▸ "Zoek update".
+- **Playwright op WebKit** (niet Chromium), iPhone-viewport ~393×852, camera met
+  `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream` +
+  context-permissie `camera`. WebKit ≠ mobile Safari.
+- **Handmatige checklist op de iPhone 15 Pro per release**: `navigator.share`, het
+  gebaarprobleem, cameratoegang, torch, EXIF-oriëntatie van een liggende
+  bibliotheekfoto. Niets daarvan is geautomatiseerd testbaar.
+- Klikflows: woning → ruimtes → ramen/toestellen/foto's → afronden. Persistentie na
+  `page.reload()`. Accordeon- en ruimtebalk-interacties. Na `page.fill` is de tabbalk
+  verborgen: eerst blurren.
+- **Failsafes**: injecteer `QuotaExceededError` op de `put`; verifieer rode balk,
+  blijvende dirty-vlag, en dat "Bewaar PDF nu" een geldige PDF geeft. Verifieer dat
+  verwijderen geblokkeerd is zolang `pdfBewaardOp === null`.
+- **`maakpdf.js` unit-testen in Node**, zonder browser. Assert AFM-waarden (Helvetica:
+  spatie 278, `A` 667, `i` 222; Helvetica-Bold: spatie 278, `A` 722). Assert dat een
+  grijswaarde-JPEG `/DeviceGray` geeft en een progressive JPEG een fout.
+- **PDF valideren**: `qpdf --check` (streng over xref-offsets, pypdf is dat niet), dan
+  `pypdf` voor tekstextractie (adres, tabelwaarden, groepstitels, paginanummers) en
+  paginaformaten, dan `pdftoppm` op drie pagina's om te zien dat er beeld staat.
+- `node --check` op `app.js`, `db.js`, `maakpdf.js`, `pdfworker.js`, `sw.js`.
+## 12. Release
+1. Wijziging eerst in deze spec, of in dezelfde commit.
+2. `node --check` + WebKit-flows + unittests + `qpdf --check` groen.
+3. Handmatige iPhone-checklist.
+4. `VERSIE` in `sw.js` bumpen. Enige plaats.
+5. Commit in het Nederlands, push naar `main`.
+6. App uit de app-switcher vegen en heropenen om de nieuwe versie te laden.

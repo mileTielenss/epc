@@ -1,8 +1,8 @@
 'use strict';
 
-/* moet gelijklopen met CACHE in sw.js; wijkt de draaiende SW af, dan draaien we
-   op verouderde bestanden en herladen we onszelf (eenmalig) */
-const APP_VERSIE = 'epc-v41';
+/* ============================== app.js ==============================
+   UI en applicatielogica. De app kent geen versie: VERSIE leeft enkel in
+   sw.js en wordt hieronder één keer uitgelezen voor /Producer in de PDF. */
 
 /* ============================== helpers ============================== */
 
@@ -15,7 +15,6 @@ function vandaag() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 function nu() { return new Date().toISOString(); }
-function nieuwId() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
 
 function num(s) {
   const v = parseFloat(String(s).trim().replace(',', '.'));
@@ -32,6 +31,11 @@ function esc(s) {
 function slug(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
+function datumUur(iso) {
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 let toastTimer = null;
 function toast(msg) {
@@ -47,143 +51,234 @@ function flash(btn) {
   setTimeout(() => btn.classList.remove('flash'), 200);
 }
 
-/* ============================== IndexedDB ============================== */
+/* versie uit sw.js (staat mee in de eigen cache, dus dit is de draaiende versie) */
+let swVersie = '';
+fetch('./sw.js').then(r => r.text()).then(t => {
+  const m = t.match(/VERSIE\s*=\s*'([^']+)'/);
+  if (m) swVersie = m[1];
+}).catch(() => { /* offline zonder cache: PDF krijgt dan geen versienummer */ });
 
-let db = null;
+/* ============================== balken en save-bolletje (§6) ============================== */
 
-function dbOpen() {
-  return new Promise((res, rej) => {
-    const q = indexedDB.open('epc-db', 1);
-    q.onupgradeneeded = () => {
-      q.result.createObjectStore('woningen', { keyPath: 'id' });
-      q.result.createObjectStore('instellingen');
-    };
-    q.onsuccess = () => res(q.result);
-    q.onerror = () => rej(q.error);
-  });
+let bolletjeTimer = null;
+function toonBolletje() {
+  const b = $('#bolletje');
+  b.hidden = false;
+  clearTimeout(bolletjeTimer);
+  bolletjeTimer = setTimeout(() => { b.hidden = true; }, 400);
 }
 
-function tx(store, mode, fn) {
-  return new Promise((res, rej) => {
-    const t = db.transaction(store, mode);
-    const r = fn(t.objectStore(store));
-    t.oncomplete = () => res(r && 'result' in r ? r.result : undefined);
-    t.onerror = () => rej(t.error);
-    t.onabort = () => rej(t.error);
-  });
+function zetRodeBalk(tekst) {
+  $('#foutbalk-tekst').textContent = tekst;
+  $('#foutbalk').hidden = false;
+}
+function wisRodeBalk() {
+  if (DB.inGeheugen()) return; /* geheugenmodus: balk blijft permanent */
+  $('#foutbalk').hidden = true;
 }
 
-const dbPutWoning = w => tx('woningen', 'readwrite', s => s.put(w));
-const dbGetWoning = id => tx('woningen', 'readonly', s => s.get(id));
-const dbAlleWoningen = () => tx('woningen', 'readonly', s => s.getAll());
-const dbVerwijderWoning = id => tx('woningen', 'readwrite', s => s.delete(id));
+function zetGeleBalk(tekst) {
+  $('#opslagbalk').textContent = tekst;
+  $('#opslagbalk').hidden = false;
+}
 
 /* ============================== woningmodel ============================== */
 
-/* elke woning start met de standaardruimtes; extra ruimtes voeg je toe in de ruimtebalk */
+const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch', 'mechanisch-permanent', 'ander'];
+const VENT_NAMEN = {
+  geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch',
+  'mechanisch-permanent': 'mechanisch permanent', ander: 'ander'
+};
+const ELEMENTEN = ['raam', 'deur', 'dakraam'];
+const GEVELS = ['voor', 'achter', 'links', 'rechts'];
+const BEGLAZINGEN = ['enkel', 'dubbel', 'hr-dubbel', 'drievoudig', 'paneel'];
+const KADERS = ['pvc', 'alu', 'hout'];
+const OPWEK_TYPES = ['gas', 'stookolie', 'andere', 'airco', 'kachel', 'ruimte-andere'];
+const FUNCTIES = ['radiatoren', 'vloer', 'sww'];
+const PV_ORIENTATIES = ['plat', 'voor', 'achter', 'links', 'rechts', ''];
+
+const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam' };
+const GEVEL_NAMEN = { voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
+const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' };
+const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout' };
+const OPWEK_NAMEN = { gas: 'Gas', stookolie: 'Stookolie', andere: 'Andere', airco: 'Airco', kachel: 'Kachel', 'ruimte-andere': 'Andere' };
+const FUNCTIE_NAMEN = { radiatoren: 'radiatoren', vloer: 'vloerverwarming', sww: 'warm water' };
+const PVOR_NAMEN = { '': '—', plat: 'Plat dak', voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
+
+function nieuweRuimte(naam) {
+  return { id: DB.nieuwId(), naam, vent: 'geen', ventBeschrijving: '', opm: '', afm: null };
+}
+
 function standaardRuimtes() {
-  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1']
-    .map(naam => ({ naam, vent: 'geen', ventBeschrijving: '', opm: '', afm: null }));
+  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1'].map(nieuweRuimte);
 }
 
 function leegWoning() {
   return {
-    id: nieuwId(),
-    status: 'open',
+    id: DB.nieuwId(),
     gemaakt: nu(),
     gewijzigd: nu(),
-    algemeen: { adres: '', foto: null, datum: vandaag(), notities: '' },
+    pdfBewaardOp: null,
+    algemeen: { adres: '', datum: vandaag(), notities: '', hoofdFotoId: null },
     ruimtes: standaardRuimtes(),
     ramen: [],
     energie: { opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '' },
-    fotodossier: [],
-    teller: 0,
-    tellerOpwek: 0,
-    tellerDossier: 0
+    problemen: []
   };
 }
 
-/* defaults aanvullen en tellers/nrs herstellen; geen legacy-migraties
-   (er bestaan geen woningen van oudere modelversies) */
+/* defaults aanvullen, enums en verwijzingen controleren; elke correctie wordt
+   gelogd in woning.problemen[] en gemeld — stil corrigeren is verboden (§5.1).
+   Vereist dat de foto's van de woning al geladen zijn (dode fotoId's). */
 function normaliseer(p) {
+  const fix = [];
   const basis = leegWoning();
   const w = {
     ...basis, ...p,
     algemeen: { ...basis.algemeen, ...(p.algemeen || {}) },
     energie: { ...basis.energie, ...(p.energie || {}) }
   };
+  if (!Array.isArray(w.problemen)) w.problemen = [];
 
-  if (!Array.isArray(w.ruimtes) || !w.ruimtes.length) w.ruimtes = standaardRuimtes();
-  w.ruimtes = groepeerRuimtes(w.ruimtes.map(r => ({
-    naam: String(r.naam || 'Ruimte'),
-    vent: VENT_MODES.includes(r.vent) ? r.vent : 'geen',
-    ventBeschrijving: r.ventBeschrijving || '',
-    opm: r.opm || '',
-    afm: r.afm && num(r.afm.b) && num(r.afm.d) && num(r.afm.h)
-      ? { b: num(r.afm.b), d: num(r.afm.d), h: num(r.afm.h) } : null
-  })));
+  const fotoOk = id => !!id && !!DB.fotoRecord(id);
+  const enumOf = (v, set, def, wat) => {
+    if (set.includes(v)) return v;
+    if (v !== undefined) fix.push(`${wat}: onbekende waarde "${v}" vervangen door "${def}"`);
+    return def;
+  };
+
+  if (!Array.isArray(w.ruimtes) || !w.ruimtes.length) { w.ruimtes = standaardRuimtes(); fix.push('ruimtes ontbraken: standaardruimtes teruggezet'); }
+  w.ruimtes = groepeerRuimtes(w.ruimtes.map(r => {
+    if (!r.id) fix.push(`ruimte "${r.naam || '?'}" kreeg een nieuw id`);
+    return {
+      id: r.id || DB.nieuwId(),
+      naam: String(r.naam || 'Ruimte'),
+      vent: enumOf(r.vent, VENT_MODES, 'geen', `ventilatie van ${r.naam || 'ruimte'}`),
+      ventBeschrijving: r.ventBeschrijving || '',
+      opm: r.opm || '',
+      afm: r.afm && num(r.afm.b) && num(r.afm.d) && num(r.afm.h)
+        ? { b: num(r.afm.b), d: num(r.afm.d), h: num(r.afm.h) } : null
+    };
+  }));
+  const ruimteIds = new Set(w.ruimtes.map(r => r.id));
+  const ruimteRef = (id, wat) => {
+    if (!id) return null;
+    if (ruimteIds.has(id)) return id;
+    fix.push(`${wat}: verwees naar een verwijderde ruimte`);
+    return null;
+  };
+  const fotoRef = (id, wat) => {
+    if (!id) return null;
+    if (fotoOk(id)) return id;
+    fix.push(`${wat}: foto onvindbaar, verwijzing gewist`);
+    return null;
+  };
 
   if (!Array.isArray(w.ramen)) w.ramen = [];
-  w.teller = Math.max(w.teller || 0, ...w.ramen.map(r => r.nr || 0), 0);
-  w.ramen.forEach(r => {
-    if (!r.nr) r.nr = ++w.teller;
-    r.aantal = Math.max(1, Math.round(num(r.aantal)) || 1);
-    r.ruimte = r.ruimte || '';
-  });
+  w.ramen = w.ramen.map((r, i) => ({
+    id: r.id || DB.nieuwId(),
+    ruimteId: ruimteRef(r.ruimteId, `element ${i + 1}`),
+    element: enumOf(r.element, ELEMENTEN, 'raam', `element ${i + 1}`),
+    gevel: enumOf(r.gevel, GEVELS, 'voor', `gevel van element ${i + 1}`),
+    b: num(r.b), h: num(r.h),
+    aantal: Math.max(1, Math.round(num(r.aantal)) || 1),
+    beglazing: enumOf(r.beglazing, BEGLAZINGEN, 'dubbel', `beglazing van element ${i + 1}`),
+    kader: enumOf(r.kader, KADERS, 'pvc', `kader van element ${i + 1}`),
+    rolluik: !!r.rolluik,
+    fotoId: fotoRef(r.fotoId, `foto van element ${i + 1}`)
+  }));
 
   if (!Array.isArray(w.energie.opwekkers)) w.energie.opwekkers = [];
-  w.tellerOpwek = Math.max(w.tellerOpwek || 0, ...w.energie.opwekkers.map(o => o.nr || 0), 0);
-  w.energie.opwekkers.forEach(o => {
-    if (!o.nr) o.nr = ++w.tellerOpwek;
-    o.ruimte = o.ruimte || '';
-  });
+  w.energie.opwekkers = w.energie.opwekkers.map((o, i) => ({
+    id: o.id || DB.nieuwId(),
+    type: enumOf(o.type, OPWEK_TYPES, 'andere', `opwekker ${i + 1}`),
+    ruimteId: ruimteRef(o.ruimteId, `opwekker ${i + 1}`),
+    functie: (Array.isArray(o.functie) ? o.functie : []).filter(f => FUNCTIES.includes(f)),
+    beschrijving: o.beschrijving || '',
+    fotoId: fotoRef(o.fotoId, `kenplaat van opwekker ${i + 1}`),
+    fotoKraanId: fotoRef(o.fotoKraanId, `kranenfoto van opwekker ${i + 1}`)
+  }));
   if (!Array.isArray(w.energie.pvPanelen)) w.energie.pvPanelen = [];
-  w.energie.pvPanelen = w.energie.pvPanelen.map(p => ({ orientatie: p.orientatie || '', wp: String(p.wp || '') }));
+  w.energie.pvPanelen = w.energie.pvPanelen.map(pv => ({
+    id: pv.id || DB.nieuwId(),
+    orientatie: PV_ORIENTATIES.includes(pv.orientatie) ? pv.orientatie : '',
+    wp: String(pv.wp || '')
+  }));
   w.energie.zonneboiler = w.energie.zonneboiler === 'ja' ? 'ja' : 'nee';
   if (typeof w.energie.zonneboilerM2 !== 'string') w.energie.zonneboilerM2 = '';
 
-  if (!Array.isArray(w.fotodossier)) w.fotodossier = [];
-  w.tellerDossier = Math.max(w.tellerDossier || 0, ...w.fotodossier.map(f => f.nr || 0), 0);
-  w.fotodossier.forEach(f => {
-    if (!f.nr) f.nr = ++w.tellerDossier;
-    f.ruimte = f.ruimte || '';
-  });
+  /* hoofdfoto moet een bestaande foto met groep 'gevels' zijn */
+  if (w.algemeen.hoofdFotoId) {
+    const rec = DB.fotoRecord(w.algemeen.hoofdFotoId);
+    if (!rec || rec.groep !== 'gevels') {
+      fix.push('hoofdfoto was geen gevelfoto meer, keuze gewist');
+      w.algemeen.hoofdFotoId = null;
+    }
+  }
 
-  if (!w.id) w.id = nieuwId();
-  if (!w.status) w.status = 'open';
+  if (w.pdfBewaardOp !== null && typeof w.pdfBewaardOp !== 'string') w.pdfBewaardOp = null;
+  if (!w.id) w.id = DB.nieuwId();
+
+  if (fix.length) {
+    w.problemen.push(...fix.map(f => `${nu()} ${f}`));
+    toast(`${fix.length} gegeven${fix.length === 1 ? '' : 's'} hersteld`);
+  }
   return w;
 }
 
-/* ============================== actieve woning + autosave ============================== */
+/* ============================== actieve woning + autosave (§6) ============================== */
 
-let S = null;      // actieve woning, null = lijstscherm
+let S = null;            /* actieve woning, null = lijstscherm */
 let dirty = false;
-let draft = null;  // invoerformulier ramen-tab
+let bewaarTimer = null;  /* debounce 500 ms */
+let bewaarBeurt = 0;     /* generatieteller: wijziging tijdens een write blijft dirty */
+let retryTimer = null;   /* rode balk: retry elke 5 s */
+let volgTeller = 0;      /* volgorde voor nieuwe dossierfoto's */
 
-function leegDraft() {
-  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', foto: null, aantal: 1 };
+function wijzig() {
+  if (!S) return;
+  dirty = true;
+  clearTimeout(bewaarTimer);
+  bewaarTimer = setTimeout(bewaar, 500);
 }
 
-function wijzig() { dirty = true; }
-
 async function bewaar() {
-  if (!S) return;
+  if (!S || !dirty) return;
+  clearTimeout(bewaarTimer);
+  const beurt = ++bewaarBeurt;
   S.gewijzigd = nu();
   try {
-    await dbPutWoning(S);
-    dirty = false;
-    const d = new Date();
-    const p = n => String(n).padStart(2, '0');
-    $('#savestamp').textContent = `opgeslagen\n${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    await DB.putWoning(S);
+    if (beurt === bewaarBeurt) dirty = false;
+    wisRodeBalk();
+    stopRetry();
+    toonBolletje();
   } catch (e) {
-    toast('Opslaan mislukt!');
-    return;
+    const naam = e && e.name ? e.name : 'Onbekende fout';
+    zetRodeBalk(naam === 'QuotaExceededError'
+      ? 'NIET OPGESLAGEN — Opslag vol — bewaar de PDF en verwijder een afgewerkte woning'
+      : `NIET OPGESLAGEN — ${naam}`);
+    startRetry();
   }
 }
 
-setInterval(() => { if (S && dirty) bewaar(); }, 3000);
-window.addEventListener('pagehide', () => { if (S && dirty) bewaar(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden && S && dirty) bewaar(); });
+function startRetry() {
+  if (retryTimer) return;
+  retryTimer = setInterval(() => { if (S && dirty) bewaar(); }, 5000);
+}
+function stopRetry() {
+  clearInterval(retryTimer);
+  retryTimer = null;
+}
+
+window.addEventListener('pagehide', () => {
+  commitUndo();
+  if (S && dirty) bewaar();
+  DB.revokeUrls();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && S && dirty) bewaar();
+});
 
 /* ============================== views ============================== */
 
@@ -194,7 +289,6 @@ function toonLijst() {
   $('#btn-terug').hidden = true;
   $('#ruimtebalk').hidden = true;
   $('#titel').textContent = 'EPC Plaatsbezoek';
-  $('#savestamp').textContent = '';
 }
 
 function toonEditor() {
@@ -208,15 +302,14 @@ function toonEditor() {
 
 let actieveTab = 'algemeen';
 function zetTab(naam) {
-  if (naam === 'export' && S) renderChecks();
+  if (naam === 'afronden' && S) renderAfronden();
   actieveTab = naam;
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === naam));
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + naam));
   $('#ruimtebalk').hidden = !['details', 'fotos'].includes(naam);
-  /* ramen en toestellen horen altijd bij een echte ruimte (binnen het beschermd
-     volume): op Details bestaat "Buiten" niet en is altijd een ruimte gekozen */
+  /* op Details is altijd één echte ruimte gekozen */
   if (naam === 'details' && S && !huidigeRuimte() && S.ruimtes.length) {
-    selectedRuimte = S.ruimtes[0].naam;
+    ruimteSel = S.ruimtes[0].id;
   }
   if (S) renderRuimtebalk();
   window.scrollTo(0, 0);
@@ -227,9 +320,14 @@ function zetTitel() {
 }
 
 async function openWoning(id) {
-  const w = await dbGetWoning(id);
+  let w;
+  try { w = await DB.getWoning(id); } catch (e) { toast('Woning laden mislukt'); return; }
   if (!w) { toast('Woning niet gevonden'); return; }
+  await DB.laadFotos(w.id);
   S = normaliseer(w);
+  volgTeller = 0;
+  DB.geladenFotos().forEach(f => { if ((f.volgorde || 0) > volgTeller) volgTeller = f.volgorde; });
+  dirty = false;
   draft = leegDraft();
   draftOpwek = leegDraftOpwek();
   syncAlles();
@@ -237,7 +335,9 @@ async function openWoning(id) {
 }
 
 async function sluitWoning() {
+  commitUndo();
   if (S && dirty) await bewaar();
+  DB.sluitWoning();
   S = null;
   await renderLijst();
   toonLijst();
@@ -246,103 +346,133 @@ async function sluitWoning() {
 $('#btn-terug').addEventListener('click', sluitWoning);
 $('#btn-sluiten').addEventListener('click', sluitWoning);
 
-/* ============================== woningenlijst ============================== */
+/* ============================== woningenlijst (§7.1) ============================== */
 
-const STATUS_NAMEN = { open: 'Open', afgewerkt: 'Af' };
+let lijstUrls = [];
 
 async function renderLijst() {
-  const alle = (await dbAlleWoningen()).sort((a, b) => (b.gewijzigd || '').localeCompare(a.gewijzigd || ''));
+  lijstUrls.forEach(u => URL.revokeObjectURL(u));
+  lijstUrls = [];
+  let alle = [];
+  try { alle = await DB.alleWoningen(); } catch (e) { /* lege lijst tonen */ }
+  alle.sort((a, b) => (b.gewijzigd || '').localeCompare(a.gewijzigd || ''));
   const ul = $('#woninglijst');
   ul.innerHTML = '';
   if (!alle.length) {
     ul.innerHTML = '<li class="leeg">Nog geen woningen. Start hieronder een nieuwe.</li>';
     return;
   }
-  alle.forEach(w => {
+  for (const w of alle) {
     const li = document.createElement('li');
     li.className = 'woning';
     li.dataset.id = w.id;
+    let thumb = '';
+    if (w.algemeen && w.algemeen.hoofdFotoId) {
+      try {
+        const rec = await DB.getFoto(w.algemeen.hoofdFotoId);
+        if (rec) {
+          const url = URL.createObjectURL(rec.blob);
+          lijstUrls.push(url);
+          thumb = `<img class="thumb" src="${url}" alt="">`;
+        }
+      } catch (e) { /* geen thumb */ }
+    }
+    const klaar = !!w.pdfBewaardOp;
     li.innerHTML =
-      (w.algemeen.foto ? `<img class="thumb" src="${w.algemeen.foto}" alt="">` : '') +
+      thumb +
       `<div class="info">
-         <div class="r1">${esc(w.algemeen.adres || 'Zonder adres')}</div>
-         <div class="r3">${esc(w.algemeen.datum || '')}</div>
+         <div class="r1">${esc((w.algemeen && w.algemeen.adres) || 'Zonder adres')}</div>
+         <div class="r3">${esc((w.algemeen && w.algemeen.datum) || '')}</div>
        </div>
-       <button type="button" class="status ${w.status}" data-id="${w.id}">${STATUS_NAMEN[w.status] || 'Open'}</button>
-       <button type="button" class="del" data-id="${w.id}">×</button>`;
+       <span class="status ${klaar ? 'klaar' : ''}">${klaar ? 'PDF ✓' : 'Open'}</span>`;
     ul.appendChild(li);
-  });
+  }
 }
 
-$('#woninglijst').addEventListener('click', async e => {
+$('#woninglijst').addEventListener('click', e => {
   if (e.target.closest('img.thumb')) return; /* tik op fotominiatuur: enkel lightbox */
-  const del = e.target.closest('.del');
-  if (del) {
-    const w = await dbGetWoning(del.dataset.id);
-    if (!w) return;
-    if (!confirm(`"${w.algemeen.adres || 'Zonder adres'}" definitief verwijderen?`)) return;
-    await dbVerwijderWoning(w.id);
-    await renderLijst();
-    toast('Woning verwijderd');
-    return;
-  }
-  const st = e.target.closest('.status');
-  if (st) {
-    const w = await dbGetWoning(st.dataset.id);
-    if (!w) return;
-    w.status = w.status === 'open' ? 'afgewerkt' : 'open';
-    w.gewijzigd = nu();
-    await dbPutWoning(w);
-    await renderLijst();
-    return;
-  }
   const li = e.target.closest('li.woning');
   if (li) openWoning(li.dataset.id);
 });
 
 $('#btn-nieuwewoning').addEventListener('click', async () => {
+  DB.sluitWoning();
   S = leegWoning();
+  volgTeller = 0;
   draft = leegDraft();
   draftOpwek = leegDraftOpwek();
+  dirty = true;
   await bewaar();
   syncAlles();
   toonEditor();
 });
 
-/* ============================== foto's ============================== */
+/* ============================== foto-pijplijn (§8) ==============================
+   Alles wordt via canvas hergecodeerd naar JPEG (EXIF-oriëntatie komt zo in
+   de pixels terecht) en als Blob met afmetingen opgeslagen. */
 
-/* bron (img/video-frame) verkleind naar JPEG-dataURL */
-function naarJpeg(bron, breed, hoog, maxDim, kwaliteit) {
-  const s = Math.min(1, maxDim / Math.max(breed, hoog));
-  const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(breed * s));
-  c.height = Math.max(1, Math.round(hoog * s));
-  c.getContext('2d').drawImage(bron, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', kwaliteit);
-}
+const TIER = {
+  document: { dim: 2400, kw: 0.80 },  /* groep 'algemeen': facturen, leesbaar */
+  foto: { dim: 1600, kw: 0.70 }       /* alle andere foto's */
+};
+function tierVoorGroep(groep) { return groep === 'algemeen' ? TIER.document : TIER.foto; }
 
-function verkleinBestand(f, maxDim, kwaliteit) {
+function canvasNaarJpeg(bron, breed, hoog, tier) {
   return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onerror = rej;
-    r.onload = () => {
-      const img = new Image();
-      img.onerror = rej;
-      img.onload = () => res(naarJpeg(img, img.width, img.height, maxDim, kwaliteit));
-      img.src = r.result;
-    };
-    r.readAsDataURL(f);
+    const s = Math.min(1, tier.dim / Math.max(breed, hoog));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(breed * s));
+    c.height = Math.max(1, Math.round(hoog * s));
+    c.getContext('2d').drawImage(bron, 0, 0, c.width, c.height);
+    c.toBlob(blob => {
+      if (blob) res({ blob, breedte: c.width, hoogte: c.height });
+      else rej(new Error('JPEG maken mislukt'));
+    }, 'image/jpeg', tier.kw);
   });
 }
 
-/* detailfoto's klein houden (opslag). Losse foto's (kenplaat, afstandhouder...)
-   openen de interne camera in enkel-modus: één tik, foto zit erin. Lukt de
-   camera niet, dan valt het terug op de gewone camerakiezer van het toestel. */
-let fotoCb = null, fotoMaxDim = 1200, fotoKwaliteit = 0.7;
-function neemFoto(cb, maxDim = 1200, kwaliteit = 0.7) {
+/* bestand -> JPEG-blob; EXIF via createImageBitmap, anders <img> na decode() */
+async function bestandNaarJpeg(file, tier) {
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const uit = await canvasNaarJpeg(bmp, bmp.width, bmp.height, tier);
+    bmp.close();
+    return uit;
+  } catch (e) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.style.imageOrientation = 'from-image';
+      img.src = url;
+      await img.decode();
+      return await canvasNaarJpeg(img, img.naturalWidth, img.naturalHeight, tier);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+}
+
+/* eerst de put in 'fotos', pas daarna een verwijzing/tegel — geen dode verwijzingen (§6) */
+async function voegFotoToe(groep, jpeg) {
+  const rec = {
+    id: DB.nieuwId(), woningId: S.id, blob: jpeg.blob,
+    breedte: jpeg.breedte, hoogte: jpeg.hoogte,
+    groep, volgorde: groep ? ++volgTeller : 0, gemaakt: nu()
+  };
+  try {
+    await DB.putFoto(rec);
+  } catch (e) {
+    toast('Foto niet bewaard');
+    return null;
+  }
+  return rec;
+}
+
+/* losse foto (kenplaat, kranen, afstandhouder): interne camera in enkel-modus,
+   fallback = toestelkiezer. cb krijgt het fotoId. */
+let fotoCb = null;
+function neemFoto(cb) {
   fotoCb = cb;
-  fotoMaxDim = maxDim;
-  fotoKwaliteit = kwaliteit;
   startCamera('enkel');
 }
 $('#fotoinput').addEventListener('change', async () => {
@@ -350,8 +480,48 @@ $('#fotoinput').addEventListener('change', async () => {
   if (!f || !fotoCb) return;
   const cb = fotoCb;
   fotoCb = null;
-  try { cb(await verkleinBestand(f, fotoMaxDim, fotoKwaliteit)); } catch (e) { toast('Foto laden mislukt'); }
+  try {
+    const rec = await voegFotoToe(null, await bestandNaarJpeg(f, TIER.foto));
+    if (rec) cb(rec.id);
+  } catch (e) { toast('Foto laden mislukt'); }
 });
+
+/* ---------- undo-toast voor foto's (§1): 6 s, blob pas gewist bij verlopen ---------- */
+
+let undoState = null; /* {fotoId, timer, herstel} */
+
+function undoFoto(fotoId, herstel) {
+  commitUndo();
+  $('#undotoast').hidden = false;
+  undoState = {
+    fotoId, herstel,
+    timer: setTimeout(() => {
+      const u = undoState;
+      undoState = null;
+      $('#undotoast').hidden = true;
+      DB.verwijderFoto(u.fotoId).catch(() => { });
+    }, 6000)
+  };
+}
+function commitUndo() {
+  if (!undoState) return;
+  clearTimeout(undoState.timer);
+  const u = undoState;
+  undoState = null;
+  $('#undotoast').hidden = true;
+  DB.verwijderFoto(u.fotoId).catch(() => { });
+}
+$('#btn-undo').addEventListener('click', () => {
+  if (!undoState) return;
+  clearTimeout(undoState.timer);
+  const u = undoState;
+  undoState = null;
+  $('#undotoast').hidden = true;
+  u.herstel();
+});
+
+/* verwijderde-maar-nog-herstelbare foto's verbergen we in de renders */
+function fotoVerborgen(id) { return !!(undoState && undoState.fotoId === id); }
 
 /* ---------- lightbox: tik op een miniatuur om te vergroten ---------- */
 
@@ -375,7 +545,7 @@ $('#tabbar').addEventListener('click', e => {
   zetTab(b.dataset.tab);
 });
 
-/* ============================== algemeen (tab Algemeen) ============================== */
+/* ============================== tab Algemeen (§7.3) ============================== */
 
 function bind(sel, fn) {
   $(sel).addEventListener('input', e => { if (!S) return; fn(e.target.value); wijzig(); });
@@ -405,16 +575,13 @@ $('#btn-locatie').addEventListener('click', () => {
     S.algemeen.adres = adres;
     zetTitel();
     wijzig();
-    bewaar();
     toast('Adres ingevuld');
   }, () => toast('Locatie niet beschikbaar'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 });
 bind('#datum', v => S.algemeen.datum = v);
 bind('#notities', v => S.algemeen.notities = v);
 
-
-/* roterende knop: elke tik schuift naar de volgende optie; toont dat er meer
-   opties zijn via het draai-icoon. '' toont een gedimde — */
+/* roterende knop: elke tik schuift naar de volgende optie; '' toont een gedimde — */
 function cycleInit(sel, opties, labels, get, set) {
   const btn = $(sel);
   const sync = () => {
@@ -459,18 +626,29 @@ function chipsSet(sel, vals) {
   $$(sel + ' button').forEach(b => b.classList.toggle('on', vals.includes(b.dataset.v)));
 }
 
-/* ============================== ramen & deuren (tab Details) ============================== */
+/* thumb + verwijderknop van een losse foto in een formulier */
+function zetFormThumb(thumbSel, delSel, fotoId) {
+  const t = $(thumbSel), d = $(delSel);
+  const url = fotoId && !fotoVerborgen(fotoId) ? DB.fotoUrl(fotoId) : null;
+  t.hidden = d.hidden = !url;
+  if (url) t.src = url;
+}
 
-let bewerkRaamNr = null; /* nr van het raam dat je aan het wijzigen bent, of null */
+/* ============================== ramen & deuren (tab Details, §7.4) ============================== */
+
+let bewerkRaamId = null; /* id van het raam dat je aan het wijzigen bent, of null */
+let draft = null;
+
+function leegDraft() {
+  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', fotoId: null, aantal: 1 };
+}
+draft = leegDraft();
 
 segInit('#seg-element', v => { draft.element = v; updateRaamFotoLabel(); });
 
-const syncCyBeglazing = cycleInit('#cy-beglazing',
-  ['enkel', 'dubbel', 'hr-dubbel', 'drievoudig', 'paneel'],
-  { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' },
+const syncCyBeglazing = cycleInit('#cy-beglazing', BEGLAZINGEN, GLAS_NAMEN,
   () => draft.beglazing, v => draft.beglazing = v);
-const syncCyKader = cycleInit('#cy-kader', ['pvc', 'alu', 'hout'],
-  { pvc: 'PVC', alu: 'Alu', hout: 'Hout' },
+const syncCyKader = cycleInit('#cy-kader', KADERS, KADER_NAMEN,
   () => draft.kader, v => draft.kader = v);
 const syncCyRolluik = cycleInit('#cy-rolluik', ['nee', 'ja'], { nee: 'Nee', ja: 'Ja' },
   () => draft.rolluik, v => draft.rolluik = v);
@@ -499,89 +677,80 @@ function updateM2Live() {
 $('#breedte').addEventListener('input', updateM2Live);
 $('#hoogte').addEventListener('input', updateM2Live);
 
-$('#btn-raamfoto').addEventListener('click', () => neemFoto(data => {
-  draft.foto = data;
+$('#btn-raamfoto').addEventListener('click', () => neemFoto(fotoId => {
+  if (draft.fotoId) DB.verwijderFoto(draft.fotoId).catch(() => { });
+  draft.fotoId = fotoId;
   updateRaamThumb();
 }));
 $('#btn-raamfoto-del').addEventListener('click', () => {
-  if (!confirm('Foto afstandhouder verwijderen?')) return;
-  draft.foto = null;
+  const oud = draft.fotoId;
+  if (!oud) return;
+  draft.fotoId = null;
   updateRaamThumb();
+  undoFoto(oud, () => { draft.fotoId = oud; updateRaamThumb(); });
 });
 function updateRaamThumb() {
-  const t = $('#raamfoto-thumb'), d = $('#btn-raamfoto-del');
-  t.hidden = d.hidden = !draft.foto;
-  if (draft.foto) t.src = draft.foto;
+  zetFormThumb('#raamfoto-thumb', '#btn-raamfoto-del', draft.fotoId);
 }
 
-const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam' };
-const GEVEL_NAMEN = { voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
-const GEVEL_ORDE = { voor: 0, achter: 1, links: 2, rechts: 3 };
-
-/* lijst gesorteerd voor weergave/print: eerst alle deuren, daarna de rest;
-   telkens op gevel (voor, achter, links, rechts) en dan op nr */
-function isDeur(r) { return r.element === 'deur'; }
-function gesorteerdeRamen() {
-  return [...S.ramen].sort((a, b) =>
-    (isDeur(a) ? 0 : 1) - (isDeur(b) ? 0 : 1) ||
-    (GEVEL_ORDE[a.gevel] ?? 9) - (GEVEL_ORDE[b.gevel] ?? 9) || (a.nr - b.nr));
-}
 function raamAantal(r) { return Math.max(1, r.aantal || 1); }
-const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' };
-const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout' };
+
+/* sorteervolgorde §7.4: één functie (uit maakpdf.js), gedeeld met de PDF */
+function gesorteerdeRamen() { return sorteerRamen(S.ramen); }
 
 $('#btn-voegtoe').addEventListener('click', () => {
   if (!S) return;
-  if (!huidigeRuimte()) { toast('Kies eerst een ruimte bovenaan'); return; }
+  const ruimte = huidigeRuimte();
+  if (!ruimte) { toast('Kies eerst een ruimte bovenaan'); return; }
   const b = num($('#breedte').value), h = num($('#hoogte').value);
   if (!b || !h) { toast('Vul breedte en hoogte in (m)'); return; }
   const aantal = Math.max(1, Math.round(num($('#aantal').value)) || 1);
   const velden = {
     element: draft.element,
     gevel: draft.gevel,
-    ruimte: selectedRuimte,
+    ruimteId: ruimte.id,
     b, h,
     beglazing: draft.beglazing,
     kader: draft.kader,
     rolluik: draft.rolluik === 'ja',
     aantal,
-    foto: draft.foto
+    fotoId: draft.fotoId
   };
-  if (bewerkRaamNr !== null) {
-    const r = S.ramen.find(x => x.nr === bewerkRaamNr);
+  if (bewerkRaamId !== null) {
+    const r = S.ramen.find(x => x.id === bewerkRaamId);
     if (r) Object.assign(r, velden);
-    toast(`${ELEMENT_NAMEN[draft.element]} #${bewerkRaamNr} gewijzigd`);
+    toast(`${ELEMENT_NAMEN[draft.element]} gewijzigd`);
     stopBewerkRaam();
   } else {
-    S.teller = (S.teller || 0) + 1;
-    S.ramen.push({ nr: S.teller, ...velden });
+    S.ramen.push({ id: DB.nieuwId(), ...velden });
     toast(`${ELEMENT_NAMEN[draft.element]} toegevoegd`);
   }
-  draft.foto = null;
+  /* na toevoegen blijven de keuzes staan; afmetingen, aantal en foto leeg (§7.4) */
+  draft.fotoId = null;
   updateRaamThumb();
   $('#breedte').value = '';
   $('#hoogte').value = '';
   zetAantal(1);
   updateM2Live();
   renderRamen();
-  bewaar();
+  wijzig();
   flash($('#btn-voegtoe'));
 });
 
 /* een bestaand raam in het formulier laden om te wijzigen */
-function startBewerkRaam(nr) {
-  const r = S.ramen.find(x => x.nr === nr);
+function startBewerkRaam(id) {
+  const r = S.ramen.find(x => x.id === id);
   if (!r) return;
-  bewerkRaamNr = nr;
+  bewerkRaamId = id;
   draft.element = r.element;
   draft.gevel = r.gevel;
   draft.beglazing = r.beglazing;
   draft.kader = r.kader;
   draft.rolluik = r.rolluik ? 'ja' : 'nee';
-  draft.foto = r.foto || null;
+  draft.fotoId = r.fotoId || null;
   draft.aantal = raamAantal(r);
   /* de ruimtebalk springt mee naar de ruimte van dit raam */
-  if (r.ruimte && S.ruimtes.some(x => x.naam === r.ruimte)) selectedRuimte = r.ruimte;
+  if (r.ruimteId && S.ruimtes.some(x => x.id === r.ruimteId)) ruimteSel = r.ruimteId;
   renderRuimtebalk();
   syncRaamForm();
   $('#breedte').value = fmtM(r.b);
@@ -596,14 +765,14 @@ function startBewerkRaam(nr) {
 }
 
 function stopBewerkRaam() {
-  bewerkRaamNr = null;
+  bewerkRaamId = null;
   $('#btn-voegtoe').textContent = 'Voeg toe';
   $('#btn-annuleer-raam').hidden = true;
 }
 
 $('#btn-annuleer-raam').addEventListener('click', () => {
   stopBewerkRaam();
-  draft.foto = null;
+  draft.fotoId = null;
   updateRaamThumb();
   $('#breedte').value = '';
   $('#hoogte').value = '';
@@ -611,7 +780,6 @@ $('#btn-annuleer-raam').addEventListener('click', () => {
   updateM2Live();
   renderRamen();
 });
-
 
 function syncRaamForm() {
   segSet('#seg-element', draft.element);
@@ -623,25 +791,31 @@ function syncRaamForm() {
   updateRaamThumb();
 }
 
+function ruimteNaam(id) {
+  const r = S.ruimtes.find(x => x.id === id);
+  return r ? r.naam : '';
+}
+
 function renderRamen() {
   const ul = $('#ramenlijst');
   ul.innerHTML = '';
-  gesorteerdeRamen().forEach(r => {
+  gesorteerdeRamen().forEach((r, i) => {
     const li = document.createElement('li');
-    if (r.nr === bewerkRaamNr) li.className = 'bewerk';
-    li.dataset.nr = r.nr;
+    if (r.id === bewerkRaamId) li.className = 'bewerk';
+    li.dataset.id = r.id;
     const n = raamAantal(r);
     const tags = [GLAS_NAMEN[r.beglazing] || r.beglazing, KADER_NAMEN[r.kader] || r.kader];
     if (r.rolluik) tags.push('rolluik');
-    if (r.ruimte) tags.unshift(r.ruimte);
+    if (r.ruimteId) tags.unshift(ruimteNaam(r.ruimteId));
+    const fotoUrl = r.fotoId && !fotoVerborgen(r.fotoId) ? DB.fotoUrl(r.fotoId) : null;
     li.innerHTML =
       `<div class="info">
-         <div class="r1">#${r.nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''}</div>
+         <div class="r1">#${i + 1} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''}</div>
          <div class="r2">${fmtM(r.b)} × ${fmtM(r.h)} m = ${fmt(r.b * r.h)} m²${n > 1 ? ` (${fmt(r.b * r.h * n)} m² totaal)` : ''}</div>
          <div class="r3">${esc(tags.join(' · '))} · tik om te wijzigen</div>
        </div>` +
-      (r.foto ? `<img class="thumb" src="${r.foto}" alt="foto #${r.nr}">` : '') +
-      `<button type="button" class="del" data-nr="${r.nr}">×</button>`;
+      (fotoUrl ? `<img class="thumb" src="${fotoUrl}" alt="foto element">` : '') +
+      `<button type="button" class="del" data-id="${r.id}">×</button>`;
     ul.appendChild(li);
   });
   const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
@@ -656,33 +830,30 @@ $('#ramenlijst').addEventListener('click', e => {
   if (e.target.closest('img.thumb')) return; /* fotominiatuur: enkel lightbox */
   const del = e.target.closest('.del');
   if (del) {
-    const nr = Number(del.dataset.nr);
-    const r = S.ramen.find(x => x.nr === nr);
+    const r = S.ramen.find(x => x.id === del.dataset.id);
     if (!r) return;
-    if (!confirm(`#${nr} ${ELEMENT_NAMEN[r.element]} (${fmtM(r.b)} × ${fmtM(r.h)} m) verwijderen?`)) return;
-    if (bewerkRaamNr === nr) stopBewerkRaam();
-    S.ramen = S.ramen.filter(x => x.nr !== nr);
+    if (!confirm(`${ELEMENT_NAMEN[r.element]} (${fmtM(r.b)} × ${fmtM(r.h)} m) verwijderen?`)) return;
+    if (bewerkRaamId === r.id) stopBewerkRaam();
+    S.ramen = S.ramen.filter(x => x.id !== r.id);
+    if (r.fotoId) DB.verwijderFoto(r.fotoId).catch(() => { });
     renderRamen();
-    bewaar();
+    wijzig();
     return;
   }
-  const li = e.target.closest('li[data-nr]');
-  if (li) startBewerkRaam(Number(li.dataset.nr));
+  const li = e.target.closest('li[data-id]');
+  if (li) startBewerkRaam(li.dataset.id);
 });
 
 /* ============================== centrale verwarming (tab Algemeen) ============================== */
 
-const OPWEK_NAMEN = { gas: 'Gas', stookolie: 'Stookolie', airco: 'Airco', kachel: 'Kachel', andere: 'Andere', 'ruimte-andere': 'Andere' };
-const FUNCTIE_NAMEN = { radiatoren: 'radiatoren', vloer: 'vloerverwarming', sww: 'warm water' };
-
-/* airco's en kachels horen bij een ruimte; de rest is centraal (tab Algemeen) */
+/* airco's en kachels horen bij een ruimte; de rest is centraal (ruimteId null) */
 function isRuimteToestel(o) { return o.type === 'airco' || o.type === 'kachel' || o.type === 'ruimte-andere'; }
 
 function leegDraftOpwek() {
-  return { type: 'gas', functie: [], foto: null, fotoKraan: null };
+  return { type: 'gas', functie: [], fotoId: null, fotoKraanId: null };
 }
 let draftOpwek = leegDraftOpwek();
-let bewerkOpwekNr = null; /* nr van de opwekker die je aan het wijzigen bent, of null */
+let bewerkOpwekId = null;
 
 chipsInit('#chips-opwekfunctie', vals => { draftOpwek.functie = vals; toonOpwekVelden(); });
 
@@ -694,32 +865,34 @@ function toonOpwekVelden() {
   $('#opw-kraanfoto-rij').hidden = !draftOpwek.functie.includes('radiatoren');
 }
 
-$('#btn-opwekfoto').addEventListener('click', () => neemFoto(data => {
-  draftOpwek.foto = data;
+$('#btn-opwekfoto').addEventListener('click', () => neemFoto(fotoId => {
+  if (draftOpwek.fotoId) DB.verwijderFoto(draftOpwek.fotoId).catch(() => { });
+  draftOpwek.fotoId = fotoId;
   updateOpwekThumb();
 }));
 $('#btn-opwekfoto-del').addEventListener('click', () => {
-  if (!confirm('Foto kenplaat verwijderen?')) return;
-  draftOpwek.foto = null;
+  const oud = draftOpwek.fotoId;
+  if (!oud) return;
+  draftOpwek.fotoId = null;
   updateOpwekThumb();
+  undoFoto(oud, () => { draftOpwek.fotoId = oud; updateOpwekThumb(); });
 });
 function updateOpwekThumb() {
-  const t = $('#opwekfoto-thumb'), d = $('#btn-opwekfoto-del');
-  t.hidden = d.hidden = !draftOpwek.foto;
-  if (draftOpwek.foto) t.src = draftOpwek.foto;
-  const tk = $('#kraanfoto-thumb'), dk = $('#btn-kraanfoto-del');
-  tk.hidden = dk.hidden = !draftOpwek.fotoKraan;
-  if (draftOpwek.fotoKraan) tk.src = draftOpwek.fotoKraan;
+  zetFormThumb('#opwekfoto-thumb', '#btn-opwekfoto-del', draftOpwek.fotoId);
+  zetFormThumb('#kraanfoto-thumb', '#btn-kraanfoto-del', draftOpwek.fotoKraanId);
 }
 
-$('#btn-kraanfoto').addEventListener('click', () => neemFoto(data => {
-  draftOpwek.fotoKraan = data;
+$('#btn-kraanfoto').addEventListener('click', () => neemFoto(fotoId => {
+  if (draftOpwek.fotoKraanId) DB.verwijderFoto(draftOpwek.fotoKraanId).catch(() => { });
+  draftOpwek.fotoKraanId = fotoId;
   updateOpwekThumb();
 }));
 $('#btn-kraanfoto-del').addEventListener('click', () => {
-  if (!confirm('Foto radiatorkranen verwijderen?')) return;
-  draftOpwek.fotoKraan = null;
+  const oud = draftOpwek.fotoKraanId;
+  if (!oud) return;
+  draftOpwek.fotoKraanId = null;
   updateOpwekThumb();
+  undoFoto(oud, () => { draftOpwek.fotoKraanId = oud; updateOpwekThumb(); });
 });
 
 function syncOpwekForm() {
@@ -731,44 +904,48 @@ function syncOpwekForm() {
 
 $('#btn-opwek-voegtoe').addEventListener('click', () => {
   if (!S) return;
+  /* radiatoren weg -> kranenfoto genuld en blob gewist (§7.3) */
+  let kraanId = draftOpwek.fotoKraanId;
+  if (!draftOpwek.functie.includes('radiatoren') && kraanId) {
+    DB.verwijderFoto(kraanId).catch(() => { });
+    kraanId = null;
+  }
   const velden = {
     type: draftOpwek.type,
-    ruimte: '',
+    ruimteId: null,
     functie: [...draftOpwek.functie],
     beschrijving: $('#opw-beschrijving').value.trim(),
-    foto: draftOpwek.foto,
-    fotoKraan: draftOpwek.functie.includes('radiatoren') ? draftOpwek.fotoKraan : null
+    fotoId: draftOpwek.fotoId,
+    fotoKraanId: kraanId
   };
-  if (bewerkOpwekNr !== null) {
-    const o = S.energie.opwekkers.find(x => x.nr === bewerkOpwekNr);
+  if (bewerkOpwekId !== null) {
+    const o = S.energie.opwekkers.find(x => x.id === bewerkOpwekId);
     if (o) Object.assign(o, velden);
-    toast(`${OPWEK_NAMEN[draftOpwek.type]} #${bewerkOpwekNr} gewijzigd`);
+    toast(`${OPWEK_NAMEN[draftOpwek.type]} gewijzigd`);
     stopBewerkOpwek();
   } else {
-    S.tellerOpwek = (S.tellerOpwek || 0) + 1;
-    S.energie.opwekkers.push({ nr: S.tellerOpwek, ...velden });
+    S.energie.opwekkers.push({ id: DB.nieuwId(), ...velden });
     toast(`${OPWEK_NAMEN[draftOpwek.type]} toegevoegd`);
   }
   draftOpwek = leegDraftOpwek();
   syncOpwekForm();
   $('#opw-beschrijving').value = '';
   renderOpwekkers();
-  bewaar();
+  wijzig();
   flash($('#btn-opwek-voegtoe'));
 });
 
 /* een bestaande centrale verwarming in het formulier laden om te wijzigen */
-function startBewerkOpwek(nr) {
-  const o = S.energie.opwekkers.find(x => x.nr === nr);
+function startBewerkOpwek(id) {
+  const o = S.energie.opwekkers.find(x => x.id === id);
   if (!o) return;
-  bewerkOpwekNr = nr;
+  bewerkOpwekId = id;
   draftOpwek = {
-    type: isRuimteToestel(o) ? 'andere' : o.type,
+    type: o.type in { gas: 1, stookolie: 1, andere: 1 } ? o.type : 'andere',
     functie: [...(o.functie || [])],
-    foto: o.foto || null,
-    fotoKraan: o.fotoKraan || null
+    fotoId: o.fotoId || null,
+    fotoKraanId: o.fotoKraanId || null
   };
-  draftOpwek.type = o.type in { gas: 1, stookolie: 1, andere: 1 } ? o.type : 'andere';
   syncOpwekForm();
   $('#opw-beschrijving').value = o.beschrijving || '';
   $('#btn-opwek-voegtoe').textContent = 'Bewaar wijziging';
@@ -778,7 +955,7 @@ function startBewerkOpwek(nr) {
 }
 
 function stopBewerkOpwek() {
-  bewerkOpwekNr = null;
+  bewerkOpwekId = null;
   $('#btn-opwek-voegtoe').textContent = 'Voeg verwarming toe';
   $('#btn-annuleer-opwek').hidden = true;
 }
@@ -798,21 +975,31 @@ function afmTekst(k) {
 function renderOpwekkers() {
   const ul = $('#opweklijst');
   ul.innerHTML = '';
+  /* nieuwste eerst (§7.3) */
   [...S.energie.opwekkers].filter(o => !isRuimteToestel(o)).reverse().forEach(o => {
     const li = document.createElement('li');
-    if (o.nr === bewerkOpwekNr) li.className = 'bewerk';
-    li.dataset.nr = o.nr;
+    if (o.id === bewerkOpwekId) li.className = 'bewerk';
+    li.dataset.id = o.id;
+    const foto = o.fotoId && !fotoVerborgen(o.fotoId) ? DB.fotoUrl(o.fotoId) : null;
+    const kraan = o.fotoKraanId && !fotoVerborgen(o.fotoKraanId) ? DB.fotoUrl(o.fotoKraanId) : null;
     li.innerHTML =
       `<div class="info">
-         <div class="r1">#${o.nr} ${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
+         <div class="r1">${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
          <div class="r2">${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + ') || '-')}</div>
          <div class="r3">${o.beschrijving ? esc(o.beschrijving) + ' · ' : ''}tik om te wijzigen</div>
        </div>` +
-      (o.foto ? `<img class="thumb" src="${o.foto}" alt="kenplaat #${o.nr}">` : '') +
-      (o.fotoKraan ? `<img class="thumb" src="${o.fotoKraan}" alt="radiatorkranen #${o.nr}">` : '') +
-      `<button type="button" class="del" data-nr="${o.nr}">×</button>`;
+      (foto ? `<img class="thumb" src="${foto}" alt="kenplaat">` : '') +
+      (kraan ? `<img class="thumb" src="${kraan}" alt="radiatorkranen">` : '') +
+      `<button type="button" class="del" data-id="${o.id}">×</button>`;
     ul.appendChild(li);
   });
+}
+
+function verwijderOpwekker(o) {
+  S.energie.opwekkers = S.energie.opwekkers.filter(x => x.id !== o.id);
+  if (o.fotoId) DB.verwijderFoto(o.fotoId).catch(() => { });
+  if (o.fotoKraanId) DB.verwijderFoto(o.fotoKraanId).catch(() => { });
+  wijzig();
 }
 
 $('#opweklijst').addEventListener('click', e => {
@@ -820,22 +1007,19 @@ $('#opweklijst').addEventListener('click', e => {
   if (e.target.closest('img.thumb')) return; /* fotominiatuur: enkel lightbox */
   const del = e.target.closest('.del');
   if (del) {
-    const nr = Number(del.dataset.nr);
-    const o = S.energie.opwekkers.find(x => x.nr === nr);
+    const o = S.energie.opwekkers.find(x => x.id === del.dataset.id);
     if (!o) return;
-    if (!confirm(`#${nr} ${OPWEK_NAMEN[o.type] || o.type} verwijderen?`)) return;
-    if (bewerkOpwekNr === nr) stopBewerkOpwek();
-    S.energie.opwekkers = S.energie.opwekkers.filter(x => x.nr !== nr);
+    if (!confirm(`${OPWEK_NAMEN[o.type] || o.type} verwijderen?`)) return;
+    if (bewerkOpwekId === o.id) stopBewerkOpwek();
+    verwijderOpwekker(o);
     renderOpwekkers();
-    bewaar();
     return;
   }
-  const li = e.target.closest('li[data-nr]');
-  if (li) startBewerkOpwek(Number(li.dataset.nr));
+  const li = e.target.closest('li[data-id]');
+  if (li) startBewerkOpwek(li.dataset.id);
 });
 
-/* zonnepanelen: meerdere installaties, elk met orientatie en eigen Wp */
-const PVOR_NAMEN = { '': '—', plat: 'Plat dak', voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
+/* zonnepanelen: meerdere installaties, elk met orientatie en eigen Wp; geen bewerken */
 let draftPvOr = 'plat';
 const syncCyPvor = cycleInit('#cy-pvor', ['plat', 'voor', 'achter', 'links', 'rechts'], PVOR_NAMEN,
   () => draftPvOr, v => draftPvOr = v);
@@ -844,24 +1028,24 @@ $('#btn-pv-voegtoe').addEventListener('click', () => {
   if (!S) return;
   const wp = Math.round(num($('#pv-wp').value));
   if (!wp) { toast('Vul het vermogen in Wp in'); return; }
-  S.energie.pvPanelen.push({ orientatie: draftPvOr, wp: String(wp) });
+  S.energie.pvPanelen.push({ id: DB.nieuwId(), orientatie: draftPvOr, wp: String(wp) });
   $('#pv-wp').value = '';
   renderPv();
-  bewaar();
+  wijzig();
   toast(`Zonnepanelen ${PVOR_NAMEN[draftPvOr].toLowerCase()} toegevoegd`);
 });
 
 function renderPv() {
   const ul = $('#pvlijst');
   ul.innerHTML = '';
-  S.energie.pvPanelen.forEach((p, i) => {
+  S.energie.pvPanelen.forEach(p => {
     const li = document.createElement('li');
     li.innerHTML =
       `<div class="info">
          <div class="r1">${esc(PVOR_NAMEN[p.orientatie] || '—')}</div>
          <div class="r2">${esc(p.wp)} Wp</div>
        </div>` +
-      `<button type="button" class="del" data-i="${i}">×</button>`;
+      `<button type="button" class="del" data-id="${p.id}">×</button>`;
     ul.appendChild(li);
   });
 }
@@ -869,12 +1053,12 @@ function renderPv() {
 $('#pvlijst').addEventListener('click', e => {
   const b = e.target.closest('.del');
   if (!b || !S) return;
-  const p = S.energie.pvPanelen[Number(b.dataset.i)];
+  const p = S.energie.pvPanelen.find(x => x.id === b.dataset.id);
   if (!p) return;
   if (!confirm(`Zonnepanelen (${PVOR_NAMEN[p.orientatie] || '—'}, ${p.wp} Wp) verwijderen?`)) return;
-  S.energie.pvPanelen.splice(Number(b.dataset.i), 1);
+  S.energie.pvPanelen = S.energie.pvPanelen.filter(x => x.id !== p.id);
   renderPv();
-  bewaar();
+  wijzig();
 });
 
 const syncCyZonneboiler = cycleInit('#cy-zonneboiler', ['nee', 'ja'], { nee: 'Nee', ja: 'Ja' },
@@ -888,8 +1072,8 @@ bind('#zb-m2', v => S.energie.zonneboilerM2 = v);
    airco's en kachels horen bij de gekozen ruimte; de afmetingen van de ruimte
    geef je maar één keer in (op de ruimte zelf), hoeveel toestellen er ook hangen */
 
-let draftRv = { type: 'airco', foto: null };
-let bewerkRvNr = null;
+let draftRv = { type: 'airco', fotoId: null };
+let bewerkRvId = null;
 
 const syncCyRvtype = cycleInit('#cy-rvtype', ['airco', 'kachel', 'ruimte-andere'],
   { airco: 'Airco', kachel: 'Kachel', 'ruimte-andere': 'Andere' },
@@ -921,6 +1105,7 @@ function syncRuimteAfm() {
   $('#ruimte-h').value = r && r.afm ? fmtM(r.afm.h) : '';
   $('#ruimte-opm').value = r ? (r.opm || '') : '';
   updateRuimteM3();
+  updateRuimteWeg();
 }
 
 $('#ruimte-opm').addEventListener('input', () => {
@@ -930,19 +1115,20 @@ $('#ruimte-opm').addEventListener('input', () => {
   wijzig();
 });
 
-$('#btn-rvfoto').addEventListener('click', () => neemFoto(data => {
-  draftRv.foto = data;
+$('#btn-rvfoto').addEventListener('click', () => neemFoto(fotoId => {
+  if (draftRv.fotoId) DB.verwijderFoto(draftRv.fotoId).catch(() => { });
+  draftRv.fotoId = fotoId;
   updateRvThumb();
 }));
 $('#btn-rvfoto-del').addEventListener('click', () => {
-  if (!confirm('Foto kenplaat verwijderen?')) return;
-  draftRv.foto = null;
+  const oud = draftRv.fotoId;
+  if (!oud) return;
+  draftRv.fotoId = null;
   updateRvThumb();
+  undoFoto(oud, () => { draftRv.fotoId = oud; updateRvThumb(); });
 });
 function updateRvThumb() {
-  const t = $('#rvfoto-thumb'), d = $('#btn-rvfoto-del');
-  t.hidden = d.hidden = !draftRv.foto;
-  if (draftRv.foto) t.src = draftRv.foto;
+  zetFormThumb('#rvfoto-thumb', '#btn-rvfoto-del', draftRv.fotoId);
 }
 
 function syncRvForm() {
@@ -956,39 +1142,37 @@ $('#btn-rv-voegtoe').addEventListener('click', () => {
   if (!r) { toast('Kies eerst een ruimte bovenaan'); return; }
   const velden = {
     type: draftRv.type,
-    ruimte: r.naam,
+    ruimteId: r.id,
     functie: [],
     beschrijving: $('#rv-beschrijving').value.trim(),
-    foto: draftRv.foto,
-    fotoKraan: null
+    fotoId: draftRv.fotoId,
+    fotoKraanId: null
   };
-  if (bewerkRvNr !== null) {
-    const o = S.energie.opwekkers.find(x => x.nr === bewerkRvNr);
+  if (bewerkRvId !== null) {
+    const o = S.energie.opwekkers.find(x => x.id === bewerkRvId);
     if (o) Object.assign(o, velden);
-    toast(`${OPWEK_NAMEN[draftRv.type]} #${bewerkRvNr} gewijzigd`);
+    toast(`${OPWEK_NAMEN[draftRv.type]} gewijzigd`);
     stopBewerkRv();
   } else {
-    S.tellerOpwek = (S.tellerOpwek || 0) + 1;
-    S.energie.opwekkers.push({ nr: S.tellerOpwek, ...velden });
+    S.energie.opwekkers.push({ id: DB.nieuwId(), ...velden });
     toast(`${OPWEK_NAMEN[draftRv.type]} toegevoegd in ${r.naam}`);
   }
-  draftRv = { type: draftRv.type, foto: null };
+  draftRv = { type: draftRv.type, fotoId: null };
   syncRvForm();
   $('#rv-beschrijving').value = '';
   renderRv();
-  bewaar();
+  wijzig();
   flash($('#btn-rv-voegtoe'));
 });
 
-function startBewerkRv(nr) {
-  const o = S.energie.opwekkers.find(x => x.nr === nr);
+function startBewerkRv(id) {
+  const o = S.energie.opwekkers.find(x => x.id === id);
   if (!o) return;
-  bewerkRvNr = nr;
-  draftRv = { type: ['kachel', 'ruimte-andere'].includes(o.type) ? o.type : 'airco', foto: o.foto || null };
+  bewerkRvId = id;
+  draftRv = { type: ['kachel', 'ruimte-andere'].includes(o.type) ? o.type : 'airco', fotoId: o.fotoId || null };
   /* de ruimtebalk springt mee naar de ruimte van dit toestel */
-  selectedRuimte = o.ruimte && S.ruimtes.some(x => x.naam === o.ruimte) ? o.ruimte : selectedRuimte;
+  if (o.ruimteId && S.ruimtes.some(x => x.id === o.ruimteId)) ruimteSel = o.ruimteId;
   renderRuimtebalk();
-  syncRuimteAfm();
   syncRvForm();
   $('#rv-beschrijving').value = o.beschrijving || '';
   $('#sec-energie').open = true;
@@ -999,14 +1183,14 @@ function startBewerkRv(nr) {
 }
 
 function stopBewerkRv() {
-  bewerkRvNr = null;
+  bewerkRvId = null;
   $('#btn-rv-voegtoe').textContent = 'Voeg toestel toe';
   $('#btn-annuleer-rv').hidden = true;
 }
 
 $('#btn-annuleer-rv').addEventListener('click', () => {
   stopBewerkRv();
-  draftRv = { type: 'airco', foto: null };
+  draftRv = { type: 'airco', fotoId: null };
   syncRvForm();
   $('#rv-beschrijving').value = '';
   renderRv();
@@ -1015,23 +1199,23 @@ $('#btn-annuleer-rv').addEventListener('click', () => {
 function renderRv() {
   const ul = $('#rvlijst');
   ul.innerHTML = '';
-  [...S.energie.opwekkers]
-    .filter(o => isRuimteToestel(o) && o.ruimte === selectedRuimte)
-    .sort((a, b) => a.nr - b.nr)
+  S.energie.opwekkers
+    .filter(o => isRuimteToestel(o) && o.ruimteId === ruimteSel)
     .forEach(o => {
       const li = document.createElement('li');
-      if (o.nr === bewerkRvNr) li.className = 'bewerk';
-      li.dataset.nr = o.nr;
-      const r = S.ruimtes.find(x => x.naam === o.ruimte);
+      if (o.id === bewerkRvId) li.className = 'bewerk';
+      li.dataset.id = o.id;
+      const r = S.ruimtes.find(x => x.id === o.ruimteId);
       const det = [o.beschrijving, r && r.afm ? afmTekst(r.afm) : ''].filter(Boolean);
+      const foto = o.fotoId && !fotoVerborgen(o.fotoId) ? DB.fotoUrl(o.fotoId) : null;
       li.innerHTML =
         `<div class="info">
-           <div class="r1">#${o.nr} ${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
-           <div class="r2">${esc(o.ruimte || '-')}</div>
+           <div class="r1">${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
+           <div class="r2">${esc(r ? r.naam : '-')}</div>
            <div class="r3">${det.length ? esc(det.join(' · ')) + ' · ' : ''}tik om te wijzigen</div>
          </div>` +
-        (o.foto ? `<img class="thumb" src="${o.foto}" alt="kenplaat #${o.nr}">` : '') +
-        `<button type="button" class="del" data-nr="${o.nr}">×</button>`;
+        (foto ? `<img class="thumb" src="${foto}" alt="kenplaat">` : '') +
+        `<button type="button" class="del" data-id="${o.id}">×</button>`;
       ul.appendChild(li);
     });
 }
@@ -1041,51 +1225,49 @@ $('#rvlijst').addEventListener('click', e => {
   if (e.target.closest('img.thumb')) return;
   const del = e.target.closest('.del');
   if (del) {
-    const nr = Number(del.dataset.nr);
-    const o = S.energie.opwekkers.find(x => x.nr === nr);
+    const o = S.energie.opwekkers.find(x => x.id === del.dataset.id);
     if (!o) return;
-    if (!confirm(`#${nr} ${OPWEK_NAMEN[o.type] || o.type} (${o.ruimte || '-'}) verwijderen?`)) return;
-    if (bewerkRvNr === nr) stopBewerkRv();
-    S.energie.opwekkers = S.energie.opwekkers.filter(x => x.nr !== nr);
+    if (!confirm(`${OPWEK_NAMEN[o.type] || o.type} (${ruimteNaam(o.ruimteId) || '-'}) verwijderen?`)) return;
+    if (bewerkRvId === o.id) stopBewerkRv();
+    verwijderOpwekker(o);
     renderRv();
-    bewaar();
     return;
   }
-  const li = e.target.closest('li[data-nr]');
-  if (li) startBewerkRv(Number(li.dataset.nr));
+  const li = e.target.closest('li[data-id]');
+  if (li) startBewerkRv(li.dataset.id);
 });
 
-/* ============================== ruimtebalk (ramen/energie/foto's) ==============================
-   kies bovenaan in welke ruimte je staat: alles wat je daarna toevoegt (ramen, opwekkers,
-   dossierfoto's) krijgt die ruimte als label. "Algemeen" = geen specifieke ruimte.
-   Per ruimte cycle je de ventilatie: geen -> natuurlijk -> mechanisch -> ander (+beschrijving). */
+/* ============================== ruimtebalk (§7.2) ==============================
+   Details: enkel echte ruimtes, altijd één geselecteerd. Foto's en camera:
+   vooraan "Algemeen" en "Gevels". Lang indrukken op een ruimtechip = hernoemen. */
 
-const VENT_MODES = ['geen', 'natuurlijk', 'mechanisch', 'mechanisch-permanent', 'ander'];
-const VENT_NAMEN = {
-  geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch',
-  'mechanisch-permanent': 'mechanisch permanent', ander: 'ander'
-};
-let selectedRuimte = ''; /* '' = Buiten (geen specifieke ruimte) */
+let ruimteSel = null;   /* ruimteId, voor de Details-tab */
+let fotoSel = 'gevels'; /* 'gevels' | 'algemeen' | ruimteId, voor Foto's en camera */
 
 function huidigeRuimte() {
-  return S.ruimtes.find(r => r.naam === selectedRuimte) || null;
+  return S.ruimtes.find(r => r.id === ruimteSel) || null;
 }
 
-/* dezelfde ruimtechips in de header en in het camerascherm; "Buiten" ('' ) bestaat
-   alleen in de foto-context (gevelfoto's), nooit op de Details-tab */
-function renderRuimteChips(container, metPlus, metBuiten) {
+function fotoGroepLabel(v) {
+  if (v === 'algemeen') return 'Algemeen';
+  if (v === 'gevels') return 'Gevels';
+  return ruimteNaam(v) || '?';
+}
+
+function renderRuimteChips(container, metPlus, fotoContext) {
   container.innerHTML = '';
+  const sel = fotoContext ? fotoSel : ruimteSel;
   const maak = (v, tekst, extraClass) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.v = v;
     b.textContent = tekst;
     if (extraClass) b.className = extraClass;
-    if (v !== '__plus') b.classList.toggle('on', selectedRuimte === v);
+    if (v !== '__plus') b.classList.toggle('on', sel === v);
     container.appendChild(b);
   };
-  if (metBuiten) { maak(FOTO_ALGEMEEN, 'Algemeen'); maak('', 'Gevels'); }
-  S.ruimtes.forEach(r => maak(r.naam, r.naam));
+  if (fotoContext) { maak('algemeen', 'Algemeen'); maak('gevels', 'Gevels'); }
+  S.ruimtes.forEach(r => maak(r.id, r.naam));
   if (metPlus) maak('__plus', '+ Ruimte', 'plus');
   /* de actieve chip in beeld houden */
   const on = container.querySelector('button.on');
@@ -1113,7 +1295,7 @@ function syncVent() {
 $('#camruimtes').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b || !S) return;
-  selectedRuimte = b.dataset.v;
+  fotoSel = b.dataset.v;
   renderRuimtebalk();
 });
 
@@ -1122,25 +1304,56 @@ $('#camruimtes').addEventListener('click', e => {
 function voegRuimteToe(naam) {
   const zelfde = S.ruimtes.filter(r => r.naam === naam || r.naam.startsWith(naam + ' ')).length;
   const uniek = zelfde ? `${naam} ${zelfde + 1}` : naam;
-  S.ruimtes.push({ naam: uniek, vent: 'geen', ventBeschrijving: '', opm: '', afm: null });
+  const r = nieuweRuimte(uniek);
+  S.ruimtes.push(r);
   S.ruimtes = groepeerRuimtes(S.ruimtes);
-  selectedRuimte = uniek;
+  ruimteSel = r.id;
   $('#ruimtekeuze').hidden = true;
   renderRuimtebalk();
   $('#sec-vent').open = true; /* accordeon sluit de rest */
-  bewaar();
+  wijzig();
   toast(`${uniek} toegevoegd`);
 }
+
+/* lang indrukken op een ruimtechip = hernoemen via prompt() (§7.2) */
+let langDrukTimer = null;
+let langGedrukt = false;
+
+function koppelLangDruk(container) {
+  container.addEventListener('pointerdown', e => {
+    const b = e.target.closest('button');
+    langGedrukt = false;
+    if (!b || !S || b.dataset.v === '__plus') return;
+    const r = S.ruimtes.find(x => x.id === b.dataset.v);
+    if (!r) return; /* Algemeen/Gevels hernoem je niet */
+    langDrukTimer = setTimeout(() => {
+      langGedrukt = true;
+      const naam = (prompt(`Nieuwe naam voor "${r.naam}"?`, r.naam) || '').trim();
+      if (naam && naam !== r.naam) {
+        r.naam = naam;
+        S.ruimtes = groepeerRuimtes(S.ruimtes);
+        renderRuimtebalk();
+        wijzig();
+        toast('Ruimte hernoemd');
+      }
+    }, 550);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+    container.addEventListener(ev, () => clearTimeout(langDrukTimer)));
+}
+koppelLangDruk($('#ruimtechips'));
 
 $('#ruimtechips').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b || !S) return;
+  if (langGedrukt) { langGedrukt = false; return; }
   if (b.dataset.v === '__plus') {
     $('#ruimtekeuze').hidden = !$('#ruimtekeuze').hidden;
     return;
   }
   $('#ruimtekeuze').hidden = true;
-  selectedRuimte = b.dataset.v;
+  if (actieveTab === 'details') ruimteSel = b.dataset.v;
+  else fotoSel = b.dataset.v;
   renderRuimtebalk();
 });
 
@@ -1163,7 +1376,7 @@ $('#btn-vent').addEventListener('click', () => {
   r.vent = VENT_MODES[(VENT_MODES.indexOf(r.vent) + 1) % VENT_MODES.length];
   syncVent();
   if (r.vent === 'ander') $('#vent-besch').focus();
-  bewaar();
+  wijzig();
 });
 
 $('#vent-besch').addEventListener('input', () => {
@@ -1173,14 +1386,36 @@ $('#vent-besch').addEventListener('input', () => {
   wijzig();
 });
 
+/* ruimte verwijderen kan enkel als ze geen ramen, toestellen of foto's heeft (§7.2) */
+function ruimteIsLeeg(r) {
+  if (S.ramen.some(x => x.ruimteId === r.id)) return false;
+  if (S.energie.opwekkers.some(x => x.ruimteId === r.id)) return false;
+  let fotos = false;
+  DB.geladenFotos().forEach(f => { if (f.groep === r.id && !fotoVerborgen(f.id)) fotos = true; });
+  return !fotos;
+}
 
-/* natte ruimtes eerst (keuken, badkamer, wc), daarna de rest alfabetisch;
-   Slaapkamer 1/2/3 blijft zo vanzelf bij elkaar */
-const VENT_NAT = ['keuken', 'badkamer', 'wc'];
-function ruimteBasis(naam) { return String(naam).toLowerCase().replace(/\s*\d+\s*$/, '').trim(); }
+function updateRuimteWeg() {
+  const r = huidigeRuimte();
+  $('#btn-ruimte-weg').hidden = !r || !ruimteIsLeeg(r);
+}
+
+$('#btn-ruimte-weg').addEventListener('click', () => {
+  const r = huidigeRuimte();
+  if (!r || !ruimteIsLeeg(r)) return;
+  if (!confirm(`Ruimte "${r.naam}" verwijderen?`)) return;
+  S.ruimtes = S.ruimtes.filter(x => x.id !== r.id);
+  if (!S.ruimtes.length) S.ruimtes = [nieuweRuimte('Living')];
+  ruimteSel = S.ruimtes[0].id;
+  renderRuimtebalk();
+  wijzig();
+  toast('Ruimte verwijderd');
+});
 
 /* zelfde basisnamen bij elkaar (alle wc's samen, slaapkamers achter elkaar...),
    op volgorde van eerste voorkomen; binnen een groep oplopend genummerd */
+function ruimteBasis(naam) { return String(naam).toLowerCase().replace(/\s*\d+\s*$/, '').trim(); }
+
 function groepeerRuimtes(lijst) {
   const volgorde = [];
   const groepen = new Map();
@@ -1192,126 +1427,88 @@ function groepeerRuimtes(lijst) {
   return volgorde.flatMap(b =>
     groepen.get(b).sort((a, c) => String(a.naam).localeCompare(String(c.naam), 'nl', { numeric: true })));
 }
-function gesorteerdeRuimtes() {
-  return [...S.ruimtes].sort((a, b) => {
-    const na = VENT_NAT.indexOf(ruimteBasis(a.naam)), nb = VENT_NAT.indexOf(ruimteBasis(b.naam));
-    const ca = na >= 0 ? 0 : 1, cb = nb >= 0 ? 0 : 1;
-    if (ca !== cb) return ca - cb;
-    if (ca === 0 && na !== nb) return na - nb;
-    return String(a.naam).localeCompare(String(b.naam), 'nl', { numeric: true });
+
+/* ============================== fotodossier (tab Foto's, §7.5) ============================== */
+
+/* dossierfoto's van één groep, op volgorde van nemen */
+function dossierFotos(groep) {
+  const uit = [];
+  DB.geladenFotos().forEach(f => {
+    if (f.groep === groep && !fotoVerborgen(f.id)) uit.push(f);
   });
+  return uit.sort((a, b) => (a.volgorde || 0) - (b.volgorde || 0));
 }
 
-function ventTekst(r) {
-  return (VENT_NAMEN[r.vent] || r.vent) + (r.vent === 'ander' && r.ventBeschrijving ? ` (${r.ventBeschrijving})` : '');
+function dossierTotaal() {
+  let n = 0;
+  DB.geladenFotos().forEach(f => {
+    if (!fotoVerborgen(f.id) && (f.groep === 'gevels' || f.groep === 'algemeen' || S.ruimtes.some(r => r.id === f.groep))) n++;
+  });
+  return n;
 }
 
-
-/* ============================== fotodossier (tab Foto's) ============================== */
-
-/* minimaal fotodossier voor het projectdossier (10 jaar bewaarplicht): veel foto's,
-   snel na elkaar, met alleen een grove categorie als bijschrift in de PDF */
-
-const DOSSIER_MAXDIM = 2000, DOSSIER_KWALITEIT = 0.7;
-/* facturen/documenten moeten leesbaar blijven: hogere resolutie */
-const ALGEMEEN_MAXDIM = 2600, ALGEMEEN_KWALITEIT = 0.75;
-/* sentinel voor algemene foto's (facturen e.d.); '' blijft Gevels */
-const FOTO_ALGEMEEN = '__algemeen';
-
-/* nette naam voor een fotocontext-waarde (nooit de interne sentinel tonen) */
-function ruimteLabel(v) {
-  if (v === FOTO_ALGEMEEN) return 'Algemeen';
-  return v || 'Gevels';
-}
-function dossierDim() { return selectedRuimte === FOTO_ALGEMEEN ? ALGEMEEN_MAXDIM : DOSSIER_MAXDIM; }
-function dossierKw() { return selectedRuimte === FOTO_ALGEMEEN ? ALGEMEEN_KWALITEIT : DOSSIER_KWALITEIT; }
-
-function voegDossierFoto(dataUrl) {
-  S.tellerDossier = (S.tellerDossier || 0) + 1;
-  S.fotodossier.push({ nr: S.tellerDossier, ruimte: selectedRuimte, foto: dataUrl });
-  wijzig();
-  renderDossier();
-}
-
-/* titel/bijschrift: Gevels ('' ), Algemeen (sentinel) of de ruimtenaam */
-function dossierCap(f) {
-  return ruimteLabel(f.ruimte);
-}
-
-/* dossier gesorteerd per ruimte: Gevels eerst, dan de ruimtes in hun eigen
-   volgorde; binnen een ruimte op volgorde van nemen (voor de PDF) */
-function gesorteerdDossier() {
-  const orde = new Map(S.ruimtes.map((r, i) => [r.naam, i]));
-  const idx = f => {
-    if (!f.ruimte) return -1;                       /* Gevels eerst */
-    if (f.ruimte === FOTO_ALGEMEEN) return 999;     /* Algemeen (facturen) altijd laatst */
-    return orde.has(f.ruimte) ? orde.get(f.ruimte) : 98;
-  };
-  return [...S.fotodossier].sort((a, b) => idx(a) - idx(b) || a.nr - b.nr);
-}
-
-/* het raster toont alleen de foto's van de geselecteerde ruimte (of Gevels);
-   de ster (hoofdfoto kiezen) staat alleen op Gevels-foto's */
+/* het raster toont alleen de foto's van de geselecteerde chip;
+   de ster (hoofdfoto kiezen) staat alleen op gevels-foto's */
 function renderDossier() {
   const grid = $('#dossiergrid');
   grid.innerHTML = '';
-  const hier = S.fotodossier.filter(f => (f.ruimte || '') === selectedRuimte);
+  const hier = dossierFotos(fotoSel);
   hier.forEach(f => {
     const d = document.createElement('div');
     d.className = 'dfoto';
     d.innerHTML =
-      `<img class="thumb" src="${f.foto}" alt="dossierfoto ${f.nr}">` +
-      (f.ruimte ? '' : `<button type="button" class="ster${f.foto === S.algemeen.foto ? ' hoofd' : ''}" data-nr="${f.nr}" title="Gebruik als hoofdfoto">&#9733;</button>`) +
-      `<button type="button" class="verplaats" data-nr="${f.nr}" title="Verplaats naar andere ruimte">&#8644;</button>` +
-      `<button type="button" class="del" data-nr="${f.nr}">×</button>` +
-      `<div class="cap">${esc(dossierCap(f))}</div>`;
+      `<img class="thumb" src="${DB.fotoUrl(f.id)}" alt="dossierfoto">` +
+      (f.groep === 'gevels' ? `<button type="button" class="ster${f.id === S.algemeen.hoofdFotoId ? ' hoofd' : ''}" data-id="${f.id}" title="Gebruik als hoofdfoto">&#9733;</button>` : '') +
+      `<button type="button" class="verplaats" data-id="${f.id}" title="Verplaats naar andere groep">&#8644;</button>` +
+      `<button type="button" class="del" data-id="${f.id}">×</button>`;
     grid.appendChild(d);
   });
-  const label = ruimteLabel(selectedRuimte);
-  $('#dossier-totaal').textContent = S.fotodossier.length
-    ? `${hier.length} foto${hier.length === 1 ? '' : "'s"} in ${label} · ${S.fotodossier.length} in totaal${selectedRuimte ? '' : ' · ★ = hoofdfoto'}`
+  const totaal = dossierTotaal();
+  $('#dossier-totaal').textContent = totaal
+    ? `${hier.length} foto${hier.length === 1 ? '' : "'s"} in ${fotoGroepLabel(fotoSel)} · ${totaal} in totaal${fotoSel === 'gevels' ? ' · ★ = hoofdfoto' : ''}`
     : "Nog geen foto's. Start de camera en tik ze snel na elkaar.";
 }
 
 $('#dossiergrid').addEventListener('click', e => {
   if (!S) return;
-  /* ster: deze foto wordt de hoofdfoto van de woning (blijft ook in het dossier) */
+  /* ster: deze foto wordt de hoofdfoto van de woning — geen confirm (§7.5) */
   const ster = e.target.closest('.ster');
   if (ster) {
-    const f = S.fotodossier.find(x => x.nr === Number(ster.dataset.nr));
-    if (!f) return;
-    if (!confirm(`Deze foto (${dossierCap(f)}) als hoofdfoto van de woning gebruiken?`)) return;
-    S.algemeen.foto = f.foto;
+    const f = DB.fotoRecord(ster.dataset.id);
+    if (!f || f.groep !== 'gevels') return;
+    S.algemeen.hoofdFotoId = f.id;
     renderDossier();
-    bewaar();
+    wijzig();
     toast('Hoofdfoto ingesteld');
     return;
   }
-  /* verplaatsen naar een andere ruimte, zodat je de foto niet opnieuw moet nemen */
+  /* verplaatsen naar een andere groep, zodat je de foto niet opnieuw moet nemen */
   const vp = e.target.closest('.verplaats');
   if (vp) {
-    openVerplaats(Number(vp.dataset.nr));
+    openVerplaats(vp.dataset.id);
     return;
   }
   const b = e.target.closest('.del');
   if (!b) return;
-  const nr = Number(b.dataset.nr);
-  const f = S.fotodossier.find(x => x.nr === nr);
+  const f = DB.fotoRecord(b.dataset.id);
   if (!f) return;
-  if (!confirm(`Foto (${dossierCap(f)}) verwijderen?`)) return;
-  S.fotodossier = S.fotodossier.filter(x => x.nr !== nr);
+  const wasHoofd = S.algemeen.hoofdFotoId === f.id;
+  if (wasHoofd) { S.algemeen.hoofdFotoId = null; wijzig(); }
+  undoFoto(f.id, () => {
+    if (wasHoofd) { S.algemeen.hoofdFotoId = f.id; wijzig(); }
+    renderDossier();
+  });
   renderDossier();
-  bewaar();
 });
 
-/* ---------- foto verplaatsen naar een andere ruimte ---------- */
+/* ---------- foto verplaatsen naar een andere groep ---------- */
 
-let verplaatsNr = null;
+let verplaatsId = null;
 
-function openVerplaats(nr) {
-  const f = S.fotodossier.find(x => x.nr === nr);
+function openVerplaats(id) {
+  const f = DB.fotoRecord(id);
   if (!f) return;
-  verplaatsNr = nr;
+  verplaatsId = id;
   const chips = $('#verplaats-chips');
   chips.innerHTML = '';
   const maak = (v, tekst) => {
@@ -1319,38 +1516,44 @@ function openVerplaats(nr) {
     b.type = 'button';
     b.dataset.v = v;
     b.textContent = tekst;
-    b.classList.toggle('on', f.ruimte === v);
+    b.classList.toggle('on', f.groep === v);
     chips.appendChild(b);
   };
-  maak(FOTO_ALGEMEEN, 'Algemeen');
-  maak('', 'Gevels');
-  S.ruimtes.forEach(r => maak(r.naam, r.naam));
+  maak('algemeen', 'Algemeen');
+  maak('gevels', 'Gevels');
+  S.ruimtes.forEach(r => maak(r.id, r.naam));
   $('#verplaats').hidden = false;
 }
 
-$('#verplaats-chips').addEventListener('click', e => {
+$('#verplaats-chips').addEventListener('click', async e => {
   const b = e.target.closest('button');
-  if (!b || !S || verplaatsNr === null) return;
-  const f = S.fotodossier.find(x => x.nr === verplaatsNr);
-  if (f) {
-    f.ruimte = b.dataset.v;
-    renderDossier();
-    bewaar();
-    toast(`Foto verplaatst naar ${b.textContent}`);
-  }
-  verplaatsNr = null;
+  if (!b || !S || verplaatsId === null) return;
+  const f = DB.fotoRecord(verplaatsId);
+  verplaatsId = null;
   $('#verplaats').hidden = true;
+  if (!f || f.groep === b.dataset.v) return;
+  /* hoofdfoto die gevels verlaat, is geen hoofdfoto meer (§7.5) */
+  if (S.algemeen.hoofdFotoId === f.id && b.dataset.v !== 'gevels') {
+    S.algemeen.hoofdFotoId = null;
+    wijzig();
+  }
+  f.groep = b.dataset.v;
+  try {
+    await DB.putFoto(f);
+    toast(`Foto verplaatst naar ${b.textContent}`);
+  } catch (err) { toast('Foto niet bewaard'); }
+  renderDossier();
 });
 
 $('#btn-verplaats-annuleer').addEventListener('click', () => {
-  verplaatsNr = null;
+  verplaatsId = null;
   $('#verplaats').hidden = true;
 });
 $('#verplaats').addEventListener('click', e => {
-  if (e.target === $('#verplaats')) { verplaatsNr = null; $('#verplaats').hidden = true; }
+  if (e.target === $('#verplaats')) { verplaatsId = null; $('#verplaats').hidden = true; }
 });
 
-/* ---------- meerdere foto's uit de bibliotheek (zoals bij een zoekertje) ---------- */
+/* ---------- meerdere foto's uit de bibliotheek ---------- */
 
 $('#btn-fotokies').addEventListener('click', () => {
   if (!S) return;
@@ -1363,15 +1566,15 @@ $('#dossierinput').addEventListener('change', async () => {
   let n = 0;
   for (const f of files) {
     try {
-      voegDossierFoto(await verkleinBestand(f, dossierDim(), dossierKw()));
-      n++;
+      const rec = await voegFotoToe(fotoSel, await bestandNaarJpeg(f, tierVoorGroep(fotoSel)));
+      if (rec) n++;
     } catch (e) { /* geen afbeelding: overslaan */ }
   }
-  bewaar();
+  renderDossier();
   toast(n ? `${n} foto${n === 1 ? '' : "'s"} toegevoegd` : 'Geen foto kunnen laden');
 });
 
-/* ---------- eigen camerascherm: blijft open, foto per tik op de sluiter ---------- */
+/* ---------- eigen camerascherm (§7.6): blijft open, foto per tik ---------- */
 
 let camStream = null;
 let camFlits = false;
@@ -1404,14 +1607,14 @@ async function startCamera(modus) {
 }
 
 /* geen cameratoegang: losse foto via de toestelkiezer, dossier via de bibliotheek
-   (die op iOS ook de native camera aanbiedt) + tip waar de toestemming staat */
+   (die op iOS ook de native camera aanbiedt) */
 function camFallback(fout) {
   if (camModus === 'enkel') {
     const inp = $('#fotoinput');
     inp.value = '';
     inp.click();
   } else {
-    toast(`Geen cameratoegang${fout ? ' (' + fout + ')' : ''} – bibliotheek geopend. Tip: Instellingen ▸ Apps ▸ Safari ▸ Camera → Vraag.`);
+    toast(`Geen cameratoegang${fout ? ' (' + fout + ')' : ''} – bibliotheek geopend`);
     const inp = $('#dossierinput');
     inp.value = '';
     inp.click();
@@ -1451,20 +1654,32 @@ function updateCamTeller(n) {
 
 $('#btn-camera').addEventListener('click', () => startCamera('dossier'));
 
-$('#btn-sluiter').addEventListener('click', () => {
+$('#btn-sluiter').addEventListener('click', async () => {
   const v = $('#camvideo');
   if (!S || !camStream || !v.videoWidth) return;
   if (camModus === 'enkel') {
-    const data = naarJpeg(v, v.videoWidth, v.videoHeight, fotoMaxDim, fotoKwaliteit);
     const cb = fotoCb;
     fotoCb = null;
-    stopCamera();
-    if (cb) cb(data);
+    try {
+      const jpeg = await canvasNaarJpeg(v, v.videoWidth, v.videoHeight, TIER.foto);
+      stopCamera();
+      const rec = await voegFotoToe(null, jpeg);
+      if (rec && cb) cb(rec.id);
+    } catch (e) {
+      stopCamera();
+      toast('Foto niet bewaard');
+    }
     return;
   }
-  voegDossierFoto(naarJpeg(v, v.videoWidth, v.videoHeight, dossierDim(), dossierKw()));
-  updateCamTeller(camSessieFotos + 1);
   flash($('#btn-sluiter'));
+  try {
+    const jpeg = await canvasNaarJpeg(v, v.videoWidth, v.videoHeight, tierVoorGroep(fotoSel));
+    const rec = await voegFotoToe(fotoSel, jpeg);
+    if (rec) {
+      updateCamTeller(camSessieFotos + 1);
+      renderDossier();
+    }
+  } catch (e) { toast('Foto niet bewaard'); }
 });
 
 $('#btn-camklaar').addEventListener('click', () => {
@@ -1474,69 +1689,157 @@ $('#btn-camklaar').addEventListener('click', () => {
     return;
   }
   stopCamera();
-  bewaar();
   if (camSessieFotos) toast(`${camSessieFotos} foto${camSessieFotos === 1 ? '' : "'s"} toegevoegd`);
 });
 
 /* app naar de achtergrond: camera netjes loslaten (iOS stopt de stream toch) */
-document.addEventListener('visibilitychange', () => { if (document.hidden && camStream) { stopCamera(); bewaar(); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden && camStream) { stopCamera(); if (S && dirty) bewaar(); } });
 window.addEventListener('pagehide', () => { if (camStream) stopCamera(); });
 
-/* ============================== afronden ============================== */
+/* ============================== tab Afronden (§7.7) ============================== */
 
+function renderAfronden() {
+  renderChecks();
+  /* grijze regel + verwijderknop volgen pdfBewaardOp (§6) */
+  const klaar = !!S.pdfBewaardOp;
+  $('#pdf-bewaard').hidden = !klaar;
+  if (klaar) $('#pdf-bewaard').textContent = `PDF bewaard op ${datumUur(S.pdfBewaardOp)}`;
+  const del = $('#btn-verwijder-woning');
+  del.disabled = !klaar;
+  del.textContent = klaar ? 'Woning verwijderen' : 'Bewaar eerst de PDF';
+}
 
-/* ---------- controlelijstje op Afronden: informatief, nooit blokkerend ---------- */
-
+/* controlelijstje: informatief, nooit blokkerend, vers berekend bij openen */
 function renderChecks() {
   const ul = $('#checklijst');
   ul.innerHTML = '';
-  const zonderFoto = S.ruimtes.filter(r => !S.fotodossier.some(f => f.ruimte === r.naam)).map(r => r.naam);
+  const zonderFoto = S.ruimtes.filter(r => !dossierFotos(r.id).length).map(r => r.naam);
   const items = [
     { ok: !zonderFoto.length, tekst: 'Elke ruimte minstens één foto', detail: zonderFoto.join(', ') },
     { ok: S.energie.opwekkers.length > 0, tekst: 'Verwarming ingevuld', detail: 'nog geen opwekker of toestel' },
-    { ok: !!S.algemeen.foto, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
+    { ok: !!S.algemeen.hoofdFotoId, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
   ];
   items.forEach(i => {
     const li = document.createElement('li');
     li.innerHTML =
       `<div class="info">
-         <div class="r1">${i.ok ? '\u2705' : '\u274C'} ${esc(i.tekst)}</div>
+         <div class="r1">${i.ok ? '✅' : '❌'} ${esc(i.tekst)}</div>
          ${!i.ok && i.detail ? `<div class="r3">${esc(i.detail)}</div>` : ''}
        </div>`;
     ul.appendChild(li);
   });
 }
 
-/* ---------- PDF bewaren (zie pdf.js voor de generator) ---------- */
+/* ---------- PDF bewaren (§9.3): worker met voortgang, dan share/download ---------- */
 
-/* de PDF krijgt het adres als bestandsnaam */
-function pdfNaam() {
-  return (S.algemeen.adres || 'EPC plaatsbezoek').trim();
+let pdfBezig = false;
+let pdfKlaarFile = null; /* Blob wacht op een user gesture na NotAllowedError */
+
+function zetVoortgang(v) {
+  const p = $('#pdf-voortgang');
+  p.hidden = false;
+  p.value = v;
+}
+function verbergVoortgang() {
+  $('#pdf-voortgang').hidden = true;
 }
 
-$('#btn-print').addEventListener('click', async () => {
-  if (!S) return;
-  toast('PDF maken\u2026');
+function bouwInWorker(woning, fotos) {
+  return new Promise((res, rej) => {
+    let w;
+    try { w = new Worker('pdfworker.js'); } catch (e) { rej(e); return; }
+    w.onmessage = ev => {
+      if (ev.data.voortgang !== undefined) { zetVoortgang(ev.data.voortgang); return; }
+      if (ev.data.fout) { w.terminate(); rej(new Error(ev.data.fout)); return; }
+      if (ev.data.klaar) { w.terminate(); res(ev.data.klaar); }
+    };
+    w.onerror = e => { w.terminate(); rej(new Error(e.message || 'Worker-fout')); };
+    const buffers = [...fotos.values()].map(f => f.bytes.buffer);
+    w.postMessage({ woning: JSON.parse(JSON.stringify(woning)), fotos, versie: swVersie }, buffers);
+  });
+}
+
+async function bewaarPdf() {
+  if (!S || pdfBezig) return;
+  pdfBezig = true;
+  toast('PDF maken…');
+  zetVoortgang(0);
   try {
-    const blob = await bouwPdf(S);
-    const naam = (slug(pdfNaam()) || 'epc') + '.pdf';
-    const file = new File([blob], naam, { type: 'application/pdf' });
-    /* deelmenu (iPhone: Bewaar in Bestanden); zonder deelmenu gewoon downloaden */
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file] });
-        return;
-      } catch (e) {
-        if (e.name === 'AbortError') return;
-      }
+    const fotos = new Map();
+    for (const [id, rec] of DB.geladenFotos()) {
+      if (fotoVerborgen(id)) continue;
+      const buf = await rec.blob.arrayBuffer();
+      fotos.set(id, { bytes: new Uint8Array(buf), breedte: rec.breedte, hoogte: rec.hoogte, groep: rec.groep, volgorde: rec.volgorde });
     }
-    downloadBlob(naam, file);
+    const blob = await bouwInWorker(S, fotos);
+    if (blob.size > 150 * 1024 * 1024 && !confirm('Grote PDF, delen kan mislukken. Toch doorgaan?')) {
+      toast('Niet bewaard');
+      return;
+    }
+    const naam = (slug(S.algemeen.adres) || 'epc') + '.pdf';
+    const file = new File([blob], naam, { type: 'application/pdf' });
+    await deelOfDownload(file);
   } catch (e) {
-    toast('PDF maken mislukt' + (e && e.name ? ' (' + e.name + ')' : ''));
+    toast('PDF maken mislukt' + (e && (e.name || e.message) ? ` (${e.name || e.message})` : ''));
+  } finally {
+    pdfBezig = false;
+    verbergVoortgang();
+  }
+}
+
+async function deelOfDownload(file) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      zetPdfBewaard();
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') { toast('Niet bewaard'); return; }
+      if (e.name === 'NotAllowedError') {
+        /* iOS eist een user gesture: Blob blijft in het geheugen, de knop
+           wordt "Deel PDF" die share() rechtstreeks vanuit een tik aanroept */
+        pdfKlaarFile = file;
+        $('#btn-print').hidden = true;
+        $('#btn-deel').hidden = false;
+        toast('Tik op "Deel PDF" om te delen');
+        return;
+      }
+      throw e;
+    }
+  }
+  downloadBlob(file.name, file);
+  zetPdfBewaard();
+}
+
+function zetPdfBewaard() {
+  S.pdfBewaardOp = nu();
+  wijzig();
+  bewaar();
+  renderAfronden();
+  toast('PDF bewaard');
+}
+
+$('#btn-print').addEventListener('click', bewaarPdf);
+$('#btn-noodpdf').addEventListener('click', bewaarPdf);
+
+$('#btn-deel').addEventListener('click', async () => {
+  if (!pdfKlaarFile) return;
+  try {
+    await navigator.share({ files: [pdfKlaarFile] });
+    pdfKlaarFile = null;
+    $('#btn-deel').hidden = true;
+    $('#btn-print').hidden = false;
+    zetPdfBewaard();
+  } catch (e) {
+    if (e.name === 'AbortError') { toast('Niet bewaard'); return; } /* knop blijft: opnieuw proberen kan */
+    pdfKlaarFile = null;
+    $('#btn-deel').hidden = true;
+    $('#btn-print').hidden = false;
+    toast('Delen mislukt' + (e && e.name ? ` (${e.name})` : ''));
   }
 });
 
-/* ---------- bestand downloaden (desktop zonder deelmenu) ---------- */
+/* ---------- bestand downloaden (zonder deelmenu) ---------- */
 
 function downloadBlob(naam, blob) {
   const a = document.createElement('a');
@@ -1548,13 +1851,23 @@ function downloadBlob(naam, blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
+/* ---------- woning verwijderen: pas na een geslaagde PDF (§6) ---------- */
+
 $('#btn-verwijder-woning').addEventListener('click', async () => {
-  if (!S) return;
-  if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?`)) return;
+  if (!S || !S.pdfBewaardOp) return;
+  if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?\nPDF bewaard op ${datumUur(S.pdfBewaardOp)}.`)) return;
+  commitUndo();
   const w = S;
   S = null;
   dirty = false;
-  await dbVerwijderWoning(w.id);
+  try {
+    await DB.verwijderWoningMetFotos(w.id);
+  } catch (e) {
+    S = w;
+    toast('Verwijderen mislukt' + (e && e.name ? ` (${e.name})` : ''));
+    return;
+  }
+  DB.sluitWoning();
   await renderLijst();
   toonLijst();
   toast('Woning verwijderd');
@@ -1589,15 +1902,17 @@ function syncAlles() {
 
   /* ramen: formulier volgt draft, geen openstaande wijziging */
   stopBewerkRaam();
+  draft = leegDraft();
   syncRaamForm();
   $('#breedte').value = '';
   $('#hoogte').value = '';
-  $('#aantal').value = draft.aantal || 1;
+  $('#aantal').value = draft.aantal;
   updateM2Live();
   renderRamen();
 
   /* centrale verwarming (tab Algemeen) */
   stopBewerkOpwek();
+  draftOpwek = leegDraftOpwek();
   syncOpwekForm();
   $('#opw-beschrijving').value = '';
   renderOpwekkers();
@@ -1613,97 +1928,70 @@ function syncAlles() {
 
   /* verwarming per ruimte (tab Details) */
   stopBewerkRv();
-  draftRv = { type: 'airco', foto: null };
+  draftRv = { type: 'airco', fotoId: null };
   syncRvForm();
   $('#rv-beschrijving').value = '';
-  renderRv();
 
-  /* ruimtebalk: start op Algemeen */
-  selectedRuimte = '';
+  /* ruimtebalk: Details start op de eerste ruimte, Foto's op Gevels */
+  ruimteSel = S.ruimtes.length ? S.ruimtes[0].id : null;
+  fotoSel = 'gevels';
   renderRuimtebalk();
 
-  /* fotodossier */
-  renderDossier();
+  /* PDF-knoppen terug in de basisstand */
+  pdfKlaarFile = null;
+  $('#btn-deel').hidden = true;
+  $('#btn-print').hidden = false;
+  verbergVoortgang();
 }
 
 /* ============================== start ============================== */
 
 (async function init() {
+  DB.zetFoutmelder(naam => {
+    if (naam === 'QuotaExceededError') {
+      zetRodeBalk('NIET OPGESLAGEN — Opslag vol — bewaar de PDF en verwijder een afgewerkte woning');
+    }
+  });
+
   try {
-    db = await dbOpen();
+    await DB.open();
   } catch (e) {
-    toast('Opslag niet beschikbaar in deze browser');
-    return;
+    /* niets wissen: rode balk + read-only geheugenmodus, enkel "Bewaar PDF" werkt nog (§6) */
+    DB.startGeheugenmodus();
+    zetRodeBalk(`NIET OPGESLAGEN — databank niet beschikbaar (${(e && e.name) || 'fout'})`);
   }
 
-  /* vraag persistente opslag aan tegen eviction */
-  if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
-
-  /* staand vergrendelen waar de browser het toelaat (iOS negeert dit; daar vangt #draai het op) */
-  try { screen.orientation.lock('portrait').catch(() => {}); } catch (e) { /* niet ondersteund */ }
+  /* opslag: persist() aanvragen en estimate() controleren, in een try (§6) */
+  try {
+    let persisted = null;
+    if (navigator.storage && navigator.storage.persist) persisted = await navigator.storage.persist();
+    let est = null;
+    if (navigator.storage && navigator.storage.estimate) est = await navigator.storage.estimate();
+    const mb = b => `${Math.round(b / 1048576)} MB`;
+    const vol = est && est.quota ? est.usage / est.quota : 0;
+    if (persisted === false || vol > 0.8) {
+      zetGeleBalk(
+        (vol > 0.8 ? `Opslag bijna vol: ${mb(est.usage)} van ${mb(est.quota)} gebruikt. ` : '') +
+        (persisted === false ? 'Opslag is niet persistent: de browser kan gegevens wissen.' : '')
+      );
+    }
+  } catch (e) { /* geen storage-API: geen balk */ }
 
   await renderLijst();
   toonLijst();
 
-  /* nieuwe versie: check bij elke start en bij terugkeer naar de app, en herlaad automatisch */
+  /* weesfotosweep op idle; faalt stil (§5.1) */
+  const idle = window.requestIdleCallback || (fn => setTimeout(fn, 3000));
+  idle(() => DB.weesfotoSweep());
+
+  /* service worker: registreren en updates checken bij start en terugkeer.
+     Verder niets — de nieuwe versie draait na het wegvegen uit de app-switcher. */
   if ('serviceWorker' in navigator) {
-    let swReg = null;
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
       .then(reg => {
-        swReg = reg;
         reg.update();
         document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
-        vraagVersie();
       })
       .catch(() => { /* offline install vereist https of localhost */ });
-
-    const hadController = !!navigator.serviceWorker.controller;
-    let herladen = false;
-    navigator.serviceWorker.addEventListener('controllerchange', async () => {
-      if (!hadController || herladen) { vraagVersie(); return; } /* eerste installatie: niet herladen */
-      herladen = true;
-      if (S && dirty) await bewaar();
-      location.reload();
-    });
-
-    /* toon welke versie er op dit toestel echt draait */
-    function vraagVersie() {
-      if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('versie');
-    }
-    navigator.serviceWorker.addEventListener('message', e => {
-      if (!e.data || !e.data.versie) return;
-      $('#versie').textContent = 'Versie ' + String(e.data.versie).replace('epc-', '');
-      /* zelfherstel: SW nieuwer dan de geladen bestanden -> eenmalig herladen */
-      if (e.data.versie !== APP_VERSIE) {
-        if (!sessionStorage.getItem('herlaadpoging')) {
-          sessionStorage.setItem('herlaadpoging', '1');
-          location.reload();
-        }
-      } else {
-        sessionStorage.removeItem('herlaadpoging');
-      }
-    });
-
-    /* handmatig een update forceren, met duidelijke feedback */
-    let updateBezig = false;
-    $('#btn-update').addEventListener('click', async () => {
-      if (updateBezig) return;
-      updateBezig = true;
-      toast('Zoeken naar update…');
-      try {
-        const reg = swReg || await navigator.serviceWorker.getRegistration();
-        if (!reg) { toast('App nog niet geïnstalleerd'); return; }
-        await reg.update();
-        if (reg.waiting) { reg.waiting.postMessage('skip'); return; } /* activeert en herlaadt vanzelf */
-        if (reg.installing) { toast('Update gevonden, app herlaadt zo…'); return; }
-        toast('Je hebt al de nieuwste versie');
-      } catch (e) {
-        toast('Update checken mislukt. Ben je online?');
-      } finally {
-        updateBezig = false;
-      }
-    });
-  } else {
-    $('#versierij').hidden = true;
   }
 })();

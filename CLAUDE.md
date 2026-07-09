@@ -18,22 +18,32 @@ daarin is **bewust gekozen** door de gebruiker. Daarom:
 ## Vaste afspraken
 
 - Vanilla HTML/CSS/JS, geen dependencies, alles in het Nederlands (UI én commits).
+- Bestanden: `index.html`, `app.js`, `db.js`, `maakpdf.js`, `pdfworker.js`,
+  `style.css`, `sw.js`, `manifest.json` — zie de tabel in `SPEC.md` §2.
 - Werk **direct op `main`**; push deployt automatisch naar GitHub Pages.
   Branches `v1`, `v2`, … zijn historische checkpoints — nooit op verder bouwen.
   Maak op vraag van de gebruiker een nieuwe checkpoint-branch vóór grote verbouwingen.
-- **Bump bij elke release de cache-versie in `sw.js` én `APP_VERSIE` in `app.js`**
-  (zelfde `epc-vNN`-waarde), anders krijgen toestellen de update niet of blijft
-  het zelfherstel herladen.
-- **Test vóór elke push** met Playwright in de meegeleverde Chromium
-  (`/opt/pw-browsers/chromium-*/chrome-linux/chrome`; camera met
-  `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`):
-  volledige klikflows op iPhone-viewport (393×852), persistentie na een reload,
-  en de PDF via `bouwPdf()` gevalideerd met pypdf (paginaformaten, tekst,
-  JPEG-integriteit). Plus `node --check` op alle JS.
+- **Eén versieconstante**: `VERSIE` in `sw.js`. Bump die bij elke release; `app.js`
+  kent geen versie.
+- Destructieve acties gebruiken `confirm()`/`prompt()`, **behalve foto's**: die
+  krijgen een undo-toast van 6 s (SPEC.md §1).
+- Testen vóór elke push (SPEC.md §11):
+  - `node --check` op `app.js`, `db.js`, `maakpdf.js`, `pdfworker.js`, `sw.js`.
+  - Unit-tests van `maakpdf.js` in Node (AFM-waarden, DeviceGray, progressive-fout).
+  - Playwright-klikflows op iPhone-viewport (393×852), bij voorkeur WebKit
+    (WebKit ≠ mobile Safari); camera met
+    `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`.
+    Na `page.fill` is de tabbalk verborgen: eerst blurren.
+  - PDF valideren: `qpdf --check`, dan pypdf (tekst, paginaformaten), dan
+    `pdftoppm` op drie pagina's.
+  - Failsafes: geïnjecteerde `QuotaExceededError` → rode balk; verwijderen
+    geblokkeerd zolang `pdfBewaardOp === null`.
+- Wat alleen op het echte toestel te testen valt (share, user gesture, camera,
+  torch, EXIF) staat in de handmatige iPhone-checklist in SPEC.md §11 — vermeld
+  bij een release expliciet dat die checklist bij de gebruiker ligt.
 - Verifieer na de deploy dat `https://miletielenss.github.io/epc/sw.js` de nieuwe
   versie serveert.
-- `normaliseer()` vult defaults aan en herstelt tellers; legacy-migraties zijn
-  bewust verwijderd (er bestaan geen oude records). Voeg pas migratiecode toe
-  als een modelwijziging échte data in omloop raakt.
-- Wat iOS niet kan (bv. torch in getUserMedia, window.print in standalone) wordt
+- `normaliseer()` corrigeert nooit stil: elke correctie in `woning.problemen[]`
+  plus één toast (SPEC.md §5.1).
+- Wat iOS niet kan (bv. torch in getUserMedia, share zonder user gesture) wordt
   eerlijk opgevangen met een fallback en zo in de spec gedocumenteerd.
