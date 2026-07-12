@@ -84,8 +84,53 @@ await scenario('hoofdflow', {
 
   await page.goto(BASIS);
   await page.waitForSelector('#woninglijst .leeg');
+
+  /* verstopt knopje (§7.1): op de lijst (geen open dossier) doet een druk op de
+     titel niets — start() valt uit op !S, stop() ziet geen actieve timer */
+  const titel = page.locator('#titel');
+  await titel.hover();
+  await page.mouse.down();
+  await page.mouse.up();
+
+  /* volgendeIndex-catch: bij kapotte getItem valt hij terug op 1 */
+  const viFout = await page.evaluate(() => {
+    const g = localStorage.getItem.bind(localStorage);
+    localStorage.getItem = () => { throw new Error('geen storage'); };
+    try { return volgendeIndex(); } finally { localStorage.getItem = g; }
+  });
+  assert.equal(viFout, 1, 'volgendeIndex valt terug op 1');
+
   await page.click('#btn-nieuwewoning');
   await page.waitForSelector('#app:not([hidden])');
+  assert.equal(await page.evaluate(() => S.nummer), 1, 'nieuwe woning krijgt nummer 1');
+  assert.equal(await page.evaluate(() => localStorage.getItem('epc-volgindex')), '2', 'teller op 2');
+
+  /* lange druk op de editortitel corrigeert het nummer van dit dossier (§7.1) */
+  /* korte druk: timer gewist vóór 800 ms (stop met actieve timer) */
+  await titel.hover();
+  await page.mouse.down();
+  await page.mouse.up();
+  /* ongeldige invoer -> toast, nummer blijft 1 */
+  antwoord({ doe: 'accept', tekst: 'abc' });
+  await titel.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  assert.equal(await page.evaluate(() => S.nummer), 1, 'ongeldig nummer genegeerd');
+  /* geannuleerd -> geen wijziging */
+  antwoord({ doe: 'dismiss' });
+  await titel.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  /* geldig nummer -> nummer gezet, globale teller volgt op nummer+1 */
+  antwoord({ doe: 'accept', tekst: '30' });
+  await titel.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  await page.waitForFunction(() => S.nummer === 30);
+  assert.equal(await page.evaluate(() => localStorage.getItem('epc-volgindex')), '31', 'teller volgt op 31');
 
   /* locatieknop: adres, dan 500 -> coördinaten, dan offline -> coördinaten */
   await page.click('#btn-locatie');
@@ -286,6 +331,7 @@ await scenario('hoofdflow', {
 
   /* foto's: raster, ster, verplaatsen, undo-verloop, lightbox */
   await page.click('#tabbar button[data-tab="fotos"]');
+  await page.click('#ruimtechips button[data-v="gevels"]');   /* gevelfoto's voor de ster/hoofdfoto */
   const [kiezer] = await Promise.all([
     page.waitForEvent('filechooser'),
     page.click('#btn-fotokies')
@@ -590,6 +636,7 @@ await scenario('geheugen', {
   await page.waitForTimeout(700);
   assert.ok(await page.locator('#foutbalk:not([hidden])').count(), 'balk blijft in geheugenmodus');
   await page.click('#tabbar button[data-tab="fotos"]');
+  await page.click('#ruimtechips button[data-v="gevels"]');   /* gevelfoto voor de ster */
   await page.setInputFiles('#dossierinput', FOTO);
   await page.waitForSelector('#dossiergrid .dfoto');
   await page.click('#dossiergrid .ster');

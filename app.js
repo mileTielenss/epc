@@ -28,9 +28,6 @@ function fmtM(m) {
 function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
-function slug(s) {
-  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
 function datumUur(iso) {
   const d = new Date(iso);
   const p = n => String(n).padStart(2, '0');
@@ -111,6 +108,7 @@ function standaardRuimtes() {
 function leegWoning() {
   return {
     id: DB.nieuwId(),
+    nummer: 0,
     gemaakt: nu(),
     gewijzigd: nu(),
     pdfBewaardOp: null,
@@ -324,7 +322,8 @@ function zetTab(naam) {
 }
 
 function zetTitel() {
-  $('#titel').textContent = (S && S.algemeen.adres) || 'Nieuwe woning';
+  const adres = (S && S.algemeen.adres) || 'Nieuwe woning';
+  $('#titel').textContent = (S ? nummerPrefix(S) : '') + adres;
 }
 
 async function openWoning(id) {
@@ -389,7 +388,7 @@ async function renderLijst() {
     li.innerHTML =
       thumb +
       `<div class="info">
-         <div class="r1">${esc((w.algemeen && w.algemeen.adres) || 'Zonder adres')}</div>
+         <div class="r1">${esc(nummerPrefix(w) + ((w.algemeen && w.algemeen.adres) || 'Zonder adres'))}</div>
          <div class="r3">${esc((w.algemeen && w.algemeen.datum) || '')}</div>
        </div>
        <span class="status ${klaar ? 'klaar' : ''}">${klaar ? 'PDF ✓' : 'Open'}</span>`;
@@ -403,9 +402,40 @@ $('#woninglijst').addEventListener('click', e => {
   if (li) openWoning(li.dataset.id);
 });
 
+/* verstopt knopje (§7.1): lang drukken op de titel van het geopende dossier
+   corrigeert het nummer van dít dossier; de globale teller volgt zodat het
+   volgende nieuwe dossier verder telt vanaf nummer+1. */
+(() => {
+  const titel = $('#titel');
+  let timer = null;
+  const start = () => {
+    if (!S) return; /* enkel zinvol met een geopend dossier */
+    timer = setTimeout(() => {
+      timer = null;
+      const inv = prompt('Dossiernummer van deze woning:', String(S.nummer || volgendeIndex()));
+      if (inv === null) return;
+      const n = parseInt(inv, 10);
+      if (!Number.isFinite(n) || n <= 0) { toast('Ongeldig nummer'); return; }
+      S.nummer = n;
+      zetVolgendeIndex(n + 1);
+      wijzig();
+      bewaar();
+      zetTitel();
+      toast(`Dossiernummer: ${n}`);
+    }, 800);
+  };
+  const stop = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  titel.addEventListener('pointerdown', start);
+  titel.addEventListener('pointerup', stop);
+  titel.addEventListener('pointerleave', stop);
+  titel.addEventListener('pointercancel', stop);
+})();
+
 $('#btn-nieuwewoning').addEventListener('click', async () => {
   DB.sluitWoning();
   S = leegWoning();
+  S.nummer = volgendeIndex();          /* automatisch het volgende nummer … */
+  zetVolgendeIndex(S.nummer + 1);      /* … en de teller meteen ophogen */
   volgTeller = 0;
   draft = leegDraft();
   draftOpwek = leegDraftOpwek();
@@ -447,6 +477,10 @@ async function importeerDossier(d, leden) {
   w.algemeen.adres = d.adres || '';
   if (d.datumPlaatsbezoek) w.algemeen.datum = d.datumPlaatsbezoek;
   w.algemeen.notities = d.notities || '';
+  /* het nummer staat niet in de json (§9.3): een import is een nieuw dossier en
+     krijgt gewoon het volgende vrije nummer, net als een nieuwe woning */
+  w.nummer = volgendeIndex();
+  zetVolgendeIndex(w.nummer + 1);
 
   /* echte ruimtes aanmaken; "Gevels"/"Algemeen" zijn fotogroepen, geen ruimte */
   const idVoorNaam = new Map();
@@ -1391,11 +1425,13 @@ $('#rvlijst').addEventListener('click', e => {
 });
 
 /* ============================== ruimtebalk (§7.2) ==============================
-   Details: enkel echte ruimtes, altijd één geselecteerd. Foto's en camera:
-   vooraan "Algemeen" en "Gevels". Lang indrukken op een ruimtechip = hernoemen. */
+   Eén gedeelde selectie over Details, Foto's en camera, zodat je al wandelend
+   in dezelfde ruimte blijft terwijl je noteert én fotografeert. Foto's en camera
+   tonen vooraan ook "Algemeen" en "Gevels"; op Details wordt zo'n keuze (geen
+   echte ruimte) opgevangen door zetTab, dat terugvalt op de eerste ruimte.
+   Lang indrukken op een ruimtechip = hernoemen. */
 
-let ruimteSel = null;   /* ruimteId, voor de Details-tab */
-let fotoSel = 'gevels'; /* 'gevels' | 'algemeen' | ruimteId, voor Foto's en camera */
+let ruimteSel = null;   /* 'gevels' | 'algemeen' | ruimteId — gedeeld over de tabs */
 
 function huidigeRuimte() {
   return S.ruimtes.find(r => r.id === ruimteSel) || null;
@@ -1409,7 +1445,7 @@ function fotoGroepLabel(v) {
 
 function renderRuimteChips(container, metPlus, fotoContext) {
   container.innerHTML = '';
-  const sel = fotoContext ? fotoSel : ruimteSel;
+  const sel = ruimteSel;
   const maak = (v, tekst, extraClass) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -1449,7 +1485,7 @@ function syncVent() {
 $('#camruimtes').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b || !S) return;
-  fotoSel = b.dataset.v;
+  ruimteSel = b.dataset.v;
   renderRuimtebalk();
 });
 
@@ -1506,8 +1542,7 @@ $('#ruimtechips').addEventListener('click', e => {
     return;
   }
   $('#ruimtekeuze').hidden = true;
-  if (actieveTab === 'details') ruimteSel = b.dataset.v;
-  else fotoSel = b.dataset.v;
+  ruimteSel = b.dataset.v;
   renderRuimtebalk();
 });
 
@@ -1606,7 +1641,7 @@ function dossierTotaal() {
 function renderDossier() {
   const grid = $('#dossiergrid');
   grid.innerHTML = '';
-  const hier = dossierFotos(fotoSel);
+  const hier = dossierFotos(ruimteSel);
   hier.forEach(f => {
     const d = document.createElement('div');
     d.className = 'dfoto';
@@ -1619,7 +1654,7 @@ function renderDossier() {
   });
   const totaal = dossierTotaal();
   $('#dossier-totaal').textContent = totaal
-    ? `${hier.length} foto${hier.length === 1 ? '' : "'s"} in ${fotoGroepLabel(fotoSel)} · ${totaal} in totaal${fotoSel === 'gevels' ? ' · ★ = hoofdfoto' : ''}`
+    ? `${hier.length} foto${hier.length === 1 ? '' : "'s"} in ${fotoGroepLabel(ruimteSel)} · ${totaal} in totaal${ruimteSel === 'gevels' ? ' · ★ = hoofdfoto' : ''}`
     : "Nog geen foto's. Start de camera en tik ze snel na elkaar.";
 }
 
@@ -1720,7 +1755,7 @@ $('#dossierinput').addEventListener('change', async () => {
   let n = 0;
   for (const f of files) {
     try {
-      const rec = await voegFotoToe(fotoSel, await bestandNaarJpeg(f, tierVoorGroep(fotoSel)));
+      const rec = await voegFotoToe(ruimteSel, await bestandNaarJpeg(f, tierVoorGroep(ruimteSel)));
       if (rec) n++;
     } catch (e) { /* geen afbeelding: overslaan */ }
   }
@@ -1827,8 +1862,8 @@ $('#btn-sluiter').addEventListener('click', async () => {
   }
   flash($('#btn-sluiter'));
   try {
-    const jpeg = await canvasNaarJpeg(v, v.videoWidth, v.videoHeight, tierVoorGroep(fotoSel));
-    const rec = await voegFotoToe(fotoSel, jpeg);
+    const jpeg = await canvasNaarJpeg(v, v.videoWidth, v.videoHeight, tierVoorGroep(ruimteSel));
+    const rec = await voegFotoToe(ruimteSel, jpeg);
     if (rec) {
       updateCamTeller(camSessieFotos + 1);
       renderDossier();
@@ -1889,6 +1924,35 @@ function renderChecks() {
 let pdfBezig = false;
 let pdfKlaarFile = null; /* Blob wacht op een user gesture na NotAllowedError */
 
+/* globale teller (§7.1): het nummer dat het VOLGENDE nieuwe dossier krijgt.
+   In localStorage; elk nieuw dossier neemt deze waarde en telt de teller op.
+   Een lange druk op de titel corrigeert het nummer van het huidige dossier. */
+function volgendeIndex() {
+  try {
+    const n = parseInt(localStorage.getItem('epc-volgindex'), 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  } catch (e) { return 1; }
+}
+function zetVolgendeIndex(n) {
+  try { localStorage.setItem('epc-volgindex', String(Math.max(1, Math.round(n) || 1))); } catch (e) { /* geen storage */ }
+}
+/* prefix "<nummer>. " van een dossier; leeg als er (nog) geen nummer is.
+   Het nummer is puur app-zijde (overzicht + zip-naam) — het staat NIET in de
+   pdf of json, zodat de zip-inhoud nummeronafhankelijk en reproduceerbaar blijft. */
+function nummerPrefix(w) {
+  return w && w.nummer ? w.nummer + '. ' : '';
+}
+/* adres zonder tekens die een bestandsnaam breken; spaties, komma's en
+   koppeltekens blijven behouden. Naam van de pdf ín de zip (nummervrij). */
+function schoonAdres(w) {
+  return (((w && w.algemeen && w.algemeen.adres) || 'EPC plaatsbezoek')
+    .replace(/[\/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim()) || 'EPC plaatsbezoek';
+}
+/* bestandsnaam van de zip zelf: "<nummer>. <adres>" (§9.3) */
+function zipBasisnaam(w) {
+  return nummerPrefix(w) + schoonAdres(w);
+}
+
 function zetVoortgang(v) {
   const p = $('#pdf-voortgang');
   p.hidden = false;
@@ -1898,7 +1962,7 @@ function verbergVoortgang() {
   $('#pdf-voortgang').hidden = true;
 }
 
-function bouwInWorker(woning, fotos) {
+function bouwInWorker(woning, fotos, naam) {
   return new Promise((res, rej) => {
     let w;
     try { w = new Worker('pdfworker.js'); } catch (e) { rej(e); return; }
@@ -1909,7 +1973,7 @@ function bouwInWorker(woning, fotos) {
     };
     w.onerror = e => { w.terminate(); rej(new Error(e.message || 'Worker-fout')); };
     const buffers = [...fotos.values()].map(f => f.bytes.buffer);
-    w.postMessage({ woning: JSON.parse(JSON.stringify(woning)), fotos, versie: swVersie, naam: slug(woning.algemeen.adres) || 'epc' }, buffers);
+    w.postMessage({ woning: JSON.parse(JSON.stringify(woning)), fotos, versie: swVersie, naam }, buffers);
   });
 }
 
@@ -1919,19 +1983,21 @@ async function bewaarPdf() {
   toast('Dossier maken…');
   zetVoortgang(0);
   try {
+    /* pdf ín de zip: nummervrij (adres); de zip zelf: met nummerprefix */
+    const pdfNaam = schoonAdres(S);
+    const zipNaam = zipBasisnaam(S) + '.zip';
     const fotos = new Map();
     for (const [id, rec] of DB.geladenFotos()) {
       if (fotoVerborgen(id)) continue;
       const buf = await rec.blob.arrayBuffer();
       fotos.set(id, { bytes: new Uint8Array(buf), breedte: rec.breedte, hoogte: rec.hoogte, groep: rec.groep, volgorde: rec.volgorde });
     }
-    const blob = await bouwInWorker(S, fotos);
+    const blob = await bouwInWorker(S, fotos, pdfNaam);
     if (blob.size > 150 * 1024 * 1024 && !confirm('Groot dossier, delen kan mislukken. Toch doorgaan?')) {
       toast('Niet bewaard');
       return;
     }
-    const naam = (slug(S.algemeen.adres) || 'epc') + '.zip';
-    const file = new File([blob], naam, { type: 'application/zip' });
+    const file = new File([blob], zipNaam, { type: 'application/zip' });
     await deelOfDownload(file);
   } catch (e) {
     toast('Dossier maken mislukt' + (e && (e.name || e.message) ? ` (${e.name || e.message})` : ''));
@@ -2086,9 +2152,8 @@ function syncAlles() {
   syncRvForm();
   $('#rv-beschrijving').value = '';
 
-  /* ruimtebalk: Details start op de eerste ruimte, Foto's op Gevels */
+  /* ruimtebalk: één gedeelde selectie, start op de eerste ruimte */
   ruimteSel = S.ruimtes.length ? S.ruimtes[0].id : null;
-  fotoSel = 'gevels';
   renderRuimtebalk();
 
   /* PDF-knoppen terug in de basisstand */

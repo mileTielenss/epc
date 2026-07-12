@@ -87,6 +87,7 @@ onverwijderbaar blijven omdat verwijderen een geslaagde PDF vereist).
 ```
 woning = {
   id: base36-timestamp + '-' + random5,
+  nummer: geheel getal,        // dossiernummer (§7.1), app-zijde; niet in pdf/json
   gemaakt, gewijzigd,          // ISO
   pdfBewaardOp: ISO | null,    // enige statusbron
   algemeen: { adres, datum (YYYY-MM-DD, default vandaag), notities,
@@ -155,16 +156,30 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 ## 7. Schermen
 ### 7.1 Woningenlijst
 - Titelbalk "EPC Plaatsbezoek". Gesorteerd op laatst gewijzigd.
-- Per rij: hoofdfoto-thumb, adres ("Zonder adres"), datum, statuspill afgeleid uit
-  `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen knop**).
+- Per rij: hoofdfoto-thumb, **`<nummer>. <adres>`** ("Zonder adres"), datum,
+  statuspill afgeleid uit `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen
+  knop**). Het prefix valt weg als de woning (nog) geen nummer heeft.
 - Verwijderen kan niet vanuit de lijst, enkel op de tab Afronden.
 - "+ Nieuwe woning" maakt en opent een record.
 - Daaronder "Importeer dossier": kies een eerder bewaarde dossier-zip en de
   woning wordt integraal teruggeladen (§9.4).
 - Geen Info-blok, geen versielabel, geen updateknop.
+- **Dossiernummer (per woning, app-zijde).** Elk dossier heeft een eigen `nummer`.
+  Een **nieuwe woning én een import** krijgen automatisch het volgende vrije
+  nummer uit een globale teller (`localStorage['epc-volgindex']`), die daarbij met
+  1 ophoogt. Het nummer verschijnt in het overzicht en als prefix van de
+  zip-bestandsnaam (§9.3). Het staat **niet** in de pdf of `woning.json`, zodat de
+  zip-inhoud nummeronafhankelijk en reproduceerbaar blijft.
+- **Verstopt: nummer corrigeren.** Klopt de teller ooit niet, dan corrigeer je het
+  nummer van het **geopende** dossier met een **lange druk** (± 0,8 s) op de titel
+  in de editorheader: `prompt()` "Dossiernummer van deze woning:" met het huidige
+  nummer voorin. Een geheel getal > 0 wordt het nieuwe `nummer` en zet de globale
+  teller op nummer+1 (zodat de volgende woning verder telt); anders toast
+  "Ongeldig nummer".
 ### 7.2 Header (editor)
-- Groene sticky balk: terugpijl `‹`, adres (ellipsis), save-bolletje. Rode balk
-  daarboven.
+- Groene sticky balk: terugpijl `‹`, titel `<nummer>. <adres>` (ellipsis),
+  save-bolletje. Rode balk daarboven. Lang indrukken op de titel corrigeert het
+  dossiernummer (§7.1).
 - Tabs: Algemeen · Details · Foto's · Afronden.
 - Op **Details** en **Foto's**: ruimtebalk, horizontaal scrollbare chip-rij
   (outline-chips, actieve gevuld). Actieve chip scrollt in beeld.
@@ -333,22 +348,29 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    `maakzip.woningExport(...)` → `woning.json` (de enige bron) →
    `maakpdf.bouwPdf(json.woning, fotosOpPad)` → PDF → de zip via `maakzip.bouwZip`
    (store, geen compressie — PDF en JPEG zijn al gecomprimeerd). Een import
-   reproduceert zo gegarandeerd dezelfde PDF. Leden:
-   - `<slug(adres)>.pdf` — het dossier;
+   reproduceert zo gegarandeerd dezelfde PDF. Leden (allemaal **nummervrij**, zodat
+   de inhoud niet afhangt van het dossiernummer):
+   - `<adres>.pdf` — het dossier;
    - `hoofdfoto.jpg` — de hoofdfoto op opgeslagen resolutie (weggelaten als er
      geen hoofdfoto is);
    - `fotos/0001.jpg` … — álle foto's (dossier én elementfoto's zoals
      kenplaten en afstandhouders), op de opgeslagen resolutie;
    - `woning.json` — alle gegevens machineleesbaar, bedoeld om de VEKA-invoer
      later te automatiseren én als bron voor de import. **Genest en zonder
-     afgeleide waarden of ruis** (§9.3.1).
-3. `File` met naam `<slug(adres)>.zip` (fallback `epc.zip`) → `navigator.share({files})`.
+     afgeleide waarden of ruis** (§9.3.1); bevat géén dossiernummer.
+3. **`<adres>`** = het ingevulde adres met tekens die een bestandsnaam breken
+   (`/ \ : * ? " < > |`) vervangen door spaties, meervoudige spaties
+   samengevouwen (fallback "EPC plaatsbezoek"); spaties, komma's en koppeltekens
+   blijven behouden. **De zip zelf** heet `"<nummer>. <adres>.zip"` (§7.1), bv.
+   `"24. Pelgrimlaan 15, Hasselt.zip"` — het nummer staat enkel op de
+   buitenverpakking. `File` met die naam → `navigator.share({files})`.
 4. **`NotAllowedError`** (iOS eist een user gesture, de bouw zit ertussen): de Blob
    blijft in het geheugen, op de plaats van de knop verschijnt **"Deel dossier"**
    die `share()` rechtstreeks vanuit een tik aanroept.
 5. Geen share-ondersteuning → download via tijdelijke `<a download>`.
-6. Resolve → `pdfBewaardOp = now`, meteen bewaren. `AbortError` → toast "Niet bewaard".
-   Andere fout → toast "Dossier maken mislukt (naam)".
+6. Resolve → `pdfBewaardOp = now`, meteen bewaren. `AbortError` → toast "Niet
+   bewaard". Andere fout → toast "Dossier maken mislukt (naam)". (Het nummer telt
+   niet hier op — het is al bij het aanmaken/importeren toegekend, §7.1.)
 7. Blob > 150 MB → eerst confirm "Groot dossier, delen kan mislukken".
 ### 9.3.1 Structuur van `woning.json`
 Ontworpen zodat elke koppeling structureel is en niets afgeleids of leeg wordt
@@ -398,7 +420,8 @@ woning: {
 - "Importeer dossier" op de woningenlijst opent een bestandskiezer (.zip).
 - `maakzip.js` leest de zip (enkel store-leden — dossiers van deze app zelf);
   `woning.json` wordt gecontroleerd op `formaat: 'epc-plaatsbezoek-dossier'`.
-- Er wordt een **nieuwe** woning aangemaakt (nieuwe ids, `pdfBewaardOp: null`):
+- Er wordt een **nieuwe** woning aangemaakt (nieuwe ids, `pdfBewaardOp: null`, het
+  volgende vrije dossiernummer volgens §7.1):
   de geneste structuur wordt teruggevouwen — "Gevels"/"Algemeen" worden weer
   fotogroepen, de andere ruimtes echte ruimtes, hun `elementen` worden ramen,
   hun `toestellen` en de centrale `opwekkers` worden energie-opwekkers, foto's

@@ -27,6 +27,9 @@ await page.click('#btn-camera');
 await page.waitForSelector('#camera:not([hidden])');
 check('camera-overlay open', true);
 check('ruimtechips in camera', await page.locator('#camruimtes button').count() >= 3);
+/* de camera opent in de gedeelde ruimteselectie (eerste ruimte, §7.2):
+   voor deze flow eerst expliciet naar Gevels wisselen */
+await page.click('#camruimtes button[data-v="gevels"]');
 await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
 await page.click('#btn-sluiter');
 await page.waitForFunction(() => document.querySelector('#camteller').textContent.includes('1'));
@@ -61,6 +64,7 @@ await page.reload();
 await page.click('#woninglijst li.woning');
 await page.waitForSelector('#app:not([hidden])');
 await page.click('#tabbar button[data-tab="fotos"]');
+await page.click('#ruimtechips button[data-v="gevels"]');
 check('camerafoto\'s bewaard na reload', await page.locator('#dossiergrid .dfoto').count() === 2);
 
 await browser.close();

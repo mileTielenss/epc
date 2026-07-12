@@ -1,7 +1,7 @@
 /* Klikflows op WebKit, iPhone-viewport (SPEC.md §11).
    Draaien: PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node flow-test.mjs */
 import { webkit } from 'playwright-core';
-import { readFileSync, rmSync, mkdirSync } from 'node:fs';
+import { readFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { strict as assert } from 'node:assert';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +50,24 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.waitForSelector('#app:not([hidden])');
   await page.fill('#adres', 'Teststraat 12, Ranst');
   await page.locator('#adres').blur();
-  check('titel volgt adres', (await page.textContent('#titel')).includes('Teststraat'));
+  check('titel volgt adres met nummerprefix', (await page.textContent('#titel')) === '1. Teststraat 12, Ranst');
+
+  /* verstopt knopje (§7.1): lange druk op de titel corrigeert het dossiernummer */
+  promptAntwoord = '7';
+  await page.locator('#titel').hover();
+  await page.mouse.down();
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('#titel').textContent === '7. Teststraat 12, Ranst');
+  check('lange druk zet dossiernummer', (await page.textContent('#titel')) === '7. Teststraat 12, Ranst');
+  /* terug naar het standaardnummer voor de rest van de flow (zip-naam) */
+  promptAntwoord = '1';
+  await page.locator('#titel').hover();
+  await page.mouse.down();
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('#titel').textContent === '1. Teststraat 12, Ranst');
+  promptAntwoord = '';
 
   /* verwarming (accordeon) */
   await page.click('#tab-algemeen details:nth-of-type(2) summary');
@@ -124,11 +141,21 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.waitForTimeout(100);
   check('lege ruimte verwijderd', await page.locator('#ruimtechips button', { hasText: 'Hobbykamer' }).count() === 0);
 
-  /* foto's: kiezen uit bibliotheek, ster, verplaatsen, undo */
+  /* de gekozen ruimte loopt mee tussen Details en Foto's (§7.2) — één selectie */
   await page.click('#tabbar button[data-tab="fotos"]');
   const chips = await page.locator('#ruimtechips button').allTextContents();
   check('Algemeen en Gevels vooraan', chips[0] === 'Algemeen' && chips[1] === 'Gevels');
-  check('Gevels geselecteerd', (await page.locator('#ruimtechips button.on').textContent()) === 'Gevels');
+  check('gekozen ruimte loopt mee naar Foto\'s', (await page.locator('#ruimtechips button.on').textContent()) === 'Living');
+  /* een fotogroep kiezen op Foto\'s; terug naar Details valt terug op een echte ruimte */
+  await page.click('#ruimtechips button[data-v="gevels"]');
+  await page.click('#tabbar button[data-tab="details"]');
+  const detSel = await page.locator('#ruimtechips button.on').textContent();
+  check('Gevels-keuze valt op Details terug op een echte ruimte', detSel !== 'Gevels' && detSel !== 'Algemeen');
+  /* terug naar Foto\'s: de ruimte loopt mee, dan expliciet Gevels voor gevelfoto\'s */
+  await page.click('#tabbar button[data-tab="fotos"]');
+  check('ruimte loopt mee terug naar Foto\'s', (await page.locator('#ruimtechips button.on').textContent()) === detSel);
+  await page.click('#ruimtechips button[data-v="gevels"]');
+  /* foto's: kiezen uit bibliotheek, ster, verplaatsen, undo */
   await page.setInputFiles('#dossierinput', [FOTO, FOTO]);
   await page.waitForSelector('#dossiergrid .dfoto');
   check('2 gevelfoto\'s in raster', await page.locator('#dossiergrid .dfoto').count() === 2);
@@ -172,6 +199,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#tabbar button[data-tab="details"]');
   check('ramen bewaard', await page.locator('#ramenlijst li').count() === 2);
   await page.click('#tabbar button[data-tab="fotos"]');
+  await page.click('#ruimtechips button[data-v="gevels"]');
   check('gevelfoto\'s bewaard', await page.locator('#dossiergrid .dfoto').count() === 2);
 
   /* afronden: checks + delete geblokkeerd + PDF via download */
@@ -187,16 +215,21 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   ]);
   const zipPad = `${MAP}/flowtest.zip`;
   await download.saveAs(zipPad);
-  check('bestandsnaam = slug(adres).zip', download.suggestedFilename() === 'teststraat-12-ranst.zip');
-  execSync(`unzip -t ${zipPad}`);
+  /* eerste dossier van een vers profiel: nummer 1. De zip draagt het nummer,
+     de pdf ín de zip is nummervrij (§7.1, §9.3). */
+  check('zip-bestandsnaam = "<nummer>. <adres>.zip"', download.suggestedFilename() === '1. Teststraat 12, Ranst.zip');
+  const pdfBasis = 'Teststraat 12, Ranst';
+  execSync(`unzip -t "${zipPad}"`);
   check('zip uitpakbaar (CRC ok)', true);
-  execSync(`rm -rf ${MAP}/flowzip && mkdir -p ${MAP}/flowzip && unzip -o -q ${zipPad} -d ${MAP}/flowzip`);
-  execSync(`qpdf --check ${MAP}/flowzip/teststraat-12-ranst.pdf`);
+  execSync(`rm -rf ${MAP}/flowzip && mkdir -p ${MAP}/flowzip && unzip -o -q "${zipPad}" -d ${MAP}/flowzip`);
+  execSync(`qpdf --check "${MAP}/flowzip/${pdfBasis}.pdf"`);
   check('qpdf --check groen op de PDF in de zip', true);
-  const pdfTekst = readFileSync(`${MAP}/flowzip/teststraat-12-ranst.pdf`, 'latin1');
+  check('pdf in de zip is nummervrij (adres)', existsSync(`${MAP}/flowzip/${pdfBasis}.pdf`) && !existsSync(`${MAP}/flowzip/1. ${pdfBasis}.pdf`));
+  const pdfTekst = readFileSync(`${MAP}/flowzip/${pdfBasis}.pdf`, 'latin1');
   check('/Producer bevat sw-versie', /\/Producer \(EPC Plaatsbezoek epc-v\d+\)/.test(pdfTekst));
   const dossierJson = JSON.parse(readFileSync(`${MAP}/flowzip/woning.json`, 'utf8'));
   check('woning.json bevat het adres', dossierJson.woning.adres === 'Teststraat 12, Ranst');
+  check('woning.json bevat GEEN nummer', !('nummer' in dossierJson.woning));
   const jLiving = dossierJson.woning.ruimtes.find(r => r.naam === 'Living');
   check('woning.json: elementen genest onder de ruimte, deur eerst', jLiving.elementen[0].type === 'deur');
   check('woning.json: geen afgeleide m² of nr', !('oppervlakteM2' in jLiving.elementen[0]) && !('nr' in jLiving.elementen[0]));
@@ -231,6 +264,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#tabbar button[data-tab="details"]');
   check('ramen terug na import', await page.locator('#ramenlijst li').count() === 2);
   await page.click('#tabbar button[data-tab="fotos"]');
+  await page.click('#ruimtechips button[data-v="gevels"]');
   check('gevelfoto\'s terug na import', await page.locator('#dossiergrid .dfoto').count() === 2);
   check('hoofdfoto terug na import', await page.locator('#dossiergrid .ster.hoofd').count() === 1);
   await page.click('#tabbar button[data-tab="afronden"]');
