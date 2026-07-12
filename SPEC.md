@@ -304,9 +304,10 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    bijschrift "Type – ruimte, kenplaat/radiatorkranen". Dan **Zonnepanelen**
    ("Plat dak 4200 Wp · Voor 2000 Wp" of "—") en, alleen bij ja, **Zonneboiler**
    ("ja, 4,6 m²").
-4. **VENTILATIE**: tabel Ruimte, Ventilatie (+ "(beschrijving)" bij ander),
-   Afmetingen, Opmerking. Natte ruimtes (keuken, badkamer, wc) eerst, rest
-   alfabetisch-numeriek.
+4. **VENTILATIE**: tabel met enkel Ruimte en Ventilatie (+ "(beschrijving)" bij
+   ander) — afmetingen horen bij het toestel in ENERGIE en staan daar al.
+   Natte ruimtes (keuken, badkamer, wc) eerst, rest alfabetisch-numeriek.
+   Onder de tabel één regel "Ruimte — opmerking" per ruimte met een opmerking.
 5. **NOTITIES**: alleen indien ingevuld.
 6. **FOTODOSSIER**, nieuwe pagina: koptekst + "adres · plaatsbezoek datum · N foto's".
    Groepstitel in hoofdletters. Volgorde: Gevels, dan de ruimtes in ruimtevolgorde,

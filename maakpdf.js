@@ -498,16 +498,17 @@
     if (E.zonneboiler === 'ja') kvRegel('Zonneboiler', `ja${E.zonneboilerM2 ? ', ' + E.zonneboilerM2 + ' m²' : ''}`);
     meld(0.4);
 
-    /* ---------- ventilatie ---------- */
+    /* ---------- ventilatie: enkel de gekozen optie per ruimte (§9.2) ---------- */
     sectieKop('Ventilatie');
+    const ventRuimtes = sorteerVentilatie(ruimtes);
     tabel(
-      [{ kop: 'Ruimte', b: 90 }, { kop: 'Ventilatie', b: 120 }, { kop: 'Afmetingen', b: 130 }, { kop: 'Opmerking', b: 175 }],
-      sorteerVentilatie(ruimtes).map(r => [
+      [{ kop: 'Ruimte', b: 130 }, { kop: 'Ventilatie', b: 385 }],
+      ventRuimtes.map(r => [
         r.naam,
-        (VENT_NAMEN[r.vent] || r.vent) + (r.vent === 'ander' && r.ventBeschrijving ? ` (${r.ventBeschrijving})` : ''),
-        r.afm ? afmTekst(r.afm) : '',
-        r.opm || ''])
+        (VENT_NAMEN[r.vent] || r.vent) + (r.vent === 'ander' && r.ventBeschrijving ? ` (${r.ventBeschrijving})` : '')])
     );
+    /* opmerkingen per ruimte, enkel waar er een is */
+    ventRuimtes.filter(r => (r.opm || '').trim()).forEach(r => kvRegel(r.naam, r.opm.trim()));
 
     /* ---------- notities ---------- */
     if ((A.notities || '').trim()) {
