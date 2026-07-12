@@ -105,7 +105,7 @@ function nieuweRuimte(naam) {
 }
 
 function standaardRuimtes() {
-  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1'].map(nieuweRuimte);
+  return ['Living', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1', 'Hal'].map(nieuweRuimte);
 }
 
 function leegWoning() {

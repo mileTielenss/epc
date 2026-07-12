@@ -107,7 +107,7 @@ woning = {
   }
 }
 ```
-Nieuwe woning start met Living, Keuken, Badkamer, WC, Slaapkamer 1.
+Nieuwe woning start met Living, Keuken, Badkamer, WC, Slaapkamer 1 en Hal.
 Bewust niet ingevoerd: bouwjaar, gebouwtype, kelder, zolder, oriëntatie van de
 voorgevel, beschermd volume. Die komen uit documenten, plannen of de VEKA-software.
 ### 5.1 `normaliseer()` bij elke load

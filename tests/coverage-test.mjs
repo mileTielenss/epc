@@ -277,7 +277,7 @@ await scenario('hoofdflow', {
   await page.mouse.up();
   await page.waitForTimeout(150);
   /* lege ruimtes verwijderen zodat het controlelijstje ✅ kan worden */
-  for (const naam of ['Hobbyzolder', 'Slaapkamer 2', 'Berging', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1']) {
+  for (const naam of ['Hobbyzolder', 'Slaapkamer 2', 'Berging', 'Keuken', 'Badkamer', 'WC', 'Slaapkamer 1', 'Hal']) {
     await page.click(`#ruimtechips button:has-text("${naam}")`);
     await page.click('#btn-ruimte-weg');
     await page.waitForTimeout(80);
