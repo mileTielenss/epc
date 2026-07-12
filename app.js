@@ -941,10 +941,16 @@ function ruimteNaam(id) {
   return r ? r.naam : '';
 }
 
+/* de lijst toont enkel de elementen van de gekozen ruimte (zoals de toestellen);
+   het #nr blijft het huisbrede volgnummer uit de sorteervolgorde (§7.4), zodat het
+   overeenkomt met de PDF */
 function renderRamen() {
   const ul = $('#ramenlijst');
   ul.innerHTML = '';
-  gesorteerdeRamen().forEach((r, i) => {
+  const hier = gesorteerdeRamen()
+    .map((r, i) => ({ r, nr: i + 1 }))
+    .filter(x => x.r.ruimteId === ruimteSel);
+  hier.forEach(({ r, nr }) => {
     const li = document.createElement('li');
     if (r.id === bewerkRaamId) li.className = 'bewerk';
     li.dataset.id = r.id;
@@ -953,11 +959,10 @@ function renderRamen() {
     if (r.beglazing) tags.push(GLAS_NAMEN[r.beglazing] || r.beglazing);
     tags.push(KADER_NAMEN[r.kader] || r.kader);
     if (r.rolluik) tags.push('rolluik');
-    if (r.ruimteId) tags.unshift(ruimteNaam(r.ruimteId));
     const fotoUrl = r.fotoId && !fotoVerborgen(r.fotoId) ? DB.fotoUrl(r.fotoId) : null;
     li.innerHTML =
       `<div class="info">
-         <div class="r1">#${i + 1} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''}</div>
+         <div class="r1">#${nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''}</div>
          <div class="r2">${fmtM(r.b)} × ${fmtM(r.h)} m = ${fmt(r.b * r.h)} m²${n > 1 ? ` (${fmt(r.b * r.h * n)} m² totaal)` : ''}</div>
          <div class="r3">${esc(tags.join(' · '))} · tik om te wijzigen</div>
        </div>` +
@@ -965,11 +970,12 @@ function renderRamen() {
       `<button type="button" class="del" data-id="${r.id}">×</button>`;
     ul.appendChild(li);
   });
-  const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
-  const totAantal = S.ramen.reduce((a, r) => a + raamAantal(r), 0);
-  $('#ramen-totaal').textContent = S.ramen.length
-    ? `Totaal: ${totAantal} element${totAantal === 1 ? '' : 'en'} · ${fmt(totM2)} m²`
-    : 'Nog geen elementen toegevoegd.';
+  const eigen = S.ramen.filter(r => r.ruimteId === ruimteSel);
+  const totM2 = eigen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
+  const totAantal = eigen.reduce((a, r) => a + raamAantal(r), 0);
+  $('#ramen-totaal').textContent = eigen.length
+    ? `Deze ruimte: ${totAantal} element${totAantal === 1 ? '' : 'en'} · ${fmt(totM2)} m²`
+    : 'Nog geen elementen in deze ruimte.';
 }
 
 $('#ramenlijst').addEventListener('click', e => {
@@ -1426,6 +1432,7 @@ function renderRuimtebalk() {
   renderRuimteChips($('#camruimtes'), false, true);
   syncRuimteAfm();
   renderRv();
+  renderRamen();
   renderDossier();
   syncVent();
 }

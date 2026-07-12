@@ -31,8 +31,8 @@ Vanilla HTML/CSS/JS. Nul dependencies, geen build-stap.
 | `index.html` | één pagina, alle views |
 | `app.js` | UI en applicatielogica |
 | `db.js` | IndexedDB: open, CRUD, blob-URL-cache, foutkanaal |
-| `maakpdf.js` | PDF-generator, `bouwPdf(woning, fotos) → Blob` (was `pdf.js`) |
-| `maakzip.js` | zip-schrijver en -lezer (store + CRC-32, geen compressie), `woningExport()` voor `woning.json` en `dossierLeden()`; puur, Node-testbaar |
+| `maakpdf.js` | PDF-generator uit de `woning.json`-structuur, `bouwPdf(dossierWoning, Map<pad,{bytes}>) → Blob` (was `pdf.js`) |
+| `maakzip.js` | zip-schrijver en -lezer (store + CRC-32, geen compressie) en `woningExport()` voor `woning.json`; puur, Node-testbaar |
 | `pdfworker.js` | `new Worker`, importeert `maakpdf.js` en `maakzip.js`, bouwt de dossier-zip, postMessage voortgang |
 | `style.css` | opmaak, CSS-variabelen in `:root` |
 | `sw.js` | service worker, **enige** versieconstante `const VERSIE = 'epc-vNN'` |
@@ -221,9 +221,11 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
 - **Sorteervolgorde** (één functie, gebruikt door lijst, PDF en nummering): eerst alle
   deuren, dan de rest; binnen elk blok gevel voor → achter → links → rechts; dan
   aanmaakvolgorde. `#nr` = 1-gebaseerde index in die volgorde.
-- Rij toont "#nr Element · Gevel · n×", "b × h m = x m² (totaal)", tags (ruimte ·
-  beglazing · kader · rolluik). Totaalregel: aantal elementen (aantallen meegeteld) +
-  totale m².
+- De lijst toont enkel de elementen van de gekozen ruimte (net als de
+  toestellen); het `#nr` blijft het huisbrede volgnummer uit §7.4 (matcht de PDF).
+- Rij toont "#nr Element · Gevel · n×", "b × h m = x m² (totaal)", tags (beglazing ·
+  kader · rolluik). Totaalregel: elementen en m² **van deze ruimte** (aantallen
+  meegeteld).
 - Onderaan de tab, buiten de secties: **"Opmerking bij deze ruimte"** (textarea).
 ### 7.5 Tab Foto's
 - **"📷 Start camera"** en **"🖼 Kies foto's"** (`multiple`, elk bestand door §8).
