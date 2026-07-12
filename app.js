@@ -438,76 +438,107 @@ $('#zipinput').addEventListener('change', async () => {
 });
 
 const FUNCTIE_TERUG = { radiatoren: 'radiatoren', vloerverwarming: 'vloer', 'sanitair warm water': 'sww' };
-const PV_TERUG = { 'plat dak': 'plat', voor: 'voor', achter: 'achter', links: 'links', rechts: 'rechts', '': '' };
+const PV_TERUG = { 'plat dak': 'plat', voor: 'voor', achter: 'achter', links: 'links', rechts: 'rechts' };
+const RESERVEERD = ['Gevels', 'Algemeen'];
 
+/* de geneste woning.json (§9.3.1) terugvouwen naar het interne model */
 async function importeerDossier(d, leden) {
   const w = leegWoning();
   w.algemeen.adres = d.adres || '';
   if (d.datumPlaatsbezoek) w.algemeen.datum = d.datumPlaatsbezoek;
   w.algemeen.notities = d.notities || '';
 
-  const naamNaarId = new Map();
-  w.ruimtes = (d.ruimtes || []).map(r => {
+  /* echte ruimtes aanmaken; "Gevels"/"Algemeen" zijn fotogroepen, geen ruimte */
+  const idVoorNaam = new Map();
+  w.ruimtes = [];
+  (d.ruimtes || []).forEach(r => {
+    if (RESERVEERD.includes(r.naam)) return;
     const ruimte = nieuweRuimte(String(r.naam || 'Ruimte'));
-    ruimte.vent = r.ventilatie || 'geen';
-    ruimte.ventBeschrijving = r.ventilatieBeschrijving || '';
-    ruimte.opm = r.opmerking || '';
-    ruimte.afm = r.afmetingen ? { b: r.afmetingen.breedteM, d: r.afmetingen.diepteM, h: r.afmetingen.hoogteM } : null;
-    naamNaarId.set(ruimte.naam, ruimte.id);
-    return ruimte;
+    if (r.ventilatie) ruimte.vent = r.ventilatie;
+    if (r.ventilatieBeschrijving) ruimte.ventBeschrijving = r.ventilatieBeschrijving;
+    if (r.opmerking) ruimte.opm = r.opmerking;
+    if (r.afmetingen) ruimte.afm = { b: r.afmetingen.breedteM, d: r.afmetingen.diepteM, h: r.afmetingen.hoogteM };
+    w.ruimtes.push(ruimte);
+    idVoorNaam.set(r.naam, ruimte.id);
   });
   if (!w.ruimtes.length) w.ruimtes = standaardRuimtes();
 
-  /* eerst de woning en de foto's, pas daarna de verwijzingen; mislukt er iets,
-     dan wordt alles weer opgeruimd — geen halve import (§9.4) */
+  /* eerst de woning, dan de foto's (met dedupe op pad), pas daarna de
+     verwijzingen; mislukt er iets, dan wordt alles opgeruimd (§9.4) */
   try {
     await DB.putWoning(w);
     await DB.laadFotos(w.id);
 
-    const fotoIdVan = new Map(); /* bestand in fotos/ -> nieuw fotoId */
-    let hoofdFotoId = null;
-    for (const foto of (d.fotos || [])) {
-      const bytes = leden.get(foto.bestand);
-      if (!bytes) continue;
-      let groep = null;
-      if (foto.groep === 'Gevels') groep = 'gevels';
-      else if (foto.groep === 'Algemeen') groep = 'algemeen';
-      else if (foto.groep) groep = naamNaarId.get(foto.groep) || null;
+    let volg = 0;
+    const idVoorPad = new Map(); /* fotos/000N.jpg -> nieuw fotoId (dedupe) */
+    async function schrijfFoto(pad, groep) {
+      if (!pad) return null;
+      if (idVoorPad.has(pad)) return idVoorPad.get(pad);
+      const bytes = leden.get(pad);
+      if (!bytes) return null;
+      let dims = { breedte: 1600, hoogte: 1200 };
+      try { const inf = MAAKPDF.leesJpegInfo(bytes); dims = { breedte: inf.breedte, hoogte: inf.hoogte }; } catch (e) { /* baseline verwacht */ }
       const rec = {
-        id: DB.nieuwId(), woningId: w.id,
-        blob: new Blob([bytes], { type: 'image/jpeg' }),
-        breedte: foto.breedte || 1600, hoogte: foto.hoogte || 1200,
-        groep, volgorde: foto.volgorde || 0, gemaakt: nu()
+        id: DB.nieuwId(), woningId: w.id, blob: new Blob([bytes], { type: 'image/jpeg' }),
+        breedte: dims.breedte, hoogte: dims.hoogte,
+        groep, volgorde: groep ? ++volg : 0, gemaakt: nu()
       };
       await DB.putFoto(rec);
-      fotoIdVan.set(foto.bestand, rec.id);
-      if (foto.hoofdfoto && groep === 'gevels') hoofdFotoId = rec.id;
+      idVoorPad.set(pad, rec.id);
+      return rec.id;
     }
-    w.algemeen.hoofdFotoId = hoofdFotoId;
 
-    w.ramen = (d.ramenEnDeuren || []).map(r => ({
-      id: DB.nieuwId(),
-      ruimteId: naamNaarId.get(r.ruimte) || null,
-      element: r.element, gevel: r.gevel,
-      b: num(r.breedteM), h: num(r.hoogteM),
-      aantal: Math.max(1, Math.round(num(r.aantal)) || 1),
-      beglazing: r.beglazing ?? null,
-      kader: r.kader, rolluik: !!r.rolluik,
-      fotoId: r.foto ? (fotoIdVan.get(r.foto) || null) : null
-    }));
+    /* dossierfoto's per ruimte in hun eigen groep (volgorde = arrayvolgorde) */
+    for (const r of (d.ruimtes || [])) {
+      const groep = r.naam === 'Gevels' ? 'gevels' : r.naam === 'Algemeen' ? 'algemeen' : idVoorNaam.get(r.naam);
+      if (!groep) continue;
+      for (const pad of (r.fotos || [])) await schrijfFoto(pad, groep);
+    }
 
+    /* elementen + ruimtetoestellen per ruimte */
+    w.ramen = [];
+    const opwekkers = [];
+    for (const r of (d.ruimtes || [])) {
+      if (RESERVEERD.includes(r.naam)) continue;
+      const rid = idVoorNaam.get(r.naam) || null;
+      for (const el of (r.elementen || [])) {
+        w.ramen.push({
+          id: DB.nieuwId(), ruimteId: rid,
+          element: el.type, gevel: el.gevel,
+          b: num(el.breedteM), h: num(el.hoogteM),
+          aantal: Math.max(1, Math.round(num(el.aantal)) || 1),
+          beglazing: el.type === 'deur' ? null : (el.beglazing || 'dubbel'),
+          kader: el.kader, rolluik: !!el.rolluik,
+          fotoId: await schrijfFoto(el.foto, null)
+        });
+      }
+      for (const t of (r.toestellen || [])) {
+        opwekkers.push({
+          id: DB.nieuwId(), type: t.type, ruimteId: rid, functie: [],
+          beschrijving: t.beschrijving || '',
+          fotoId: await schrijfFoto(t.kenplaatFoto, null), fotoKraanId: null
+        });
+      }
+    }
+
+    /* centrale opwekkers + PV + zonneboiler */
     const E = d.energie || {};
-    w.energie.opwekkers = (E.opwekkers || []).map(o => ({
-      id: DB.nieuwId(), type: o.type,
-      ruimteId: naamNaarId.get(o.ruimte) || null,
-      functie: (o.functies || []).map(f => FUNCTIE_TERUG[f] || f).filter(f => FUNCTIES.includes(f)),
-      beschrijving: o.beschrijving || '',
-      fotoId: o.kenplaatFoto ? (fotoIdVan.get(o.kenplaatFoto) || null) : null,
-      fotoKraanId: o.kranenFoto ? (fotoIdVan.get(o.kranenFoto) || null) : null
-    }));
-    w.energie.pvPanelen = (E.zonnepanelen || []).map(p => ({ id: DB.nieuwId(), orientatie: PV_TERUG[p.orientatie] ?? '', wp: String(p.wp || '') }));
-    w.energie.zonneboiler = E.zonneboiler && E.zonneboiler.aanwezig ? 'ja' : 'nee';
+    for (const o of (E.opwekkers || [])) {
+      opwekkers.push({
+        id: DB.nieuwId(), type: o.type, ruimteId: null,
+        functie: (o.functies || []).map(f => FUNCTIE_TERUG[f] || f).filter(f => FUNCTIES.includes(f)),
+        beschrijving: o.beschrijving || '',
+        fotoId: await schrijfFoto(o.kenplaatFoto, null),
+        fotoKraanId: await schrijfFoto(o.kranenFoto, null)
+      });
+    }
+    w.energie.opwekkers = opwekkers;
+    w.energie.pvPanelen = (E.zonnepanelen || []).map(p => ({ id: DB.nieuwId(), orientatie: PV_TERUG[p.orientatie] || '', wp: String(p.wp || '') }));
+    w.energie.zonneboiler = E.zonneboiler ? 'ja' : 'nee';
     w.energie.zonneboilerM2 = E.zonneboiler && E.zonneboiler.collectorM2 != null ? String(E.zonneboiler.collectorM2).replace('.', ',') : '';
+
+    /* hoofdfoto (staat al als gevelfoto; hier enkel koppelen) */
+    w.algemeen.hoofdFotoId = d.hoofdfoto ? await schrijfFoto(d.hoofdfoto, 'gevels') : null;
 
     await DB.putWoning(w);
   } catch (e) {

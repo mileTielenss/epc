@@ -174,12 +174,7 @@
   const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' };
   const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout' };
   const OPWEK_NAMEN = { gas: 'Gas', stookolie: 'Stookolie', andere: 'Andere', airco: 'Airco', kachel: 'Kachel', 'ruimte-andere': 'Andere' };
-  const FUNCTIE_NAMEN = { radiatoren: 'radiatoren', vloer: 'vloerverwarming', sww: 'warm water' };
-  const PVOR_NAMEN = { plat: 'Plat dak', voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
   const VENT_NAMEN = { geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch', 'mechanisch-permanent': 'mechanisch permanent', ander: 'ander' };
-
-  function raamAantal(r) { return Math.max(1, r.aantal || 1); }
-  function afmTekst(k) { return `${fmt(k.b)} × ${fmt(k.d)} × ${fmt(k.h)} m = ${fmt(k.b * k.d * k.h, 1)} m³`; }
 
   /* natte ruimtes (keuken, badkamer, wc) eerst, rest alfabetisch-numeriek */
   const NAT = ['keuken', 'badkamer', 'wc'];
@@ -317,19 +312,29 @@
 
   /* ============================== opmaak van het dossier ============================== */
 
-  /* woning: het woningrecord (§5); fotos: Map<fotoId, {bytes, breedte, hoogte,
-     groep, volgorde}>; opties: {versie, voortgang(0..1)} */
-  function bouwPdf(woning, fotos, opties) {
+  /* w: de geneste export-structuur uit maakzip.woningExport (§9.3.1) — de PDF
+     wordt VOLLEDIG uit die json gebouwd, niet uit het interne model. fotos:
+     Map<pad, {bytes}> met de paden uit de json (fotos/000N.jpg). opties:
+     {versie, voortgang(0..1)}. */
+  function bouwPdf(w, fotos, opties) {
     const opt = opties || {};
     const meld = typeof opt.voortgang === 'function' ? opt.voortgang : () => { };
-    const A = woning.algemeen || {};
-    const E = woning.energie || { opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '' };
-    const ruimtes = woning.ruimtes || [];
-    const ruimteNaam = id => { const r = ruimtes.find(x => x.id === id); return r ? r.naam : ''; };
-    const ruimteVanId = id => ruimtes.find(x => x.id === id) || null;
+    const ruimtes = w.ruimtes || [];
+    const echteRuimtes = ruimtes.filter(r => r.naam !== 'Gevels' && r.naam !== 'Algemeen');
+    const E = w.energie || {};
+    const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    const volTekst = a => `${fmt(a.breedteM)} × ${fmt(a.diepteM)} × ${fmt(a.hoogteM)} m = ${fmt(a.breedteM * a.diepteM * a.hoogteM, 1)} m³`;
+
+    /* alle elementen over alle ruimtes, globaal gesorteerd (§7.4) */
+    function sorteerElementen(els) {
+      return els.map((e, i) => ({ e, i })).sort((a, b) =>
+        (a.e.type === 'deur' ? 0 : 1) - (b.e.type === 'deur' ? 0 : 1) ||
+        (GEVEL_ORDE[a.e.gevel] ?? 9) - (GEVEL_ORDE[b.e.gevel] ?? 9) || a.i - b.i).map(x => x.e);
+    }
+    const elementen = sorteerElementen(echteRuimtes.flatMap(r => (r.elementen || []).map(el => ({ ...el, ruimte: r.naam }))));
 
     const doc = nieuwPdfDoc({
-      titel: A.adres || 'EPC Plaatsbezoek',
+      titel: w.adres || 'EPC Plaatsbezoek',
       producer: 'EPC Plaatsbezoek' + (opt.versie ? ' ' + opt.versie : '')
     });
     const M = PDF_MARGE;
@@ -392,13 +397,14 @@
       y += 6;
     }
 
-    /* haalt bytes op uit de fotomap; dode verwijzing -> null (overslaan) */
-    function fotoBytes(fotoId) {
-      if (!fotoId || !fotos || !fotos.has(fotoId)) return null;
-      return fotos.get(fotoId).bytes;
+    /* haalt bytes op uit de fotomap (sleutel = pad); dode verwijzing -> null */
+    function fotoBytes(pad) {
+      if (!pad || !fotos || !fotos.has(pad)) return null;
+      return fotos.get(pad).bytes;
     }
 
-    /* fotoraster: cellen van vaste hoogte, foto passend (contain) gecentreerd */
+    /* fotoraster: cellen van vaste hoogte, foto passend (contain) gecentreerd;
+       items: {pad, cap} — bytes en dedupe via het pad */
     function fotoRaster(items, perRij, celH, metCap) {
       const gap = 8;
       const celB = (binnenB() - (perRij - 1) * gap) / perRij;
@@ -408,7 +414,7 @@
         checkPagina(celH + capH + 6);
         for (let k = 0; k < blok.length; k++) {
           const f = blok[k];
-          const reg = doc.registreerFoto(f.fotoId, f.bytes);
+          const reg = doc.registreerFoto(f.pad, fotoBytes(f.pad));
           const s = Math.min(celB / reg.w, celH / reg.h);
           const bw = reg.w * s, bh = reg.h * s;
           const x = M + k * (celB + gap) + (celB - bw) / 2;
@@ -426,94 +432,97 @@
 
     /* ---------- kop ---------- */
     let kopOnder = M;
-    const hoofdBytes = fotoBytes(A.hoofdFotoId);
+    const hoofdBytes = fotoBytes(w.hoofdfoto);
     if (hoofdBytes) {
-      const reg = doc.registreerFoto(A.hoofdFotoId, hoofdBytes);
+      const reg = doc.registreerFoto(w.hoofdfoto, hoofdBytes);
       const bw = 130, bh = Math.min(100, bw * reg.h / reg.w);
-      const w = Math.min(bw, bh * reg.w / reg.h);
-      doc.foto(p, reg.naam, M + binnenB() - bw + (bw - w) / 2, M, w, bh);
+      const bb = Math.min(bw, bh * reg.w / reg.h);
+      doc.foto(p, reg.naam, M + binnenB() - bw + (bw - bb) / 2, M, bb, bh);
       kopOnder = M + bh;
     }
     doc.tekst(p, M, y, 'EPC Plaatsbezoek', 9, false, true);
     y += 14;
-    pdfWrap(A.adres || 'Adres onbekend', 15, true, binnenB() - 150).forEach(r => {
+    pdfWrap(w.adres || 'Adres onbekend', 15, true, binnenB() - 150).forEach(r => {
       doc.tekst(p, M, y, r, 15, true);
       y += 19;
     });
-    doc.tekst(p, M, y, `Datum plaatsbezoek: ${A.datum || '-'}`, 9.5, false);
+    doc.tekst(p, M, y, `Datum plaatsbezoek: ${w.datumPlaatsbezoek || '-'}`, 9.5, false);
     y += 14;
     y = Math.max(y, kopOnder) + 4;
 
     /* ---------- ramen & deuren ---------- */
     sectieKop('Ramen & deuren');
-    const ramen = sorteerRamen(woning.ramen || []);
-    if (ramen.length) {
-      const totM2 = ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
-      const totAantal = ramen.reduce((a, r) => a + raamAantal(r), 0);
+    if (elementen.length) {
+      const aant = el => Math.max(1, el.aantal || 1);
+      const totM2 = elementen.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
+      const totAantal = elementen.reduce((a, el) => a + aant(el), 0);
       tabel(
         [{ kop: '#', b: 16 }, { kop: 'Type', b: 42 }, { kop: 'Ruimte', b: 62 }, { kop: 'Gevel', b: 36 },
         { kop: 'Aant.', b: 26, uitlijn: 'r' }, { kop: 'B (m)', b: 32, uitlijn: 'r' }, { kop: 'H (m)', b: 32, uitlijn: 'r' },
         { kop: 'm²', b: 32, uitlijn: 'r' }, { kop: 'Beglazing', b: 52 }, { kop: 'Kader', b: 34 }, { kop: 'Rolluik', b: 34 }],
-        ramen.map((r, i) => [i + 1, ELEMENT_NAMEN[r.element] || r.element, ruimteNaam(r.ruimteId), GEVEL_NAMEN[r.gevel] || '',
-        raamAantal(r), fmt(r.b), fmt(r.h), fmt(r.b * r.h * raamAantal(r)),
-        r.beglazing ? GLAS_NAMEN[r.beglazing] || '' : '', KADER_NAMEN[r.kader] || '', r.rolluik ? 'ja' : 'nee']),
+        elementen.map((el, i) => [i + 1, ELEMENT_NAMEN[el.type] || el.type, el.ruimte || '', GEVEL_NAMEN[el.gevel] || '',
+        aant(el), fmt(el.breedteM), fmt(el.hoogteM), fmt(el.breedteM * el.hoogteM * aant(el)),
+        el.beglazing ? GLAS_NAMEN[el.beglazing] || '' : '', KADER_NAMEN[el.kader] || '', el.rolluik ? 'ja' : 'nee']),
         ['Totaal', '', '', '', totAantal, '', '', fmt(totM2), '', '', '']
       );
-      fotoRaster(ramen.filter(r => fotoBytes(r.fotoId)).map(r => ({
-        fotoId: r.fotoId,
-        bytes: fotoBytes(r.fotoId),
-        cap: `${ELEMENT_NAMEN[r.element] || r.element} ${(GEVEL_NAMEN[r.gevel] || '').toLowerCase()}${r.ruimteId ? ' – ' + ruimteNaam(r.ruimteId) : ''}, ${r.element === 'dakraam' ? 'kenplaatje' : 'afstandhouder'}`
+      fotoRaster(elementen.filter(el => fotoBytes(el.foto)).map(el => ({
+        pad: el.foto,
+        cap: `${ELEMENT_NAMEN[el.type] || el.type} ${(GEVEL_NAMEN[el.gevel] || '').toLowerCase()}${el.ruimte ? ' – ' + el.ruimte : ''}, ${el.type === 'dakraam' ? 'kenplaatje' : 'afstandhouder'}`
       })), 4, 82, true);
     } else {
       kvRegel('Geen elementen opgemeten.', '');
     }
     meld(0.25);
 
-    /* ---------- energie ---------- */
+    /* ---------- energie: centrale opwekkers + ruimtetoestellen ---------- */
     sectieKop('Energie');
-    if (E.opwekkers.length) {
+    const centrale = (E.opwekkers || []).map(o => ({ ...o, ruimte: null }));
+    const toestellen = echteRuimtes.flatMap(r => (r.toestellen || []).map(t => ({ ...t, ruimte: r.naam, afm: r.afmetingen })));
+    const alleOpwek = centrale.concat(toestellen);
+    if (alleOpwek.length) {
       tabel(
         [{ kop: '#', b: 16 }, { kop: 'Opwekker', b: 60 }, { kop: 'Ruimte', b: 70 }, { kop: 'Doet', b: 110 }, { kop: 'Beschrijving', b: 200 }],
-        E.opwekkers.map((o, i) => {
-          const r = ruimteVanId(o.ruimteId);
-          const vol = r && r.afm ? 'ruimte ' + afmTekst(r.afm) : '';
-          return [i + 1, OPWEK_NAMEN[o.type] || o.type, ruimteNaam(o.ruimteId),
-          (o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + '),
+        alleOpwek.map((o, i) => {
+          const vol = o.afm ? 'ruimte ' + volTekst(o.afm) : '';
+          return [i + 1, OPWEK_NAMEN[o.type] || o.type, o.ruimte || '',
+          (o.functies || []).join(' + '),
           [o.beschrijving, vol].filter(Boolean).join(' – ')];
         })
       );
       const opwekFotos = [];
-      E.opwekkers.forEach(o => {
-        const naam = `${OPWEK_NAMEN[o.type] || o.type}${o.ruimteId ? ' – ' + ruimteNaam(o.ruimteId) : ''}`;
-        if (fotoBytes(o.fotoId)) opwekFotos.push({ fotoId: o.fotoId, bytes: fotoBytes(o.fotoId), cap: `${naam}, kenplaat` });
-        if (fotoBytes(o.fotoKraanId)) opwekFotos.push({ fotoId: o.fotoKraanId, bytes: fotoBytes(o.fotoKraanId), cap: `${naam}, radiatorkranen` });
+      alleOpwek.forEach(o => {
+        const naam = `${OPWEK_NAMEN[o.type] || o.type}${o.ruimte ? ' – ' + o.ruimte : ''}`;
+        if (fotoBytes(o.kenplaatFoto)) opwekFotos.push({ pad: o.kenplaatFoto, cap: `${naam}, kenplaat` });
+        if (fotoBytes(o.kranenFoto)) opwekFotos.push({ pad: o.kranenFoto, cap: `${naam}, radiatorkranen` });
       });
       fotoRaster(opwekFotos, 4, 82, true);
     } else {
       kvRegel('Geen opwekkers genoteerd.', '');
     }
-    kvRegel('Zonnepanelen', E.pvPanelen.length
-      ? E.pvPanelen.map(pv => `${PVOR_NAMEN[pv.orientatie] || '?'} ${pv.wp} Wp`).join(' · ')
+    const pv = E.zonnepanelen || [];
+    kvRegel('Zonnepanelen', pv.length
+      ? pv.map(x => `${x.orientatie ? capit(x.orientatie) + ' ' : ''}${x.wp} Wp`).join(' · ')
       : '—');
-    if (E.zonneboiler === 'ja') kvRegel('Zonneboiler', `ja${E.zonneboilerM2 ? ', ' + E.zonneboilerM2 + ' m²' : ''}`);
+    if (E.zonneboiler) kvRegel('Zonneboiler', `ja${E.zonneboiler.collectorM2 ? ', ' + fmt(E.zonneboiler.collectorM2, 1) + ' m²' : ''}`);
     meld(0.4);
 
     /* ---------- ventilatie: enkel de gekozen optie per ruimte (§9.2) ---------- */
     sectieKop('Ventilatie');
-    const ventRuimtes = sorteerVentilatie(ruimtes);
+    const ventRuimtes = sorteerVentilatie(echteRuimtes);
     tabel(
       [{ kop: 'Ruimte', b: 130 }, { kop: 'Ventilatie', b: 385 }],
-      ventRuimtes.map(r => [
-        r.naam,
-        (VENT_NAMEN[r.vent] || r.vent) + (r.vent === 'ander' && r.ventBeschrijving ? ` (${r.ventBeschrijving})` : '')])
+      ventRuimtes.map(r => {
+        const v = r.ventilatie || 'geen';
+        return [r.naam, (VENT_NAMEN[v] || v) + (v === 'ander' && r.ventilatieBeschrijving ? ` (${r.ventilatieBeschrijving})` : '')];
+      })
     );
     /* opmerkingen per ruimte, enkel waar er een is */
-    ventRuimtes.filter(r => (r.opm || '').trim()).forEach(r => kvRegel(r.naam, r.opm.trim()));
+    ventRuimtes.filter(r => (r.opmerking || '').trim()).forEach(r => kvRegel(r.naam, r.opmerking.trim()));
 
     /* ---------- notities ---------- */
-    if ((A.notities || '').trim()) {
+    if ((w.notities || '').trim()) {
       sectieKop('Notities');
-      A.notities.split('\n').forEach(alinea => {
+      w.notities.split('\n').forEach(alinea => {
         pdfWrap(alinea, 8.5, false, binnenB()).forEach(r => {
           checkPagina(12);
           doc.tekst(p, M, y, r, 8.5, false);
@@ -524,36 +533,21 @@
     meld(0.5);
 
     /* ---------- fotodossier ----------
-       dossier = foto's met groep gevels/algemeen/ruimteId (groep null hangt
-       aan een element en staat al bij zijn sectie) */
-    const dossier = [];
-    if (fotos) fotos.forEach((f, id) => {
-      if (f.groep === 'gevels' || f.groep === 'algemeen' || ruimtes.some(r => r.id === f.groep)) {
-        dossier.push({ fotoId: id, bytes: f.bytes, groep: f.groep, volgorde: f.volgorde || 0 });
-      }
-    });
-    if (dossier.length) {
-      const groepOrde = new Map([['gevels', -1], ['algemeen', 999]]);
-      ruimtes.forEach((r, i) => groepOrde.set(r.id, i));
-      dossier.sort((a, b) => (groepOrde.get(a.groep) ?? 998) - (groepOrde.get(b.groep) ?? 998) || a.volgorde - b.volgorde);
-      const groepNaam = g => g === 'gevels' ? 'Gevels' : g === 'algemeen' ? 'Algemeen' : ruimteNaam(g);
-
-      const groepen = [];
-      dossier.forEach(f => {
-        if (!groepen.length || groepen[groepen.length - 1].groep !== f.groep) groepen.push({ groep: f.groep, fotos: [] });
-        groepen[groepen.length - 1].fotos.push(f);
-      });
-
+       de ruimtes staan in de json al in dossiervolgorde: Gevels, ruimtes,
+       Algemeen; elke ruimte draagt haar eigen fotolijst (paden) */
+    const groepen = ruimtes.filter(r => (r.fotos || []).length).map(r => ({ naam: r.naam, fotos: r.fotos }));
+    const totaalFotos = groepen.reduce((a, g) => a + g.fotos.length, 0);
+    if (totaalFotos) {
       p = doc.nieuwePagina(false);
       y = M;
       doc.tekst(p, M, y, 'FOTODOSSIER', 12, true);
       y += 16;
-      doc.tekst(p, M, y, `${A.adres || ''} · plaatsbezoek ${A.datum || ''} · ${dossier.length} foto's`, 8.5, false, true);
+      doc.tekst(p, M, y, `${w.adres || ''} · plaatsbezoek ${w.datumPlaatsbezoek || ''} · ${totaalFotos} foto's`, 8.5, false, true);
       y += 16;
 
       let klaarFotos = 0;
       for (const g of groepen) {
-        if (g.groep === 'algemeen') {
+        if (g.naam === 'Algemeen') {
           /* facturen: eigen liggende pagina's, 2 per pagina, paginavullend */
           for (let i = 0; i < g.fotos.length; i += 2) {
             p = doc.nieuwePagina(true);
@@ -564,11 +558,11 @@
             const celB = (binnenB() - 16) / 2;
             const celH = doc.pagH(p) - y - M - 14;
             for (let k = 0; k < blok.length; k++) {
-              const reg = doc.registreerFoto(blok[k].fotoId, blok[k].bytes);
+              const reg = doc.registreerFoto(blok[k], fotoBytes(blok[k]));
               const s = Math.min(celB / reg.w, celH / reg.h);
               doc.foto(p, reg.naam, M + k * (celB + 16) + (celB - reg.w * s) / 2, y + (celH - reg.h * s) / 2, reg.w * s, reg.h * s);
               klaarFotos++;
-              meld(0.5 + 0.4 * klaarFotos / dossier.length);
+              meld(0.5 + 0.4 * klaarFotos / totaalFotos);
             }
             y += celH;
           }
@@ -577,11 +571,11 @@
         } else {
           /* titel nooit alleen onderaan: titel + eerste fotorij horen samen */
           checkPagina(14 + 100 + 6);
-          doc.tekst(p, M, y, groepNaam(g.groep).toUpperCase(), 10.5, true);
+          doc.tekst(p, M, y, g.naam.toUpperCase(), 10.5, true);
           y += 14;
-          fotoRaster(g.fotos, 4, 95, false);
+          fotoRaster(g.fotos.map(pad => ({ pad })), 4, 95, false);
           klaarFotos += g.fotos.length;
-          meld(0.5 + 0.4 * klaarFotos / dossier.length);
+          meld(0.5 + 0.4 * klaarFotos / totaalFotos);
         }
       }
       /* lege slotpagina vermijden */
@@ -591,7 +585,7 @@
     /* ---------- voetregel op elke pagina ---------- */
     const n = doc.paginas.length;
     doc.paginas.forEach((pag, i) => {
-      const voet = `${A.adres || 'EPC'} · pagina ${i + 1}/${n}`;
+      const voet = `${w.adres || 'EPC'} · pagina ${i + 1}/${n}`;
       doc.tekst(pag, (doc.pagB(pag) - tekstBreedte(voet, 7, false)) / 2, doc.pagH(pag) - 22, voet, 7, false, true);
     });
 
@@ -607,7 +601,7 @@
   root.MAAKPDF = {
     bouwPdf, sorteerRamen, leesJpegInfo, tekstBreedte, pdfStr, pdfWrap,
     breedtes: { helvetica: HELV, helveticaVet: HELV_VET },
-    namen: { ELEMENT_NAMEN, GEVEL_NAMEN, GLAS_NAMEN, KADER_NAMEN, OPWEK_NAMEN, FUNCTIE_NAMEN, PVOR_NAMEN, VENT_NAMEN }
+    namen: { ELEMENT_NAMEN, GEVEL_NAMEN, GLAS_NAMEN, KADER_NAMEN, OPWEK_NAMEN, VENT_NAMEN }
   };
 
 })(typeof self !== 'undefined' ? self : globalThis);

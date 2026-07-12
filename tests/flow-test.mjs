@@ -197,9 +197,13 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('/Producer bevat sw-versie', /\/Producer \(EPC Plaatsbezoek epc-v\d+\)/.test(pdfTekst));
   const dossierJson = JSON.parse(readFileSync(`${MAP}/flowzip/woning.json`, 'utf8'));
   check('woning.json bevat het adres', dossierJson.woning.adres === 'Teststraat 12, Ranst');
-  check('woning.json: deur eerst met nr 1', dossierJson.woning.ramenEnDeuren[0].element === 'deur' && dossierJson.woning.ramenEnDeuren[0].nr === 1);
+  const jLiving = dossierJson.woning.ruimtes.find(r => r.naam === 'Living');
+  check('woning.json: elementen genest onder de ruimte, deur eerst', jLiving.elementen[0].type === 'deur');
+  check('woning.json: geen afgeleide m² of nr', !('oppervlakteM2' in jLiving.elementen[0]) && !('nr' in jLiving.elementen[0]));
+  check('woning.json: Gevels als pseudo-ruimte met foto\'s', dossierJson.woning.ruimtes[0].naam === 'Gevels' && dossierJson.woning.ruimtes[0].fotos.length === 2);
+  check('woning.json: hoofdfoto op woningniveau', dossierJson.woning.hoofdfoto === 'fotos/0001.jpg');
   check('hoofdfoto.jpg zit in de zip', readFileSync(`${MAP}/flowzip/hoofdfoto.jpg`).length > 1000);
-  check('fotos/ zit in de zip', dossierJson.woning.fotos.length >= 2 && readFileSync(`${MAP}/flowzip/fotos/0001.jpg`).length > 1000);
+  check('fotos/ zit in de zip', readFileSync(`${MAP}/flowzip/fotos/0001.jpg`).length > 1000);
 
   await page.waitForSelector('#pdf-bewaard:not([hidden])');
   check('grijze regel "Dossier bewaard op"', (await page.textContent('#pdf-bewaard')).startsWith('Dossier bewaard op'));

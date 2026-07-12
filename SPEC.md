@@ -39,9 +39,10 @@ Vanilla HTML/CSS/JS. Nul dependencies, geen build-stap.
 | `manifest.json` | "EPC Plaatsbezoek", standalone, portrait, `#0a6b3d` |
 | `icon-180/192/512.png` | `node tools/make-icons.js` |
 | `.github/workflows/deploy.yml` | Pages-deploy bij push naar `main` |
-`maakpdf.js` importeert niets. Input: woningobject +
-`Map<fotoId, {bytes:Uint8Array, breedte, hoogte, groep, volgorde}>` (groep en
-volgorde omdat het woningrecord geen fotolijst heeft, §5). Los testbaar in Node.
+`maakpdf.js` importeert niets en bouwt de PDF **volledig uit de geneste
+`woning.json`-structuur** (§9.3.1), niet uit het interne model: input =
+`bouwPdf(dossierWoning, Map<pad, {bytes:Uint8Array}>, {versie, voortgang})`,
+met de foto's op hun `fotos/000N.jpg`-pad. Los testbaar in Node.
 Kleuren: accent `#0a6b3d`, accent-donker `#07522e`, inkt `#101418`, gedempt
 `#5a6570`, achtergrond `#eef1f3`, kaart `#ffffff`, lijn `#c9d1d8`, waarschuwing
 `#b3261e`. Systeemfont, `html{font-size:14px}`.
@@ -326,23 +327,19 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
 7. **Voetregel** op elke pagina: "adres · pagina X/Y", 7 pt grijs, gecentreerd.
 ### 9.3 Bewaren: de dossier-zip
 1. Toast "Dossier maken…", worker start, voortgangsbalk.
-2. Blobs uit `fotos` → `arrayBuffer()` → in de worker: `bouwPdf(woning, fotos)`,
-   dan de zip via `maakzip.js` met drie leden (store, geen compressie — PDF en
-   JPEG zijn al gecomprimeerd):
+2. In de worker, strikt **json-first**: het interne woningobject →
+   `maakzip.woningExport(...)` → `woning.json` (de enige bron) →
+   `maakpdf.bouwPdf(json.woning, fotosOpPad)` → PDF → de zip via `maakzip.bouwZip`
+   (store, geen compressie — PDF en JPEG zijn al gecomprimeerd). Een import
+   reproduceert zo gegarandeerd dezelfde PDF. Leden:
    - `<slug(adres)>.pdf` — het dossier;
    - `hoofdfoto.jpg` — de hoofdfoto op opgeslagen resolutie (weggelaten als er
      geen hoofdfoto is);
    - `fotos/0001.jpg` … — álle foto's (dossier én elementfoto's zoals
      kenplaten en afstandhouders), op de opgeslagen resolutie;
    - `woning.json` — alle gegevens machineleesbaar, bedoeld om de VEKA-invoer
-     later te automatiseren én als bron voor de import: adres, datum, notities,
-     ruimtes (ventilatie, opmerking, afmetingen + m³), ramen & deuren met de
-     `#nr`s uit §7.4 (element, gevel, ruimte, maten, aantal, m², beglazing
-     `null` bij deuren, kader, rolluik, verwijzing naar de elementfoto),
-     energie (opwekkers met kenplaat-/kranenfotoverwijzing, zonnepanelen,
-     zonneboiler), de fotolijst (bestand in `fotos/`, groep, volgorde,
-     afmetingen, hoofdfoto-markering) en de appversie. Geen beeldbytes in de
-     json zelf.
+     later te automatiseren én als bron voor de import. **Genest en zonder
+     afgeleide waarden of ruis** (§9.3.1).
 3. `File` met naam `<slug(adres)>.zip` (fallback `epc.zip`) → `navigator.share({files})`.
 4. **`NotAllowedError`** (iOS eist een user gesture, de bouw zit ertussen): de Blob
    blijft in het geheugen, op de plaats van de knop verschijnt **"Deel dossier"**
@@ -351,14 +348,62 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
 6. Resolve → `pdfBewaardOp = now`, meteen bewaren. `AbortError` → toast "Niet bewaard".
    Andere fout → toast "Dossier maken mislukt (naam)".
 7. Blob > 150 MB → eerst confirm "Groot dossier, delen kan mislukken".
+### 9.3.1 Structuur van `woning.json`
+Ontworpen zodat elke koppeling structureel is en niets afgeleids of leeg wordt
+opgeslagen:
+- **Genest, geen tekststring-verwijzingen.** Elementen (ramen/deuren) staan
+  onder hun ruimte in `elementen`; ruimtegebonden toestellen (airco/kachel)
+  onder hun ruimte in `toestellen`. Een element kan zo nooit naar een
+  onbestaande ruimte wijzen.
+- **Foto's genest onder hun ruimte** in `fotos` (een geordende lijst
+  `fotos/000N.jpg`-paden; de volgorde ís de volgorde, geen los volgnummer).
+- **"Gevels" en "Algemeen" zijn gewone ruimtes** met enkel een `fotos`-lijst,
+  geen ventilatie of elementen. Eén structuur voor "een naam met foto's
+  eronder"; geen aparte fotogroepen-lijst. Beide zijn gereserveerde namen.
+- **De opwekkerfoto's staan enkel op de opwekker** (`kenplaatFoto`,
+  `kranenFoto`), niet nog eens in een ruimte.
+- **Eén `hoofdfoto` op woningniveau** (pad naar een gevelfoto).
+- **Geen afgeleide waarden**: geen oppervlakte per element, geen totaalblok,
+  geen volume bij afmetingen. De maten staan er (`breedteM`, `hoogteM`,
+  `aantal`, afmetingen `breedteM`/`diepteM`/`hoogteM`); m², m³ en totalen
+  worden pas bij weergave/PDF berekend.
+- **Optionele velden ontbreken gewoon** i.p.v. op `null` te staan: `beglazing`
+  is er niet bij een deur; `ventilatie` ontbreekt bij "geen"; `opmerking`,
+  `afmetingen`, `foto`, `elementen`, `toestellen`, `fotos`, `notities`,
+  `energie` en de `zonneboiler` verschijnen enkel als ze inhoud hebben.
+- Topniveau: `formaat`, `geexporteerd`, `woning`. Geen `nr`, geen `appVersie`
+  (de PDF houdt de versie in `/Producer`).
+```
+woning: {
+  adres, datumPlaatsbezoek, notities?, hoofdfoto?,
+  ruimtes: [
+    { naam: "Gevels", fotos: ["fotos/0001.jpg", …] },
+    { naam, ventilatie?, ventilatieBeschrijving?, opmerking?,
+      afmetingen?: { breedteM, diepteM, hoogteM },
+      elementen?: [ { type, gevel, breedteM, hoogteM, aantal, beglazing?, kader, rolluik, foto? } ],
+      toestellen?: [ { type, beschrijving?, kenplaatFoto? } ],
+      fotos?: [ … ] },
+    { naam: "Algemeen", fotos: [ … ] }
+  ],
+  energie?: {
+    opwekkers?: [ { type, functies?, beschrijving?, kenplaatFoto?, kranenFoto? } ],
+    zonnepanelen?: [ { orientatie?, wp } ],
+    zonneboiler?: { collectorM2? }
+  }
+}
+```
 ### 9.4 Importeren
 - "Importeer dossier" op de woningenlijst opent een bestandskiezer (.zip).
 - `maakzip.js` leest de zip (enkel store-leden — dossiers van deze app zelf);
   `woning.json` wordt gecontroleerd op `formaat: 'epc-plaatsbezoek-dossier'`.
 - Er wordt een **nieuwe** woning aangemaakt (nieuwe ids, `pdfBewaardOp: null`):
-  ruimtes op naam, ramen/toestellen met hun verwijzingen, foto's uit `fotos/`
-  terug in hun groep, hoofdfoto hersteld. Daarna opent de woning gewoon;
-  `normaliseer()` vangt rommel in een bewerkte json op zoals altijd.
+  de geneste structuur wordt teruggevouwen — "Gevels"/"Algemeen" worden weer
+  fotogroepen, de andere ruimtes echte ruimtes, hun `elementen` worden ramen,
+  hun `toestellen` en de centrale `opwekkers` worden energie-opwekkers, foto's
+  uit `fotos/` komen terug in hun groep en de `hoofdfoto` wordt hersteld. Elk
+  fotobestand wordt maar één keer geschreven (dedupe op pad); dimensies uit de
+  JPEG-header. Daarna opent de woning; `normaliseer()` vangt rommel in een
+  bewerkte json op zoals altijd.
 - Mislukt het (geen zip, verkeerd formaat, onleesbaar lid) → toast
   "Importeren mislukt (reden)", er wordt niets half aangemaakt.
 ## 10. Bewuste keuzes

@@ -103,124 +103,105 @@
     return leden;
   }
 
-  /* ---------- woning.json: alle gegevens, machineleesbaar (§9.3) ----------
-     sorteer = de gedeelde sorteerfunctie uit maakpdf.js, zodat de #nrs in de
-     json exact die van de lijst en de PDF zijn; bestandVan koppelt fotoId's
-     aan hun bestand in fotos/. */
+  /* ---------- woning.json: genest, zonder afgeleide waarden of ruis (§9.3.1) ----------
+     sorteer = de gedeelde sorteerfunctie uit maakpdf.js (elementen per ruimte in
+     dezelfde volgorde als de PDF); bestandVan koppelt fotoId's aan hun bestand
+     in fotos/. Optionele velden ontbreken gewoon i.p.v. op null te staan. */
 
   const FUNCTIE_LABELS = { radiatoren: 'radiatoren', vloer: 'vloerverwarming', sww: 'sanitair warm water' };
-  const PV_LABELS = { plat: 'plat dak', voor: 'voor', achter: 'achter', links: 'links', rechts: 'rechts', '': '' };
+  const PV_LABELS = { plat: 'plat dak', voor: 'voor', achter: 'achter', links: 'links', rechts: 'rechts' };
 
-  function woningExport(woning, versie, sorteer, fotos, bestandVan) {
+  function isRuimteToestel(o) { return o.type === 'airco' || o.type === 'kachel' || o.type === 'ruimte-andere'; }
+
+  function woningExport(woning, sorteer, fotos, bestandVan) {
+    const A = woning.algemeen || {};
     const ruimtes = woning.ruimtes || [];
-    const naamVan = id => { const r = ruimtes.find(x => x.id === id); return r ? r.naam : null; };
-    const bestand = id => (bestandVan && id && bestandVan.has(id)) ? bestandVan.get(id) : null;
     const E = woning.energie || { opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '' };
+    const bestand = id => (bestandVan && id && bestandVan.has(id)) ? bestandVan.get(id) : undefined;
 
-    const ramen = sorteer(woning.ramen || []).map((r, i) => ({
-      nr: i + 1,
-      element: r.element,
-      gevel: r.gevel,
-      ruimte: naamVan(r.ruimteId),
-      aantal: r.aantal || 1,
-      breedteM: r.b,
-      hoogteM: r.h,
-      oppervlakteM2: Math.round(r.b * r.h * (r.aantal || 1) * 10000) / 10000,
-      beglazing: r.beglazing,   /* null bij deuren */
-      kader: r.kader,
-      rolluik: !!r.rolluik,
-      foto: bestand(r.fotoId)
-    }));
-
-    /* fotolijst voor de import: bestand, groep (label), volgorde, maten */
-    const fotoLijst = [];
-    if (fotos && bestandVan) fotos.forEach((f, id) => {
-      let groep = null;
-      if (f.groep === 'gevels') groep = 'Gevels';
-      else if (f.groep === 'algemeen') groep = 'Algemeen';
-      else if (f.groep) groep = naamVan(f.groep);
-      fotoLijst.push({
-        bestand: bestandVan.get(id),
-        groep,
-        volgorde: f.volgorde || 0,
-        breedte: f.breedte, hoogte: f.hoogte,
-        hoofdfoto: !!(woning.algemeen && woning.algemeen.hoofdFotoId === id)
-      });
-    });
-
-    return {
-      formaat: 'epc-plaatsbezoek-dossier',
-      appVersie: versie || null,
-      geexporteerd: new Date().toISOString(),
-      woning: {
-        adres: (woning.algemeen && woning.algemeen.adres) || '',
-        datumPlaatsbezoek: (woning.algemeen && woning.algemeen.datum) || '',
-        notities: (woning.algemeen && woning.algemeen.notities) || '',
-        ruimtes: ruimtes.map(r => ({
-          naam: r.naam,
-          ventilatie: r.vent,
-          ventilatieBeschrijving: r.vent === 'ander' ? (r.ventBeschrijving || '') : null,
-          opmerking: r.opm || null,
-          afmetingen: r.afm ? {
-            breedteM: r.afm.b, diepteM: r.afm.d, hoogteM: r.afm.h,
-            volumeM3: Math.round(r.afm.b * r.afm.d * r.afm.h * 1000) / 1000
-          } : null
-        })),
-        ramenEnDeuren: ramen,
-        totaalRamenEnDeuren: {
-          aantal: ramen.reduce((a, r) => a + r.aantal, 0),
-          oppervlakteM2: Math.round(ramen.reduce((a, r) => a + r.oppervlakteM2, 0) * 10000) / 10000
-        },
-        energie: {
-          opwekkers: (E.opwekkers || []).map(o => ({
-            type: o.type,
-            ruimte: naamVan(o.ruimteId),
-            functies: (o.functie || []).map(f => FUNCTIE_LABELS[f] || f),
-            beschrijving: o.beschrijving || '',
-            kenplaatFoto: bestand(o.fotoId),
-            kranenFoto: bestand(o.fotoKraanId)
-          })),
-          zonnepanelen: (E.pvPanelen || []).map(p => ({
-            orientatie: PV_LABELS[p.orientatie] ?? p.orientatie,
-            wp: Math.round(Number(String(p.wp).replace(',', '.'))) || 0
-          })),
-          zonneboiler: {
-            aanwezig: E.zonneboiler === 'ja',
-            collectorM2: E.zonneboiler === 'ja' && E.zonneboilerM2
-              ? Number(String(E.zonneboilerM2).replace(',', '.')) || null : null
-          }
-        },
-        fotos: fotoLijst
-      }
-    };
-  }
-
-  /* ---------- alle leden van de dossier-zip (§9.3) ---------- */
-
-  function dossierLeden(woning, fotos, pdfBytes, basisnaam, versie, sorteer) {
-    const leden = [{ naam: basisnaam + '.pdf', bytes: pdfBytes }];
-
-    const bestandVan = new Map();
-    let n = 0;
-    if (fotos) fotos.forEach((f, id) => bestandVan.set(id, `fotos/${String(++n).padStart(4, '0')}.jpg`));
-
-    /* hoofdfoto ook als apart, direct grijpbaar lid */
-    const hoofdId = woning.algemeen && woning.algemeen.hoofdFotoId;
-    if (hoofdId && fotos && fotos.has(hoofdId)) {
-      leden.push({ naam: 'hoofdfoto.jpg', bytes: fotos.get(hoofdId).bytes });
+    /* dossierfoto's van één groep, op volgorde, als bestandspaden */
+    function fotosVanGroep(groep) {
+      if (!fotos || !bestandVan) return [];
+      const lijst = [];
+      fotos.forEach((f, id) => { if (f.groep === groep) lijst.push({ pad: bestandVan.get(id), v: f.volgorde || 0 }); });
+      return lijst.sort((a, c) => a.v - c.v).map(x => x.pad);
     }
 
-    const json = JSON.stringify(woningExport(woning, versie, sorteer, fotos, bestandVan), null, 2);
-    leden.push({ naam: 'woning.json', bytes: new TextEncoder().encode(json) });
+    function elementObj(r) {
+      const o = { type: r.element, gevel: r.gevel, breedteM: r.b, hoogteM: r.h, aantal: r.aantal || 1, kader: r.kader, rolluik: !!r.rolluik };
+      if (r.element !== 'deur' && r.beglazing) o.beglazing = r.beglazing;
+      const f = bestand(r.fotoId); if (f) o.foto = f;
+      return o;
+    }
 
-    if (fotos) fotos.forEach((f, id) => leden.push({ naam: bestandVan.get(id), bytes: f.bytes }));
-    return leden;
+    function ruimteObj(r) {
+      const o = { naam: r.naam };
+      if (r.vent && r.vent !== 'geen') {
+        o.ventilatie = r.vent;
+        if (r.vent === 'ander' && r.ventBeschrijving) o.ventilatieBeschrijving = r.ventBeschrijving;
+      }
+      if (r.opm) o.opmerking = r.opm;
+      if (r.afm) o.afmetingen = { breedteM: r.afm.b, diepteM: r.afm.d, hoogteM: r.afm.h };
+      const els = sorteer((woning.ramen || []).filter(x => x.ruimteId === r.id)).map(elementObj);
+      if (els.length) o.elementen = els;
+      const toestellen = (E.opwekkers || []).filter(x => isRuimteToestel(x) && x.ruimteId === r.id).map(x => {
+        const t = { type: x.type };
+        if (x.beschrijving) t.beschrijving = x.beschrijving;
+        const kf = bestand(x.fotoId); if (kf) t.kenplaatFoto = kf;
+        return t;
+      });
+      if (toestellen.length) o.toestellen = toestellen;
+      const fs = fotosVanGroep(r.id);
+      if (fs.length) o.fotos = fs;
+      return o;
+    }
+
+    /* Gevels en Algemeen zijn gewone ruimtes met enkel foto's (§9.3.1) */
+    const ruimteLijst = [];
+    const gevels = fotosVanGroep('gevels');
+    if (gevels.length) ruimteLijst.push({ naam: 'Gevels', fotos: gevels });
+    ruimtes.forEach(r => ruimteLijst.push(ruimteObj(r)));
+    const algemeen = fotosVanGroep('algemeen');
+    if (algemeen.length) ruimteLijst.push({ naam: 'Algemeen', fotos: algemeen });
+
+    const w = { adres: A.adres || '', datumPlaatsbezoek: A.datum || '' };
+    if (A.notities) w.notities = A.notities;
+    const hoofd = bestand(A.hoofdFotoId); if (hoofd) w.hoofdfoto = hoofd;
+    w.ruimtes = ruimteLijst;
+
+    /* energie: enkel de centrale opwekkers (ruimtetoestellen staan bij hun ruimte) */
+    const energie = {};
+    const centrale = (E.opwekkers || []).filter(o => !isRuimteToestel(o)).map(o => {
+      const x = { type: o.type };
+      if ((o.functie || []).length) x.functies = o.functie.map(f => FUNCTIE_LABELS[f] || f);
+      if (o.beschrijving) x.beschrijving = o.beschrijving;
+      const kf = bestand(o.fotoId); if (kf) x.kenplaatFoto = kf;
+      const rf = bestand(o.fotoKraanId); if (rf) x.kranenFoto = rf;
+      return x;
+    });
+    if (centrale.length) energie.opwekkers = centrale;
+    const pv = (E.pvPanelen || []).map(p => {
+      const x = { wp: Math.round(Number(String(p.wp).replace(',', '.'))) || 0 };
+      if (PV_LABELS[p.orientatie]) x.orientatie = PV_LABELS[p.orientatie];
+      return x;
+    });
+    if (pv.length) energie.zonnepanelen = pv;
+    if (E.zonneboiler === 'ja') {
+      energie.zonneboiler = {};
+      const m2 = E.zonneboilerM2 ? Number(String(E.zonneboilerM2).replace(',', '.')) : 0;
+      if (m2) energie.zonneboiler.collectorM2 = m2;
+    }
+    if (Object.keys(energie).length) w.energie = energie;
+
+    return { formaat: 'epc-plaatsbezoek-dossier', geexporteerd: new Date().toISOString(), woning: w };
   }
+
+  /* de zip zelf (pdf + hoofdfoto + woning.json + fotos/) wordt in pdfworker.js
+     samengesteld, strikt json-first: woningExport → bouwPdf(json) → bouwZip */
 
   root.bouwZip = bouwZip;
   root.leesZip = leesZip;
   root.woningExport = woningExport;
-  root.dossierLeden = dossierLeden;
-  root.MAAKZIP = { bouwZip, leesZip, woningExport, dossierLeden, crc32 };
+  root.MAAKZIP = { bouwZip, leesZip, woningExport, crc32 };
 
 })(typeof self !== 'undefined' ? self : globalThis);

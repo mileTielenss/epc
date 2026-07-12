@@ -12,8 +12,22 @@ const UIT = join(HIER, 'uitvoer');
 mkdirSync(UIT, { recursive: true });
 
 await import(join(REPO, 'maakpdf.js'));
+await import(join(REPO, 'maakzip.js'));
 const M = globalThis.MAAKPDF;
+const MZ = globalThis.MAAKZIP;
 assert.ok(M && typeof M.bouwPdf === 'function', 'maakpdf.js exporteert MAAKPDF.bouwPdf');
+
+/* json-first: intern woningobject → woning.json → PDF uit die json (§9.3),
+   net zoals pdfworker.js het doet */
+function pdfViaJson(woning, fotosById, opts) {
+  const bestandVan = new Map();
+  let n = 0;
+  if (fotosById) fotosById.forEach((f, id) => bestandVan.set(id, `fotos/${String(++n).padStart(4, '0')}.jpg`));
+  const dossier = MZ.woningExport(woning, globalThis.sorteerRamen, fotosById, bestandVan);
+  const fotosByPath = new Map();
+  if (fotosById) fotosById.forEach((f, id) => fotosByPath.set(bestandVan.get(id), { bytes: f.bytes }));
+  return { blob: M.bouwPdf(dossier.woning, fotosByPath, opts), dossier };
+}
 
 /* ---- AFM-waarden (SPEC §11) ---- */
 const H = M.breedtes.helvetica, HB = M.breedtes.helveticaVet;
@@ -117,7 +131,7 @@ const fotos = new Map([
 ]);
 
 const stappen = [];
-const blob = M.bouwPdf(woning, fotos, { versie: 'epc-vTEST', voortgang: v => stappen.push(v) });
+const { blob, dossier } = pdfViaJson(woning, fotos, { versie: 'epc-vTEST', voortgang: v => stappen.push(v) });
 assert.ok(blob.size > 10000, 'PDF heeft inhoud');
 assert.ok(stappen.length >= 4 && stappen[stappen.length - 1] === 1, 'voortgang gemeld tot 1');
 const buf = Buffer.from(await blob.arrayBuffer());
@@ -129,14 +143,29 @@ assert.ok(tekst.includes('/Title (Teststraat 12, Ranst)'), '/Title = adres');
 assert.ok(/\/ID \[<[0-9a-f]{32}> <[0-9a-f]{32}>\]/.test(tekst), '/ID in trailer');
 assert.ok(tekst.includes('/DeviceGray'), 'grijswaarde-XObject als DeviceGray');
 assert.ok(tekst.includes('(2,40)') && tekst.includes('(1,34)') /* 1,335 correct afgerond */ && tekst.includes('(1,00)'), 'maten met exact 2 decimalen');
-/* dedupe op fotoId: 9 records in de map (f-gevel1 dossier + hoofdfoto = 1 XObject);
-   f-dood staat niet in de map en wordt overgeslagen */
+/* json-controle: genest, geen afgeleide waarden, geen ruis (§9.3.1) */
+const dw = dossier.woning;
+assert.equal(dossier.formaat, 'epc-plaatsbezoek-dossier');
+assert.ok(!('appVersie' in dossier), 'geen appVersie meer');
+assert.equal(dw.ruimtes[0].naam, 'Gevels', 'Gevels als eerste pseudo-ruimte');
+assert.equal(dw.ruimtes[dw.ruimtes.length - 1].naam, 'Algemeen', 'Algemeen laatst');
+const living = dw.ruimtes.find(r => r.naam === 'Living');
+assert.ok(living.elementen && living.elementen[0].breedteM === 2.4, 'elementen genest onder ruimte');
+assert.ok(!('oppervlakteM2' in living.elementen[0]), 'geen afgeleide m² per element');
+assert.ok(!('nr' in living.elementen[0]), 'geen nr');
+assert.ok(living.toestellen && living.toestellen[0].type === 'airco', 'ruimtetoestel genest onder ruimte');
+const keukenDeur = dw.ruimtes.find(r => r.naam === 'Keuken').elementen[0];
+assert.ok(!('beglazing' in keukenDeur), 'deur zonder beglazing-sleutel');
+assert.equal(dw.hoofdfoto, 'fotos/0001.jpg', 'hoofdfoto op woningniveau');
+assert.equal(dw.energie.opwekkers.length, 1, 'enkel de centrale opwekker in energie');
+assert.ok(!('ruimte' in dw.energie.opwekkers[0]), 'geen ruimte-string op de centrale opwekker');
+/* dedupe op pad: 9 records → 9 XObjects (f-gevel1 is hoofdfoto én gevelfoto = 1) */
 const nXobj = (tekst.match(/\/Subtype \/Image/g) || []).length;
 assert.equal(nXobj, 9, `9 unieke foto's -> 9 XObjects (kreeg ${nXobj})`);
 
 /* ---- kale woning: alle "leeg"-takken, geen fotomap, geen opties ---- */
-const kaal = { id: 'kaal', algemeen: {}, ruimtes: undefined, ramen: undefined, energie: undefined };
-const blobKaal = M.bouwPdf(kaal);
+const kaal = { algemeen: {}, ruimtes: undefined, ramen: undefined, energie: undefined };
+const blobKaal = pdfViaJson(kaal).blob;
 const tekstKaal = Buffer.from(await blobKaal.arrayBuffer()).toString('latin1');
 assert.ok(tekstKaal.includes(M.pdfStr('Adres onbekend')), 'kale woning: adres onbekend');
 assert.ok(tekstKaal.includes('Geen elementen opgemeten'), 'kale woning: geen elementen');
@@ -146,30 +175,29 @@ assert.ok(!tekstKaal.includes('Zonneboiler'), 'kale woning: geen zonneboiler');
 
 /* ---- zonneboiler ja zonder m², dossier zonder algemeen-groep (geen slotpagina-pop) ---- */
 const klein = {
-  id: 'klein',
   algemeen: { adres: 'Kort 1', datum: '2026-01-01', notities: '', hoofdFotoId: null },
   ruimtes: [{ id: 'x', naam: 'Living', vent: 'geen', ventBeschrijving: '', opm: '', afm: null }],
   ramen: [],
   energie: { opwekkers: [], pvPanelen: [], zonneboiler: 'ja', zonneboilerM2: '' }
 };
-const blobKlein = M.bouwPdf(klein, new Map([['g1', { bytes: rgb, breedte: 640, hoogte: 480, groep: 'gevels', volgorde: 1 }]]), {});
+const blobKlein = pdfViaJson(klein, new Map([['g1', { bytes: rgb, breedte: 640, hoogte: 480, groep: 'gevels', volgorde: 1 }]]), {}).blob;
 const tekstKlein = Buffer.from(await blobKlein.arrayBuffer()).toString('latin1');
 assert.ok(tekstKlein.includes('FOTODOSSIER'), 'klein dossier aanwezig');
 assert.ok(/Zonneboiler/.test(tekstKlein) && !/4,6/.test(tekstKlein), 'zonneboiler ja zonder oppervlakte');
 
 /* ---- lange tabel forceert paginabreuken ---- */
 const veel = {
-  ...klein, id: 'veel',
+  ...klein,
   ramen: Array.from({ length: 70 }, (_, i) => ({
     id: 'r' + i, ruimteId: 'x', element: 'raam', gevel: 'voor', b: 1, h: 1, aantal: 1,
     beglazing: 'dubbel', kader: 'pvc', rolluik: false, fotoId: null
   }))
 };
-const blobVeel = M.bouwPdf(veel, new Map(), {});
+const blobVeel = pdfViaJson(veel, new Map(), {}).blob;
 assert.ok(blobVeel.size > 5000, 'lange tabel bouwt');
 
 /* ---- progressive JPEG in de invoer -> bouwPdf gooit ---- */
 const fout = new Map([['f-prog', { bytes: prog, breedte: 640, hoogte: 480, groep: 'gevels', volgorde: 1 }]]);
-assert.throws(() => M.bouwPdf(woning, fout, {}), /Progressive/i, 'progressive in dossier -> fout');
+assert.throws(() => pdfViaJson(woning, fout, {}), /Progressive/i, 'progressive in dossier -> fout');
 
 console.log('unittest-maakpdf: alles OK, PDF', blob.size, 'bytes,', stappen.length, 'voortgangsmeldingen');

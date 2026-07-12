@@ -34,58 +34,65 @@ assert.ok(lijst.includes('test.txt') && lijst.includes('leeg.bin'), 'ledenlijst 
 execSync(`rm -rf ${UIT}/maakzip-uitgepakt && mkdir -p ${UIT}/maakzip-uitgepakt && unzip -o -q ${zipPad} -d ${UIT}/maakzip-uitgepakt`);
 assert.equal(readFileSync(join(UIT, 'maakzip-uitgepakt', 'test.txt'), 'utf8'), 'hallo dossier', 'inhoud overleeft de rondreis');
 
-/* ---- woningExport: nummering van §7.4, deuren zonder beglazing, eenheden ---- */
+/* ---- woningExport: genest, geen afgeleide waarden, geen ruis (§9.3.1) ---- */
+const rgb = new Uint8Array(readFileSync(join(HIER, 'data', 'test-rgb.jpg')));
 const woning = {
-  algemeen: { adres: 'Exportstraat 3', datum: '2026-07-12', notities: 'nota', hoofdFotoId: 'x' },
+  algemeen: { adres: 'Exportstraat 3', datum: '2026-07-12', notities: 'nota', hoofdFotoId: 'fA' },
   ruimtes: [
     { id: 'r1', naam: 'Living', vent: 'ander', ventBeschrijving: 'type C', opm: 'hoek', afm: { b: 5, d: 4, h: 2.5 } },
     { id: 'r2', naam: 'Keuken', vent: 'geen', ventBeschrijving: '', opm: '', afm: null }
   ],
   ramen: [
-    { id: 'a', ruimteId: 'r1', element: 'raam', gevel: 'achter', b: 2, h: 1, aantal: 2, beglazing: 'dubbel', kader: 'pvc', rolluik: true, fotoId: null },
+    { id: 'a', ruimteId: 'r1', element: 'raam', gevel: 'achter', b: 2, h: 1, aantal: 2, beglazing: 'dubbel', kader: 'pvc', rolluik: true, fotoId: 'fB' },
     { id: 'b', ruimteId: 'r2', element: 'deur', gevel: 'voor', b: 1, h: 2.2, aantal: 1, beglazing: null, kader: 'hout', rolluik: false, fotoId: null }
   ],
   energie: {
-    opwekkers: [{ id: 'o', type: 'stookolie', ruimteId: null, functie: ['radiatoren'], beschrijving: 'ACV', fotoId: null, fotoKraanId: null }],
+    opwekkers: [
+      { id: 'o', type: 'stookolie', ruimteId: null, functie: ['radiatoren'], beschrijving: 'ACV', fotoId: null, fotoKraanId: null },
+      { id: 'a1', type: 'airco', ruimteId: 'r1', functie: [], beschrijving: 'Daikin', fotoId: null, fotoKraanId: null }
+    ],
     pvPanelen: [{ id: 'p', orientatie: 'plat', wp: '4200' }],
     zonneboiler: 'ja', zonneboilerM2: '4,6'
   }
 };
-const e = Z.woningExport(woning, 'epc-vTEST', globalThis.sorteerRamen).woning;
-assert.equal(e.adres, 'Exportstraat 3');
-assert.equal(e.ramenEnDeuren[0].element, 'deur', 'deur eerst (§7.4)');
-assert.equal(e.ramenEnDeuren[0].nr, 1);
-assert.equal(e.ramenEnDeuren[0].beglazing, null, 'deur zonder beglazing');
-assert.equal(e.ramenEnDeuren[1].oppervlakteM2, 4, '2 × 1 m × 2 stuks = 4 m²');
-assert.equal(e.totaalRamenEnDeuren.aantal, 3);
-assert.equal(e.ruimtes[0].afmetingen.volumeM3, 50, 'm³ berekend');
-assert.equal(e.ruimtes[0].ventilatieBeschrijving, 'type C', 'beschrijving enkel bij ander');
-assert.equal(e.ruimtes[1].ventilatieBeschrijving, null);
-assert.equal(e.energie.zonneboiler.collectorM2, 4.6, 'komma-decimaal als getal');
-assert.equal(e.energie.zonnepanelen[0].wp, 4200);
-assert.equal(e.energie.opwekkers[0].functies[0], 'radiatoren');
-const kaal = Z.woningExport({ algemeen: {} }, null, globalThis.sorteerRamen).woning;
-assert.equal(kaal.totaalRamenEnDeuren.aantal, 0, 'kale woning exporteert leeg');
-assert.deepEqual(e.fotos, [], 'zonder fotomap een lege fotolijst, geen beeldbytes');
-
-/* ---- dossierLeden + leesZip: volledige rondreis ---- */
-const rgb = new Uint8Array(readFileSync(join(HIER, 'data', 'test-rgb.jpg')));
 const fotos = new Map([
   ['fA', { bytes: rgb, breedte: 640, hoogte: 480, groep: 'gevels', volgorde: 1 }],
-  ['fB', { bytes: rgb.slice(0, 5000), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }]
+  ['fB', { bytes: rgb.slice(0, 5000), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
+  ['fC', { bytes: rgb.slice(0, 4000), breedte: 640, hoogte: 480, groep: 'r1', volgorde: 2 }]
 ]);
-woning.algemeen.hoofdFotoId = 'fA';
-woning.ramen[0].fotoId = 'fB';
-const leden = Z.dossierLeden(woning, fotos, new TextEncoder().encode('%PDF-nep'), 'exportstraat-3', 'epc-vTEST', globalThis.sorteerRamen);
-const namen = leden.map(l => l.naam);
-assert.deepEqual(namen, ['exportstraat-3.pdf', 'hoofdfoto.jpg', 'woning.json', 'fotos/0001.jpg', 'fotos/0002.jpg'], 'ledenvolgorde');
-const dossierJson = JSON.parse(new TextDecoder().decode(leden[2].bytes));
-assert.equal(dossierJson.woning.fotos.length, 2, 'fotolijst in de json');
-assert.ok(dossierJson.woning.fotos[0].hoofdfoto, 'hoofdfoto gemarkeerd');
-assert.equal(dossierJson.woning.ramenEnDeuren.find(r => r.element === 'raam').foto, 'fotos/0002.jpg', 'elementfoto gekoppeld');
+const bestandVan = new Map([['fA', 'fotos/0001.jpg'], ['fB', 'fotos/0002.jpg'], ['fC', 'fotos/0003.jpg']]);
+const e = Z.woningExport(woning, globalThis.sorteerRamen, fotos, bestandVan).woning;
+assert.equal(e.adres, 'Exportstraat 3');
+assert.equal(e.hoofdfoto, 'fotos/0001.jpg', 'hoofdfoto op woningniveau');
+assert.equal(e.ruimtes[0].naam, 'Gevels', 'Gevels als pseudo-ruimte vooraan');
+assert.deepEqual(e.ruimtes[0].fotos, ['fotos/0001.jpg'], 'gevelfoto genest onder Gevels');
+const living = e.ruimtes.find(r => r.naam === 'Living');
+assert.equal(living.elementen[0].type, 'raam', 'element genest onder ruimte, geen ruimte-string');
+assert.ok(!('oppervlakteM2' in living.elementen[0]) && !('nr' in living.elementen[0]), 'geen afgeleide m² of nr');
+assert.equal(living.elementen[0].foto, 'fotos/0002.jpg', 'elementfoto op het element');
+assert.deepEqual(living.fotos, ['fotos/0003.jpg'], 'ruimtefoto genest onder de ruimte');
+assert.equal(living.toestellen[0].type, 'airco', 'ruimtetoestel genest onder de ruimte');
+assert.equal(living.ventilatieBeschrijving, 'type C', 'beschrijving enkel bij ander');
+assert.ok(!('volumeM3' in living.afmetingen), 'geen afgeleid volume in afmetingen');
+const keuken = e.ruimtes.find(r => r.naam === 'Keuken');
+assert.ok(!('ventilatie' in keuken), 'ventilatie ontbreekt bij geen');
+assert.ok(!('beglazing' in keuken.elementen[0]), 'deur zonder beglazing-sleutel');
+assert.equal(e.energie.opwekkers.length, 1, 'enkel de centrale opwekker in energie');
+assert.ok(!('ruimteEnDeuren' in e) && !('fotos' in e), 'geen platte lijsten meer');
+assert.equal(e.energie.zonneboiler.collectorM2, 4.6, 'komma-decimaal als getal');
+assert.equal(e.energie.zonnepanelen[0].orientatie, 'plat dak');
+const kaal = Z.woningExport({ algemeen: {} }, globalThis.sorteerRamen).woning;
+assert.deepEqual(kaal.ruimtes, [], 'kale woning: geen ruimtes');
+assert.ok(!('energie' in kaal), 'kale woning: geen energie-blok');
+
+/* ---- leesZip: volledige rondreis van een zip ---- */
+const leden = [
+  { naam: 'test.pdf', bytes: new TextEncoder().encode('%PDF-nep') },
+  { naam: 'fotos/0001.jpg', bytes: rgb }
+];
 const terug = Z.leesZip(new Uint8Array(await Z.bouwZip(leden).arrayBuffer()));
-assert.equal(terug.length, leden.length, 'leesZip vindt alle leden terug');
-assert.deepEqual([...terug[3].bytes], [...rgb], 'fotobytes ongeschonden na de rondreis');
+assert.equal(terug.length, 2, 'leesZip vindt alle leden terug');
+assert.deepEqual([...terug[1].bytes], [...rgb], 'fotobytes ongeschonden na de rondreis');
 assert.throws(() => Z.leesZip(new TextEncoder().encode('geen zip hoor')), /geen zip/, 'leesZip weigert niet-zips');
 
 console.log('test-maakzip: alles OK');
