@@ -158,18 +158,21 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - Titelbalk "EPC Plaatsbezoek". Gesorteerd op laatst gewijzigd.
 - Per rij: hoofdfoto-thumb, **`<nummer>. <adres>`** ("Zonder adres"), datum,
   statuspill afgeleid uit `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen
-  knop**). Het prefix valt weg als de woning (nog) geen nummer heeft.
+  knop**).
 - Verwijderen kan niet vanuit de lijst, enkel op de tab Afronden.
 - "+ Nieuwe woning" maakt en opent een record.
 - Daaronder "Importeer dossier": kies een eerder bewaarde dossier-zip en de
   woning wordt integraal teruggeladen (§9.4).
 - Geen Info-blok, geen versielabel, geen updateknop.
-- **Dossiernummer (per woning, app-zijde).** Elk dossier heeft een eigen `nummer`.
-  Een **nieuwe woning én een import** krijgen automatisch het volgende vrije
-  nummer uit een globale teller (`localStorage['epc-volgindex']`), die daarbij met
-  1 ophoogt. Het nummer verschijnt in het overzicht en als prefix van de
-  zip-bestandsnaam (§9.3). Het staat **niet** in de pdf of `woning.json`, zodat de
-  zip-inhoud nummeronafhankelijk en reproduceerbaar blijft.
+- **Dossiernummer (per woning, app-zijde).** Elk dossier heeft **altijd** een eigen
+  `nummer` — er bestaat geen woning zonder (geen fallback-logica; de app hoeft
+  nooit backwards compatibel te zijn met records van vóór dit veld). Een **nieuwe
+  woning én een import** krijgen automatisch het volgende vrije nummer uit een
+  globale teller (`localStorage['epc-volgindex']`), die daarbij met 1 ophoogt.
+  Verwijderen raakt de teller niet: nummers worden nooit hergebruikt. Het nummer
+  verschijnt in het overzicht en als prefix van de zip-bestandsnaam (§9.3). Het
+  staat **niet** in de pdf of `woning.json`, zodat de zip-inhoud
+  nummeronafhankelijk en reproduceerbaar blijft.
 - **Verstopt: nummer corrigeren.** Klopt de teller ooit niet, dan corrigeer je het
   nummer van het **geopende** dossier met een **lange druk** (± 0,8 s) op de titel
   in de editorheader: `prompt()` "Dossiernummer van deze woning:" met het huidige

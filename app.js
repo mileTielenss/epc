@@ -322,8 +322,7 @@ function zetTab(naam) {
 }
 
 function zetTitel() {
-  const adres = (S && S.algemeen.adres) || 'Nieuwe woning';
-  $('#titel').textContent = (S ? nummerPrefix(S) : '') + adres;
+  $('#titel').textContent = nummerPrefix(S) + (S.algemeen.adres || 'Nieuwe woning');
 }
 
 async function openWoning(id) {
@@ -412,7 +411,7 @@ $('#woninglijst').addEventListener('click', e => {
     if (!S) return; /* enkel zinvol met een geopend dossier */
     timer = setTimeout(() => {
       timer = null;
-      const inv = prompt('Dossiernummer van deze woning:', String(S.nummer || volgendeIndex()));
+      const inv = prompt('Dossiernummer van deze woning:', String(S.nummer));
       if (inv === null) return;
       const n = parseInt(inv, 10);
       if (!Number.isFinite(n) || n <= 0) { toast('Ongeldig nummer'); return; }
@@ -1936,11 +1935,11 @@ function volgendeIndex() {
 function zetVolgendeIndex(n) {
   try { localStorage.setItem('epc-volgindex', String(Math.max(1, Math.round(n) || 1))); } catch (e) { /* geen storage */ }
 }
-/* prefix "<nummer>. " van een dossier; leeg als er (nog) geen nummer is.
+/* prefix "<nummer>. " van een dossier — elke woning heeft altijd een nummer.
    Het nummer is puur app-zijde (overzicht + zip-naam) — het staat NIET in de
    pdf of json, zodat de zip-inhoud nummeronafhankelijk en reproduceerbaar blijft. */
 function nummerPrefix(w) {
-  return w && w.nummer ? w.nummer + '. ' : '';
+  return w.nummer + '. ';
 }
 /* adres zonder tekens die een bestandsnaam breken; spaties, komma's en
    koppeltekens blijven behouden. Naam van de pdf ín de zip (nummervrij). */
