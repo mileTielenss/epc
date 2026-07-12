@@ -5,10 +5,16 @@ Geen versienummers of regelaantallen in dit bestand.
 Mobile-first offline PWA voor één energiedeskundige type A (Vlaanderen), op één
 iPhone. Verzamelt tijdens het plaatsbezoek gegevens en foto's per ruimte.
 - Nieuwe woning starten, al wandelend invullen. Dagen later aanvullen kan.
-- Op het einde "Bewaar PDF". Die PDF is het dossier (10 jaar bewaarplicht).
-- Na oplevering wordt de woning verwijderd. Verwijderen kan pas ná een geslaagde PDF.
-- Geen backup, export of import. Geen JSON in de PDF: invoer in de VEKA-software
-  gebeurt manueel, door een mens, op basis van de PDF.
+- Op het einde "Bewaar dossier": een **zip** met de PDF (het eigenlijke dossier,
+  10 jaar bewaarplicht), de hoofdfoto als losse `hoofdfoto.jpg`, alle foto's als
+  jpeg in `fotos/`, en een `woning.json` met alle gegevens — voor latere
+  automatisaties (de json bevat geen beeldbytes, wel verwijzingen naar `fotos/`).
+- Diezelfde zip kan via "Importeer dossier" op de woningenlijst integraal terug
+  ingeladen worden — ook jaren later (§9.4).
+- Na oplevering wordt de woning verwijderd. Verwijderen kan pas ná een geslaagd
+  dossier.
+- Invoer in de VEKA-software gebeurt manueel of via latere automatisatie op
+  basis van `woning.json`; de PDF blijft het leesbare dossier.
 - Eén gebruiker: geen accounts, geen instellingen, geen hulpteksten, geen updateknop.
 - Alles Nederlands: UI, commentaar, commits, spec.
 ### UI-principes
@@ -26,7 +32,8 @@ Vanilla HTML/CSS/JS. Nul dependencies, geen build-stap.
 | `app.js` | UI en applicatielogica |
 | `db.js` | IndexedDB: open, CRUD, blob-URL-cache, foutkanaal |
 | `maakpdf.js` | PDF-generator, `bouwPdf(woning, fotos) → Blob` (was `pdf.js`) |
-| `pdfworker.js` | `new Worker`, importeert `maakpdf.js`, postMessage voortgang |
+| `maakzip.js` | zip-schrijver en -lezer (store + CRC-32, geen compressie), `woningExport()` voor `woning.json` en `dossierLeden()`; puur, Node-testbaar |
+| `pdfworker.js` | `new Worker`, importeert `maakpdf.js` en `maakzip.js`, bouwt de dossier-zip, postMessage voortgang |
 | `style.css` | opmaak, CSS-variabelen in `:root` |
 | `sw.js` | service worker, **enige** versieconstante `const VERSIE = 'epc-vNN'` |
 | `manifest.json` | "EPC Plaatsbezoek", standalone, portrait, `#0a6b3d` |
@@ -130,7 +137,7 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - **Falen**: permanente rode balk "NIET OPGESLAGEN — <foutnaam>". Dirty-vlag blijft,
   retry elke 5 s, balk verdwijnt enkel bij een geslaagde write. De oude savestamp
   toonde altijd "opgeslagen", ook wanneer het niet zo was.
-- De rode balk bevat één knop: **"Bewaar PDF nu"** (noodklep, werkt op het geheugen).
+- De rode balk bevat één knop: **"Bewaar dossier nu"** (noodklep, werkt op het geheugen).
 - `QuotaExceededError` → "Opslag vol — bewaar de PDF en verwijder een afgewerkte woning".
 - **Foto's**: verklein → `put` in `fotos` → pas dán `fotoId` in het woningrecord en
   tegel tonen. Faalt de `put`: "Foto niet bewaard", geen dode verwijzing.
@@ -140,7 +147,7 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - **DB open faalt**: niets wissen. Rode balk + read-only geheugenmodus waarin enkel
   "Bewaar PDF" nog werkt.
 - **Verwijderen**: uitgeschakeld zolang `pdfBewaardOp === null` (knop toont "Bewaar
-  eerst de PDF"). Anders confirm met datum en uur. Wist woning + alle `fotos` met die
+  eerst het dossier"; de veldnaam blijft historisch `pdfBewaardOp`). Anders confirm met datum en uur. Wist woning + alle `fotos` met die
   `woningId` in één transactie.
 - `pdfBewaardOp` wordt enkel gezet nadat `share()` of de download **resolved** heeft.
   `AbortError` zet niets.
@@ -151,6 +158,8 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen knop**).
 - Verwijderen kan niet vanuit de lijst, enkel op de tab Afronden.
 - "+ Nieuwe woning" maakt en opent een record.
+- Daaronder "Importeer dossier": kies een eerder bewaarde dossier-zip en de
+  woning wordt integraal teruggeladen (§9.4).
 - Geen Info-blok, geen versielabel, geen updateknop.
 ### 7.2 Header (editor)
 - Groene sticky balk: terugpijl `‹`, adres (ellipsis), save-bolletje. Rode balk
@@ -245,8 +254,8 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
 - **Controlelijstje** (informatief, nooit blokkerend, vers berekend bij openen):
   ✅/❌ voor (1) elke ruimte minstens één foto (bij ❌ de namen), (2) verwarming
   ingevuld (≥1 opwekker of toestel), (3) hoofdfoto gekozen.
-- **"💾 Bewaar PDF"** met voortgangsbalk uit de worker.
-- Grijze regel "PDF bewaard op <datum en uur>" indien `pdfBewaardOp`.
+- **"💾 Bewaar dossier"** met voortgangsbalk uit de worker.
+- Grijze regel "Dossier bewaard op <datum en uur>" indien `pdfBewaardOp`.
 - "Woning sluiten" (navigeert terug, wijzigt niets).
 - "Woning verwijderen" (rood, gedrag volgens §6).
 ## 8. Foto-pijplijn
@@ -315,17 +324,43 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    groepstitel staat nooit alleen onderaan (titel + eerste rij verhuizen samen).
    **Algemeen: eigen liggende pagina's, 2 foto's per pagina, paginavullend** (contain).
 7. **Voetregel** op elke pagina: "adres · pagina X/Y", 7 pt grijs, gecentreerd.
-### 9.3 Bewaren
-1. Toast "PDF maken…", worker start, voortgangsbalk.
-2. Blobs uit `fotos` → `arrayBuffer()` → `bouwPdf(woning, fotos)`.
-3. `File` met naam `<slug(adres)>.pdf` (fallback `epc.pdf`) → `navigator.share({files})`.
+### 9.3 Bewaren: de dossier-zip
+1. Toast "Dossier maken…", worker start, voortgangsbalk.
+2. Blobs uit `fotos` → `arrayBuffer()` → in de worker: `bouwPdf(woning, fotos)`,
+   dan de zip via `maakzip.js` met drie leden (store, geen compressie — PDF en
+   JPEG zijn al gecomprimeerd):
+   - `<slug(adres)>.pdf` — het dossier;
+   - `hoofdfoto.jpg` — de hoofdfoto op opgeslagen resolutie (weggelaten als er
+     geen hoofdfoto is);
+   - `fotos/0001.jpg` … — álle foto's (dossier én elementfoto's zoals
+     kenplaten en afstandhouders), op de opgeslagen resolutie;
+   - `woning.json` — alle gegevens machineleesbaar, bedoeld om de VEKA-invoer
+     later te automatiseren én als bron voor de import: adres, datum, notities,
+     ruimtes (ventilatie, opmerking, afmetingen + m³), ramen & deuren met de
+     `#nr`s uit §7.4 (element, gevel, ruimte, maten, aantal, m², beglazing
+     `null` bij deuren, kader, rolluik, verwijzing naar de elementfoto),
+     energie (opwekkers met kenplaat-/kranenfotoverwijzing, zonnepanelen,
+     zonneboiler), de fotolijst (bestand in `fotos/`, groep, volgorde,
+     afmetingen, hoofdfoto-markering) en de appversie. Geen beeldbytes in de
+     json zelf.
+3. `File` met naam `<slug(adres)>.zip` (fallback `epc.zip`) → `navigator.share({files})`.
 4. **`NotAllowedError`** (iOS eist een user gesture, de bouw zit ertussen): de Blob
-   blijft in het geheugen, op de plaats van de knop verschijnt **"Deel PDF"** die
-   `share()` rechtstreeks vanuit een tik aanroept.
+   blijft in het geheugen, op de plaats van de knop verschijnt **"Deel dossier"**
+   die `share()` rechtstreeks vanuit een tik aanroept.
 5. Geen share-ondersteuning → download via tijdelijke `<a download>`.
 6. Resolve → `pdfBewaardOp = now`, meteen bewaren. `AbortError` → toast "Niet bewaard".
-   Andere fout → toast "PDF maken mislukt (naam)".
-7. Blob > 150 MB → eerst confirm "Grote PDF, delen kan mislukken".
+   Andere fout → toast "Dossier maken mislukt (naam)".
+7. Blob > 150 MB → eerst confirm "Groot dossier, delen kan mislukken".
+### 9.4 Importeren
+- "Importeer dossier" op de woningenlijst opent een bestandskiezer (.zip).
+- `maakzip.js` leest de zip (enkel store-leden — dossiers van deze app zelf);
+  `woning.json` wordt gecontroleerd op `formaat: 'epc-plaatsbezoek-dossier'`.
+- Er wordt een **nieuwe** woning aangemaakt (nieuwe ids, `pdfBewaardOp: null`):
+  ruimtes op naam, ramen/toestellen met hun verwijzingen, foto's uit `fotos/`
+  terug in hun groep, hoofdfoto hersteld. Daarna opent de woning gewoon;
+  `normaliseer()` vangt rommel in een bewerkte json op zoals altijd.
+- Mislukt het (geen zip, verkeerd formaat, onleesbaar lid) → toast
+  "Importeren mislukt (reden)", er wordt niets half aangemaakt.
 ## 10. Bewuste keuzes
 - Geen bouwjaar, gebouwtype, kelder, zolder, oriëntatie voorgevel, beschermd volume.
 - Geen backup, export, import, JSON-bijlage. Geen bewerken van PV-installaties.
@@ -340,7 +375,8 @@ De volledige suite staat in `tests/` (eigen `package.json`; enkel test-tooling,
 de app zelf blijft dependency-vrij). Draaien vanuit `tests/`: `npm install`,
 dan `npm run unit`, `npm run flows`, `npm run camera` en `npm run dekking`.
 - **100% regeldekking, afgedwongen**: `node tests/dekking.mjs` meet de
-  V8-regeldekking van `app.js`, `db.js`, `maakpdf.js`, `pdfworker.js` en `sw.js`
+  V8-regeldekking van `app.js`, `db.js`, `maakpdf.js`, `maakzip.js`,
+  `pdfworker.js` en `sw.js`
   (Node-dekking voor generator/worker/SW, Chromium-dekking voor app en db —
   WebKit heeft geen coverage-API) en **faalt onder de 100%**. Elke fout- en
   fallbacktak wordt daarvoor met mocks aangeraakt: share-weigeringen,
@@ -367,7 +403,13 @@ dan `npm run unit`, `npm run flows`, `npm run camera` en `npm run dekking`.
 - **PDF valideren**: `qpdf --check` (streng over xref-offsets, pypdf is dat niet), dan
   `pypdf` voor tekstextractie (adres, tabelwaarden, groepstitels, paginanummers) en
   paginaformaten, dan `pdftoppm` op drie pagina's om te zien dat er beeld staat.
-- `node --check` op `app.js`, `db.js`, `maakpdf.js`, `pdfworker.js`, `sw.js`.
+- **`maakzip.js` unit-testen in Node**: CRC-32-ijkwaarde ("123456789" →
+  `0xCBF43926`), zip uitpakbaar met `unzip`, `leesZip` als rondreis terug,
+  `woningExport` met de nummering van §7.4.
+- **Round-trip in de flows**: dossier exporteren, woning verwijderen, zip
+  importeren en verifiëren dat gegevens én foto's volledig terug zijn.
+- `node --check` op `app.js`, `db.js`, `maakpdf.js`, `maakzip.js`,
+  `pdfworker.js`, `sw.js`.
 ## 12. Release
 1. Wijziging eerst in deze spec, of in dezelfde commit.
 2. `node --check` + WebKit-flows + unittests + `qpdf --check` groen.

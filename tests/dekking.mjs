@@ -12,12 +12,12 @@ const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HIER, '..');
 const V8NODE = join(HIER, 'uitvoer', 'v8node');
 const V8BROWSER = join(HIER, 'uitvoer', 'v8browser');
-const BESTANDEN = ['app.js', 'db.js', 'maakpdf.js', 'pdfworker.js', 'sw.js'];
+const BESTANDEN = ['app.js', 'db.js', 'maakpdf.js', 'maakzip.js', 'pdfworker.js', 'sw.js'];
 
 /* ---- 1. Node-tests met V8-dekking ---- */
 rmSync(V8NODE, { recursive: true, force: true });
 mkdirSync(V8NODE, { recursive: true });
-for (const t of ['unittest-maakpdf.mjs', 'test-pdfworker.mjs', 'test-sw.mjs']) {
+for (const t of ['unittest-maakpdf.mjs', 'test-maakzip.mjs', 'test-pdfworker.mjs', 'test-sw.mjs']) {
   const r = spawnSync('node', [join(HIER, t)], {
     env: { ...process.env, NODE_V8_COVERAGE: V8NODE }, stdio: 'inherit'
   });
@@ -35,7 +35,7 @@ const map = libCoverage.createCoverageMap({});
 const bronnen = new Map(BESTANDEN.map(b => [b, readFileSync(join(REPO, b), 'utf8')]));
 
 function bestandVoorUrl(url) {
-  const m = /\/(app|db|maakpdf|pdfworker|sw)\.js$/.exec(url || '');
+  const m = /\/(app|db|maakpdf|maakzip|pdfworker|sw)\.js$/.exec(url || '');
   return m ? `${m[1]}.js` : null;
 }
 

@@ -179,22 +179,30 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('3 controlepunten', await page.locator('#checklijst li').count() === 3);
   check('hoofdfoto-check ok', (await page.locator('#checklijst li').nth(2).textContent()).includes('✅'));
   const delKnop = page.locator('#btn-verwijder-woning');
-  check('verwijderen geblokkeerd zonder PDF', await delKnop.isDisabled() && (await delKnop.textContent()) === 'Bewaar eerst de PDF');
+  check('verwijderen geblokkeerd zonder dossier', await delKnop.isDisabled() && (await delKnop.textContent()) === 'Bewaar eerst het dossier');
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 30000 }),
     page.click('#btn-print')
   ]);
-  const pdfPad = `${MAP}/flowtest.pdf`;
-  await download.saveAs(pdfPad);
-  check('bestandsnaam = slug(adres).pdf', download.suggestedFilename() === 'teststraat-12-ranst.pdf');
-  execSync(`qpdf --check ${pdfPad}`);
-  check('qpdf --check groen op flow-PDF', true);
-  const pdfTekst = readFileSync(pdfPad, 'latin1');
+  const zipPad = `${MAP}/flowtest.zip`;
+  await download.saveAs(zipPad);
+  check('bestandsnaam = slug(adres).zip', download.suggestedFilename() === 'teststraat-12-ranst.zip');
+  execSync(`unzip -t ${zipPad}`);
+  check('zip uitpakbaar (CRC ok)', true);
+  execSync(`rm -rf ${MAP}/flowzip && mkdir -p ${MAP}/flowzip && unzip -o -q ${zipPad} -d ${MAP}/flowzip`);
+  execSync(`qpdf --check ${MAP}/flowzip/teststraat-12-ranst.pdf`);
+  check('qpdf --check groen op de PDF in de zip', true);
+  const pdfTekst = readFileSync(`${MAP}/flowzip/teststraat-12-ranst.pdf`, 'latin1');
   check('/Producer bevat sw-versie', /\/Producer \(EPC Plaatsbezoek epc-v\d+\)/.test(pdfTekst));
+  const dossierJson = JSON.parse(readFileSync(`${MAP}/flowzip/woning.json`, 'utf8'));
+  check('woning.json bevat het adres', dossierJson.woning.adres === 'Teststraat 12, Ranst');
+  check('woning.json: deur eerst met nr 1', dossierJson.woning.ramenEnDeuren[0].element === 'deur' && dossierJson.woning.ramenEnDeuren[0].nr === 1);
+  check('hoofdfoto.jpg zit in de zip', readFileSync(`${MAP}/flowzip/hoofdfoto.jpg`).length > 1000);
+  check('fotos/ zit in de zip', dossierJson.woning.fotos.length >= 2 && readFileSync(`${MAP}/flowzip/fotos/0001.jpg`).length > 1000);
 
   await page.waitForSelector('#pdf-bewaard:not([hidden])');
-  check('grijze regel "PDF bewaard op"', (await page.textContent('#pdf-bewaard')).startsWith('PDF bewaard op'));
+  check('grijze regel "Dossier bewaard op"', (await page.textContent('#pdf-bewaard')).startsWith('Dossier bewaard op'));
   check('verwijderen nu mogelijk', !(await delKnop.isDisabled()) && (await delKnop.textContent()) === 'Woning verwijderen');
 
   await page.click('#btn-verwijder-woning');
@@ -211,6 +219,19 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
     };
   }));
   check('stores leeg (één transactie wiste alles)', dbLeeg.w === 0 && dbLeeg.f === 0);
+
+  /* round-trip: dezelfde zip importeren en alles terugvinden (§9.4) */
+  await page.setInputFiles('#zipinput', zipPad);
+  await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
+  check('import opent de woning', await page.inputValue('#adres') === 'Teststraat 12, Ranst');
+  await page.click('#tabbar button[data-tab="details"]');
+  check('ramen terug na import', await page.locator('#ramenlijst li').count() === 2);
+  await page.click('#tabbar button[data-tab="fotos"]');
+  check('gevelfoto\'s terug na import', await page.locator('#dossiergrid .dfoto').count() === 2);
+  check('hoofdfoto terug na import', await page.locator('#dossiergrid .ster.hoofd').count() === 1);
+  await page.click('#tabbar button[data-tab="afronden"]');
+  check('geïmporteerde woning is een nieuw open dossier',
+    (await page.locator('#btn-verwijder-woning').textContent()) === 'Bewaar eerst het dossier');
   await ctx.close();
 }
 
@@ -244,10 +265,12 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
     page.waitForEvent('download', { timeout: 30000 }),
     page.click('#btn-noodpdf')
   ]);
-  const noodPad = `${MAP}/noodtest.pdf`;
+  const noodPad = `${MAP}/noodtest.zip`;
   await nood.saveAs(noodPad);
-  execSync(`qpdf --check ${noodPad}`);
-  check('nood-PDF geldig (qpdf)', true);
+  execSync(`rm -rf ${MAP}/noodzip && mkdir -p ${MAP}/noodzip && unzip -o -q ${noodPad} -d ${MAP}/noodzip && qpdf --check ${MAP}/noodzip/*.pdf`);
+  check('nood-dossier geldig (zip + qpdf)', true);
+  execSync(`test ! -f ${MAP}/noodzip/hoofdfoto.jpg`);
+  check('geen hoofdfoto-lid zonder hoofdfoto', true);
 
   /* herstel: retry (elke 5 s) doet de write alsnog slagen, balk verdwijnt */
   await page.evaluate(() => { IDBObjectStore.prototype.put = window.__origPut; });

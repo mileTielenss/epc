@@ -1,7 +1,7 @@
 'use strict';
 
 /* enige versieconstante van de app; bump bij elke release */
-const VERSIE = 'epc-v5';
+const VERSIE = 'epc-v6';
 
 /* sw.js staat mee in de cache zodat de app er VERSIE uit kan lezen voor /Producer;
    de browser haalt SW-updates zelf op, buiten deze fetch-handler om */
@@ -12,6 +12,7 @@ const ASSETS = [
   './app.js',
   './db.js',
   './maakpdf.js',
+  './maakzip.js',
   './pdfworker.js',
   './sw.js',
   './manifest.json',

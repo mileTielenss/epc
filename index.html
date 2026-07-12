@@ -19,7 +19,7 @@
 <header id="topbar">
   <div id="foutbalk" hidden>
     <span id="foutbalk-tekst"></span>
-    <button type="button" id="btn-noodpdf">Bewaar PDF nu</button>
+    <button type="button" id="btn-noodpdf">Bewaar dossier nu</button>
   </div>
   <div class="toprij">
     <button type="button" id="btn-terug" hidden aria-label="Terug naar woningen">&#8249;</button>
@@ -48,6 +48,7 @@
   <h2>Woningen</h2>
   <ul id="woninglijst" class="lijst"></ul>
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
+  <button type="button" class="btn sec big" id="btn-importeer">Importeer dossier</button>
 </section>
 
 <main id="app" hidden>
@@ -279,8 +280,8 @@
     <span class="lbl">Controle (informatief, geen verplichting)</span>
     <ul id="checklijst" class="lijst"></ul>
   </div>
-  <button type="button" class="btn big" id="btn-print">&#128190; Bewaar PDF</button>
-  <button type="button" class="btn big" id="btn-deel" hidden>Deel PDF</button>
+  <button type="button" class="btn big" id="btn-print">&#128190; Bewaar dossier</button>
+  <button type="button" class="btn big" id="btn-deel" hidden>Deel dossier</button>
   <progress id="pdf-voortgang" max="1" value="0" hidden></progress>
   <div id="pdf-bewaard" class="totaal grijs" hidden></div>
   <button type="button" class="btn sec big" id="btn-sluiten">Woning sluiten</button>
@@ -324,9 +325,11 @@
 </div>
 <input type="file" id="fotoinput" accept="image/*" capture="environment" hidden>
 <input type="file" id="dossierinput" accept="image/*" multiple hidden>
+<input type="file" id="zipinput" accept=".zip,application/zip" hidden>
 <div id="lightbox" hidden><img alt="foto vergroot"></div>
 
 <script src="maakpdf.js"></script>
+<script src="maakzip.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 </body>

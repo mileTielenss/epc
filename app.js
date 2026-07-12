@@ -415,6 +415,110 @@ $('#btn-nieuwewoning').addEventListener('click', async () => {
   toonEditor();
 });
 
+/* ---------- dossier importeren (§9.4): dezelfde zip komt integraal terug ---------- */
+
+$('#btn-importeer').addEventListener('click', () => {
+  $('#zipinput').value = '';
+  $('#zipinput').click();
+});
+$('#zipinput').addEventListener('change', async () => {
+  const f = $('#zipinput').files[0];
+  if (!f) return;
+  toast('Importeren…');
+  try {
+    const leden = leesZip(new Uint8Array(await f.arrayBuffer()));
+    const jsonLid = leden.find(l => l.naam === 'woning.json');
+    if (!jsonLid) throw new Error('geen woning.json in de zip');
+    const dossier = JSON.parse(new TextDecoder().decode(jsonLid.bytes));
+    if (dossier.formaat !== 'epc-plaatsbezoek-dossier') throw new Error('onbekend formaat');
+    await importeerDossier(dossier.woning || {}, new Map(leden.map(l => [l.naam, l.bytes])));
+  } catch (e) {
+    toast(`Importeren mislukt (${(e && e.message) || e})`);
+  }
+});
+
+const FUNCTIE_TERUG = { radiatoren: 'radiatoren', vloerverwarming: 'vloer', 'sanitair warm water': 'sww' };
+const PV_TERUG = { 'plat dak': 'plat', voor: 'voor', achter: 'achter', links: 'links', rechts: 'rechts', '': '' };
+
+async function importeerDossier(d, leden) {
+  const w = leegWoning();
+  w.algemeen.adres = d.adres || '';
+  if (d.datumPlaatsbezoek) w.algemeen.datum = d.datumPlaatsbezoek;
+  w.algemeen.notities = d.notities || '';
+
+  const naamNaarId = new Map();
+  w.ruimtes = (d.ruimtes || []).map(r => {
+    const ruimte = nieuweRuimte(String(r.naam || 'Ruimte'));
+    ruimte.vent = r.ventilatie || 'geen';
+    ruimte.ventBeschrijving = r.ventilatieBeschrijving || '';
+    ruimte.opm = r.opmerking || '';
+    ruimte.afm = r.afmetingen ? { b: r.afmetingen.breedteM, d: r.afmetingen.diepteM, h: r.afmetingen.hoogteM } : null;
+    naamNaarId.set(ruimte.naam, ruimte.id);
+    return ruimte;
+  });
+  if (!w.ruimtes.length) w.ruimtes = standaardRuimtes();
+
+  /* eerst de woning en de foto's, pas daarna de verwijzingen; mislukt er iets,
+     dan wordt alles weer opgeruimd — geen halve import (§9.4) */
+  try {
+    await DB.putWoning(w);
+    await DB.laadFotos(w.id);
+
+    const fotoIdVan = new Map(); /* bestand in fotos/ -> nieuw fotoId */
+    let hoofdFotoId = null;
+    for (const foto of (d.fotos || [])) {
+      const bytes = leden.get(foto.bestand);
+      if (!bytes) continue;
+      let groep = null;
+      if (foto.groep === 'Gevels') groep = 'gevels';
+      else if (foto.groep === 'Algemeen') groep = 'algemeen';
+      else if (foto.groep) groep = naamNaarId.get(foto.groep) || null;
+      const rec = {
+        id: DB.nieuwId(), woningId: w.id,
+        blob: new Blob([bytes], { type: 'image/jpeg' }),
+        breedte: foto.breedte || 1600, hoogte: foto.hoogte || 1200,
+        groep, volgorde: foto.volgorde || 0, gemaakt: nu()
+      };
+      await DB.putFoto(rec);
+      fotoIdVan.set(foto.bestand, rec.id);
+      if (foto.hoofdfoto && groep === 'gevels') hoofdFotoId = rec.id;
+    }
+    w.algemeen.hoofdFotoId = hoofdFotoId;
+
+    w.ramen = (d.ramenEnDeuren || []).map(r => ({
+      id: DB.nieuwId(),
+      ruimteId: naamNaarId.get(r.ruimte) || null,
+      element: r.element, gevel: r.gevel,
+      b: num(r.breedteM), h: num(r.hoogteM),
+      aantal: Math.max(1, Math.round(num(r.aantal)) || 1),
+      beglazing: r.beglazing ?? null,
+      kader: r.kader, rolluik: !!r.rolluik,
+      fotoId: r.foto ? (fotoIdVan.get(r.foto) || null) : null
+    }));
+
+    const E = d.energie || {};
+    w.energie.opwekkers = (E.opwekkers || []).map(o => ({
+      id: DB.nieuwId(), type: o.type,
+      ruimteId: naamNaarId.get(o.ruimte) || null,
+      functie: (o.functies || []).map(f => FUNCTIE_TERUG[f] || f).filter(f => FUNCTIES.includes(f)),
+      beschrijving: o.beschrijving || '',
+      fotoId: o.kenplaatFoto ? (fotoIdVan.get(o.kenplaatFoto) || null) : null,
+      fotoKraanId: o.kranenFoto ? (fotoIdVan.get(o.kranenFoto) || null) : null
+    }));
+    w.energie.pvPanelen = (E.zonnepanelen || []).map(p => ({ id: DB.nieuwId(), orientatie: PV_TERUG[p.orientatie] ?? '', wp: String(p.wp || '') }));
+    w.energie.zonneboiler = E.zonneboiler && E.zonneboiler.aanwezig ? 'ja' : 'nee';
+    w.energie.zonneboilerM2 = E.zonneboiler && E.zonneboiler.collectorM2 != null ? String(E.zonneboiler.collectorM2).replace('.', ',') : '';
+
+    await DB.putWoning(w);
+  } catch (e) {
+    await DB.verwijderWoningMetFotos(w.id).catch(() => { });
+    DB.sluitWoning();
+    throw e;
+  }
+  toast('Dossier geïmporteerd');
+  await openWoning(w.id);
+}
+
 /* ============================== foto-pijplijn (§8) ==============================
    Alles wordt via canvas hergecodeerd naar JPEG (EXIF-oriëntatie komt zo in
    de pixels terecht) en als Blob met afmetingen opgeslagen. */
@@ -1715,10 +1819,10 @@ function renderAfronden() {
   /* grijze regel + verwijderknop volgen pdfBewaardOp (§6) */
   const klaar = !!S.pdfBewaardOp;
   $('#pdf-bewaard').hidden = !klaar;
-  if (klaar) $('#pdf-bewaard').textContent = `PDF bewaard op ${datumUur(S.pdfBewaardOp)}`;
+  if (klaar) $('#pdf-bewaard').textContent = `Dossier bewaard op ${datumUur(S.pdfBewaardOp)}`;
   const del = $('#btn-verwijder-woning');
   del.disabled = !klaar;
-  del.textContent = klaar ? 'Woning verwijderen' : 'Bewaar eerst de PDF';
+  del.textContent = klaar ? 'Woning verwijderen' : 'Bewaar eerst het dossier';
 }
 
 /* controlelijstje: informatief, nooit blokkerend, vers berekend bij openen */
@@ -1767,14 +1871,14 @@ function bouwInWorker(woning, fotos) {
     };
     w.onerror = e => { w.terminate(); rej(new Error(e.message || 'Worker-fout')); };
     const buffers = [...fotos.values()].map(f => f.bytes.buffer);
-    w.postMessage({ woning: JSON.parse(JSON.stringify(woning)), fotos, versie: swVersie }, buffers);
+    w.postMessage({ woning: JSON.parse(JSON.stringify(woning)), fotos, versie: swVersie, naam: slug(woning.algemeen.adres) || 'epc' }, buffers);
   });
 }
 
 async function bewaarPdf() {
   if (!S || pdfBezig) return;
   pdfBezig = true;
-  toast('PDF maken…');
+  toast('Dossier maken…');
   zetVoortgang(0);
   try {
     const fotos = new Map();
@@ -1784,15 +1888,15 @@ async function bewaarPdf() {
       fotos.set(id, { bytes: new Uint8Array(buf), breedte: rec.breedte, hoogte: rec.hoogte, groep: rec.groep, volgorde: rec.volgorde });
     }
     const blob = await bouwInWorker(S, fotos);
-    if (blob.size > 150 * 1024 * 1024 && !confirm('Grote PDF, delen kan mislukken. Toch doorgaan?')) {
+    if (blob.size > 150 * 1024 * 1024 && !confirm('Groot dossier, delen kan mislukken. Toch doorgaan?')) {
       toast('Niet bewaard');
       return;
     }
-    const naam = (slug(S.algemeen.adres) || 'epc') + '.pdf';
-    const file = new File([blob], naam, { type: 'application/pdf' });
+    const naam = (slug(S.algemeen.adres) || 'epc') + '.zip';
+    const file = new File([blob], naam, { type: 'application/zip' });
     await deelOfDownload(file);
   } catch (e) {
-    toast('PDF maken mislukt' + (e && (e.name || e.message) ? ` (${e.name || e.message})` : ''));
+    toast('Dossier maken mislukt' + (e && (e.name || e.message) ? ` (${e.name || e.message})` : ''));
   } finally {
     pdfBezig = false;
     verbergVoortgang();
@@ -1813,7 +1917,7 @@ async function deelOfDownload(file) {
         pdfKlaarFile = file;
         $('#btn-print').hidden = true;
         $('#btn-deel').hidden = false;
-        toast('Tik op "Deel PDF" om te delen');
+        toast('Tik op "Deel dossier" om te delen');
         return;
       }
       throw e;
@@ -1828,7 +1932,7 @@ function zetPdfBewaard() {
   wijzig();
   bewaar();
   renderAfronden();
-  toast('PDF bewaard');
+  toast('Dossier bewaard');
 }
 
 $('#btn-print').addEventListener('click', bewaarPdf);

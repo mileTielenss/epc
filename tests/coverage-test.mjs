@@ -29,7 +29,7 @@ const browser = await chromium.launch({
 let dumpNr = 0;
 async function bewaarDekking(page) {
   const entries = await page.coverage.stopJSCoverage();
-  const relevant = entries.filter(e => /\/(app|db|maakpdf|pdfworker|sw)\.js$/.test(e.url || ''));
+  const relevant = entries.filter(e => /\/(app|db|maakpdf|maakzip|pdfworker|sw)\.js$/.test(e.url || ''));
   writeFileSync(join(UIT, `dump-${++dumpNr}.json`), JSON.stringify(relevant));
 }
 
@@ -344,7 +344,7 @@ await scenario('hoofdflow', {
     page.waitForEvent('download', { timeout: 30000 }),
     page.click('#btn-print')
   ]);
-  await download.saveAs(join(HIER, 'uitvoer', 'dekking.pdf'));
+  await download.saveAs(join(HIER, 'uitvoer', 'dekking.zip'));
   await page.waitForSelector('#pdf-bewaard:not([hidden])');
   /* pagehide- en visibilitychange-takken */
   await page.evaluate(() => {
@@ -369,6 +369,24 @@ await scenario('hoofdflow', {
   await page.click('#btn-verwijder-woning');    /* confirm geweigerd */
   await page.click('#btn-verwijder-woning');
   await page.waitForSelector('#view-lijst:not([hidden])');
+
+  /* import: fout (geen zip), fout tijdens de put (opruimen), en dan geslaagd */
+  await page.click('#btn-importeer');           /* kiezer openen en annuleren */
+  await page.setInputFiles('#zipinput', join(HIER, 'serveer.mjs'));
+  await page.waitForTimeout(400);
+  assert.ok((await page.textContent('#toast')).includes('Importeren mislukt'), 'niet-zip geweigerd');
+  await page.evaluate(() => {
+    window.__EchtePutW = DB.putWoning;
+    DB.putWoning = () => Promise.reject(new DOMException('vol', 'QuotaExceededError'));
+  });
+  await page.setInputFiles('#zipinput', join(HIER, 'uitvoer', 'dekking.zip'));
+  await page.waitForTimeout(600);
+  assert.ok((await page.textContent('#toast')).includes('Importeren mislukt'), 'halve import opgeruimd');
+  await page.evaluate(() => { DB.putWoning = window.__EchtePutW; });
+  await page.setInputFiles('#zipinput', []);
+  await page.setInputFiles('#zipinput', join(HIER, 'uitvoer', 'dekking.zip'));
+  await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
+  assert.equal(await page.inputValue('#adres'), 'Dekkingsstraat 1, Ranst', 'import zet de woning terug');
 });
 
 /* ============ 2. delen: share-paden, workerfouten, grote PDF, races ============ */
@@ -590,6 +608,37 @@ await scenario('geheugen', {
   await page.waitForSelector('#view-lijst:not([hidden])');
   await page.evaluate(() => DB.weesfotoSweep());        /* geheugen-tak van de sweep */
   await houder.close();                                 /* laadt zelf geen app-scripts */
+});
+
+/* ============ clean-start: de app opent een oude v1-databank en maakt ze leeg (db.js) ============ */
+await scenario('cleanstart', { context: { serviceWorkers: 'block' } }, async page => {
+  await page.goto(BASIS + 'manifest.json');
+  await page.evaluate(() => new Promise(res => {
+    const q = indexedDB.open('epc-db', 1);
+    q.onupgradeneeded = () => {
+      q.result.createObjectStore('woningen', { keyPath: 'id' });
+      q.result.createObjectStore('instellingen');
+    };
+    q.onsuccess = () => {
+      const t = q.result.transaction('woningen', 'readwrite');
+      t.objectStore('woningen').put({ id: 'stokoud', algemeen: { adres: 'Oud' } });
+      t.oncomplete = () => { q.result.close(); res(); };
+    };
+  }));
+  /* de app zelf opent nu op v3: onupgradeneeded wist het oude record (db.js §5) */
+  await page.goto(BASIS);
+  await page.waitForSelector('#btn-nieuwewoning');
+  const info = await page.evaluate(() => new Promise(res => {
+    const q = indexedDB.open('epc-db');
+    q.onsuccess = () => {
+      const d = q.result;
+      d.transaction('woningen').objectStore('woningen').count().onsuccess =
+        e => res({ versie: d.version, aantal: e.target.result, instellingen: d.objectStoreNames.contains('instellingen') });
+    };
+  }));
+  assert.equal(info.versie, 3, 'DB op v3');
+  assert.equal(info.aantal, 0, 'oud record gewist (clean start)');
+  assert.ok(!info.instellingen, 'instellingen-store weg');
 });
 
 /* ============ 5. databankfouten, normaliseer en de weesfotosweep ============ */

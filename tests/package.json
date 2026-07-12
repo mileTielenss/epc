@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Testsuite voor EPC Plaatsbezoek (SPEC.md §11) — niet nodig voor de app zelf.",
   "scripts": {
-    "unit": "node unittest-maakpdf.mjs && node test-pdfworker.mjs && node test-sw.mjs",
+    "unit": "node unittest-maakpdf.mjs && node test-maakzip.mjs && node test-pdfworker.mjs && node test-sw.mjs",
     "flows": "node flow-test.mjs",
     "camera": "node camera-test.mjs",
     "dekking": "node dekking.mjs"
