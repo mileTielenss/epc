@@ -226,8 +226,9 @@ await scenario('hoofdflow', {
   await page.fill('#breedte', '2,5');
   await page.locator('#breedte').blur();
   await page.click('#btn-voegtoe');             /* bewaar wijziging */
-  /* deur erbij en weer weg (met foto-verwijdertak) */
+  /* deur erbij en weer weg (met foto-verwijdertak); beglazing-cycle is dan weg */
   await page.click('#seg-element button[data-v="deur"]');
+  assert.ok(await page.locator('#cy-beglazing').isHidden(), 'beglazing-cycle weg bij deur');
   await page.fill('#breedte', '1');
   await page.fill('#hoogte', '2,1');
   await page.locator('#hoogte').blur();
@@ -617,7 +618,10 @@ await scenario('dbfouten', {
         id: 'rommel-1',
         algemeen: { adres: 'Rommelstraat 3', datum: '2026-01-01', notities: '', hoofdFotoId: 'dode-foto' },
         ruimtes: [{ naam: 'Naamloos zonder id', vent: 'straalventilator', afm: { b: 'x' } }],
-        ramen: [{ element: 'poort', gevel: 'boven', b: 1, h: 1, aantal: 0, beglazing: 'quadruple', kader: 'goud', fotoId: 'weg', ruimteId: 'weg' }],
+        ramen: [
+          { element: 'poort', gevel: 'boven', b: 1, h: 1, aantal: 0, beglazing: 'quadruple', kader: 'goud', fotoId: 'weg', ruimteId: 'weg' },
+          { element: 'deur', gevel: 'voor', b: 1, h: 2, aantal: 1, beglazing: 'dubbel', kader: 'hout', fotoId: null, ruimteId: null }
+        ],
         energie: { opwekkers: [{ type: 'kernfusie', ruimteId: 'weg', functie: ['radiatoren', 'niets'], fotoId: 'weg', fotoKraanId: 'weg' }], pvPanelen: [{ orientatie: 'onder', wp: 5 }], zonneboiler: 'misschien', zonneboilerM2: 7 },
         pdfBewaardOp: 12345, problemen: 'geen-array'
       });

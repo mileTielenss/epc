@@ -170,18 +170,28 @@ function normaliseer(p) {
   };
 
   if (!Array.isArray(w.ramen)) w.ramen = [];
-  w.ramen = w.ramen.map((r, i) => ({
-    id: r.id || DB.nieuwId(),
-    ruimteId: ruimteRef(r.ruimteId, `element ${i + 1}`),
-    element: enumOf(r.element, ELEMENTEN, 'raam', `element ${i + 1}`),
-    gevel: enumOf(r.gevel, GEVELS, 'voor', `gevel van element ${i + 1}`),
-    b: num(r.b), h: num(r.h),
-    aantal: Math.max(1, Math.round(num(r.aantal)) || 1),
-    beglazing: enumOf(r.beglazing, BEGLAZINGEN, 'dubbel', `beglazing van element ${i + 1}`),
-    kader: enumOf(r.kader, KADERS, 'pvc', `kader van element ${i + 1}`),
-    rolluik: !!r.rolluik,
-    fotoId: fotoRef(r.fotoId, `foto van element ${i + 1}`)
-  }));
+  w.ramen = w.ramen.map((r, i) => {
+    const element = enumOf(r.element, ELEMENTEN, 'raam', `element ${i + 1}`);
+    let beglazing;
+    if (element === 'deur') {
+      if (r.beglazing != null) fix.push(`element ${i + 1}: een deur heeft geen beglazing, waarde gewist`);
+      beglazing = null;
+    } else {
+      beglazing = enumOf(r.beglazing, BEGLAZINGEN, 'dubbel', `beglazing van element ${i + 1}`);
+    }
+    return {
+      id: r.id || DB.nieuwId(),
+      ruimteId: ruimteRef(r.ruimteId, `element ${i + 1}`),
+      element,
+      gevel: enumOf(r.gevel, GEVELS, 'voor', `gevel van element ${i + 1}`),
+      b: num(r.b), h: num(r.h),
+      aantal: Math.max(1, Math.round(num(r.aantal)) || 1),
+      beglazing,
+      kader: enumOf(r.kader, KADERS, 'pvc', `kader van element ${i + 1}`),
+      rolluik: !!r.rolluik,
+      fotoId: fotoRef(r.fotoId, `foto van element ${i + 1}`)
+    };
+  });
 
   if (!Array.isArray(w.energie.opwekkers)) w.energie.opwekkers = [];
   w.energie.opwekkers = w.energie.opwekkers.map((o, i) => ({
@@ -651,9 +661,11 @@ const syncCyKader = cycleInit('#cy-kader', KADERS, KADER_NAMEN,
 const syncCyRolluik = cycleInit('#cy-rolluik', ['nee', 'ja'], { nee: 'Nee', ja: 'Ja' },
   () => draft.rolluik, v => draft.rolluik = v);
 
-/* dakramen hebben meestal een kenplaatje i.p.v. een afstandhouder */
+/* dakramen hebben meestal een kenplaatje i.p.v. een afstandhouder; een deur
+   heeft enkel een profiel, dus geen beglazing-cycle (§7.4) */
 function updateRaamFotoLabel() {
   $('#btn-raamfoto').textContent = draft.element === 'dakraam' ? '\u{1F4F7} Foto kenplaatje' : '\u{1F4F7} Foto afstandhouder';
+  $('#cy-beglazing').hidden = draft.element === 'deur';
 }
 
 /* aantal-stepper */
@@ -708,7 +720,7 @@ $('#btn-voegtoe').addEventListener('click', () => {
     gevel: draft.gevel,
     ruimteId: ruimte.id,
     b, h,
-    beglazing: draft.beglazing,
+    beglazing: draft.element === 'deur' ? null : draft.beglazing,
     kader: draft.kader,
     rolluik: draft.rolluik === 'ja',
     aantal,
@@ -742,7 +754,7 @@ function startBewerkRaam(id) {
   bewerkRaamId = id;
   draft.element = r.element;
   draft.gevel = r.gevel;
-  draft.beglazing = r.beglazing;
+  draft.beglazing = r.beglazing || draft.beglazing;
   draft.kader = r.kader;
   draft.rolluik = r.rolluik ? 'ja' : 'nee';
   draft.fotoId = r.fotoId || null;
@@ -802,7 +814,9 @@ function renderRamen() {
     if (r.id === bewerkRaamId) li.className = 'bewerk';
     li.dataset.id = r.id;
     const n = raamAantal(r);
-    const tags = [GLAS_NAMEN[r.beglazing] || r.beglazing, KADER_NAMEN[r.kader] || r.kader];
+    const tags = [];
+    if (r.beglazing) tags.push(GLAS_NAMEN[r.beglazing] || r.beglazing);
+    tags.push(KADER_NAMEN[r.kader] || r.kader);
     if (r.rolluik) tags.push('rolluik');
     if (r.ruimteId) tags.unshift(ruimteNaam(r.ruimteId));
     const fotoUrl = r.fotoId && !fotoVerborgen(r.fotoId) ? DB.fotoUrl(r.fotoId) : null;

@@ -91,7 +91,8 @@ woning = {
              element: 'raam'|'deur'|'dakraam',
              gevel: 'voor'|'achter'|'links'|'rechts',
              b, h, aantal (>=1),
-             beglazing: 'enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel',
+             beglazing: 'enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel'
+                        | null,   // deur: altijd null, enkel het profiel telt
              kader: 'pvc'|'alu'|'hout', rolluik (bool),
              fotoId | null } ],
   energie: {
@@ -196,13 +197,17 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
 - **Ramen & deuren**: element-rij en gevel-rij zonder label; b × h met live m²
   (placeholders "breedte (m)"/"hoogte (m)"); "Aantal identieke" met inline −/1/+
   (min. 1); drie mini-cycles naast elkaar: Beglazing (Enkel/Dubbel/HR dubbel/
-  Drievoudig/Vol paneel), Kader (PVC/Alu/Hout), Rolluik (Nee/Ja);
+  Drievoudig/Vol paneel), Kader (PVC/Alu/Hout), Rolluik (Nee/Ja); bij
+  element=deur verdwijnt de beglazing-cycle — een deur heeft enkel een profiel
+  (hout/alu/pvc), geen beglazingswaarde;
   **"📷 Foto afstandhouder"**, bij element=dakraam automatisch **"📷 Foto kenplaatje"**;
   "Voeg toe".
   - Na toevoegen blijven de keuzes staan; afmetingen, aantal en foto worden geleegd.
   - Zonder geldige b én h: toast "Vul breedte en hoogte in (m)".
   - Een dakraam behoudt gevel voor/achter/links/rechts. "Vol paneel" blijft een
-    beglazingswaarde: het wordt in de VEKA-software als raam ingevoerd.
+    beglazingswaarde voor vaste panelen die als raam worden ingegeven (zo gaat
+    het ook in de VEKA-software). Deuren hebben geen beglazingswaarde; een
+    poort wordt als deur ingegeven.
 - **Sorteervolgorde** (één functie, gebruikt door lijst, PDF en nummering): eerst alle
   deuren, dan de rest; binnen elk blok gevel voor → achter → links → rechts; dan
   aanmaakvolgorde. `#nr` = 1-gebaseerde index in die volgorde.
@@ -288,8 +293,10 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
 1. **Kop**: klein grijs "EPC Plaatsbezoek", adres (vet 15 pt, gewrapt), "Datum
    plaatsbezoek: …". Hoofdfoto rechtsboven, 130 pt breed, max 100 pt hoog.
 2. **RAMEN & DEUREN** (hoofdletters + lijn): tabel #, Type, Ruimte, Gevel, Aant.,
-   B (m), H (m), m² (aantal meegerekend), Beglazing, Kader, Rolluik. 7,5 pt, celranden,
-   wrap per cel, getallen rechts, totaalregel vet. Sortering en nummering exact als
+   B (m), H (m), m² (aantal meegerekend), Beglazing (leeg bij deuren), Kader,
+   Rolluik. 7,5 pt, celranden, wrap per cel, getallen rechts, totaalregel vet.
+   Alle maten in de PDF staan met exact twee cijfers na de komma ("1,00");
+   de UI toont meters zonder afkapping (1,335). Sortering en nummering exact als
    §7.4. Daaronder de raamfoto's: 4 per rij, cel 82 pt, contain, gecentreerd, grijs
    bijschrift 6,5 pt "Element gevel – ruimte, afstandhouder/kenplaatje".
 3. **ENERGIE**: tabel #, Opwekker, Ruimte, Doet, Beschrijving (bij airco/kachel met

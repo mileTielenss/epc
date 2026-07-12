@@ -162,8 +162,12 @@
 
   /* ---------- kleine helpers (zelfstandig: geen app.js hier) ---------- */
 
-  function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
-  function fmtM(m) { return String(Math.round(m * 1000) / 1000).replace('.', ','); }
+  /* alle maten in de PDF met exact twee cijfers na de komma (§9.2);
+     epsilon-correctie zodat 1,335 netjes 1,34 wordt i.p.v. 1,33 */
+  function fmt(n, d = 2) {
+    const f = 10 ** d;
+    return (Math.round((n + Number.EPSILON * (n || 1)) * f) / f).toFixed(d).replace('.', ',');
+  }
 
   const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam' };
   const GEVEL_NAMEN = { voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
@@ -175,7 +179,7 @@
   const VENT_NAMEN = { geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch', 'mechanisch-permanent': 'mechanisch permanent', ander: 'ander' };
 
   function raamAantal(r) { return Math.max(1, r.aantal || 1); }
-  function afmTekst(k) { return `${fmtM(k.b)} × ${fmtM(k.d)} × ${fmtM(k.h)} m = ${fmt(k.b * k.d * k.h, 1)} m³`; }
+  function afmTekst(k) { return `${fmt(k.b)} × ${fmt(k.d)} × ${fmt(k.h)} m = ${fmt(k.b * k.d * k.h, 1)} m³`; }
 
   /* natte ruimtes (keuken, badkamer, wc) eerst, rest alfabetisch-numeriek */
   const NAT = ['keuken', 'badkamer', 'wc'];
@@ -451,8 +455,8 @@
         { kop: 'Aant.', b: 26, uitlijn: 'r' }, { kop: 'B (m)', b: 32, uitlijn: 'r' }, { kop: 'H (m)', b: 32, uitlijn: 'r' },
         { kop: 'm²', b: 32, uitlijn: 'r' }, { kop: 'Beglazing', b: 52 }, { kop: 'Kader', b: 34 }, { kop: 'Rolluik', b: 34 }],
         ramen.map((r, i) => [i + 1, ELEMENT_NAMEN[r.element] || r.element, ruimteNaam(r.ruimteId), GEVEL_NAMEN[r.gevel] || '',
-        raamAantal(r), fmtM(r.b), fmtM(r.h), fmt(r.b * r.h * raamAantal(r)),
-        GLAS_NAMEN[r.beglazing] || '', KADER_NAMEN[r.kader] || '', r.rolluik ? 'ja' : 'nee']),
+        raamAantal(r), fmt(r.b), fmt(r.h), fmt(r.b * r.h * raamAantal(r)),
+        r.beglazing ? GLAS_NAMEN[r.beglazing] || '' : '', KADER_NAMEN[r.kader] || '', r.rolluik ? 'ja' : 'nee']),
         ['Totaal', '', '', '', totAantal, '', '', fmt(totM2), '', '', '']
       );
       fotoRaster(ramen.filter(r => fotoBytes(r.fotoId)).map(r => ({

@@ -87,8 +87,10 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('m² live', (await page.textContent('#m2live')).includes('3,20'));
   await page.click('#btn-voegtoe');
   check('raam toegevoegd', await page.locator('#ramenlijst li').count() === 1);
-  /* deur toevoegen: moet vóór het raam komen (sorteervolgorde §7.4) */
+  /* deur toevoegen: moet vóór het raam komen (sorteervolgorde §7.4);
+     een deur heeft geen beglazingswaarde, dus de cycle verdwijnt */
   await page.click('#seg-element button[data-v="deur"]');
+  check('beglazing-cycle weg bij deur', await page.locator('#cy-beglazing').isHidden());
   await page.fill('#breedte', '1');
   await page.fill('#hoogte', '2,1');
   await page.locator('#hoogte').blur();

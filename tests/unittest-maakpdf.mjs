@@ -90,7 +90,7 @@ const woning = {
   ],
   ramen: [
     { id: 'w1', ruimteId: r1, element: 'raam', gevel: 'achter', b: 2.4, h: 1.335, aantal: 2, beglazing: 'hr-dubbel', kader: 'pvc', rolluik: true, fotoId: 'f-raam' },
-    { id: 'w2', ruimteId: r2, element: 'deur', gevel: 'voor', b: 1, h: 2.1, aantal: 1, beglazing: 'dubbel', kader: 'hout', rolluik: false, fotoId: null },
+    { id: 'w2', ruimteId: r2, element: 'deur', gevel: 'voor', b: 1, h: 2.1, aantal: 1, beglazing: null, kader: 'hout', rolluik: false, fotoId: null },
     { id: 'w3', ruimteId: null, element: 'dakraam', gevel: 'links', b: 0.78, h: 1.18, aantal: 1, beglazing: 'drievoudig', kader: 'alu', rolluik: false, fotoId: 'f-dood' }
   ],
   energie: {
@@ -128,6 +128,7 @@ assert.ok(tekst.includes('/Producer (EPC Plaatsbezoek epc-vTEST)'), '/Producer m
 assert.ok(tekst.includes('/Title (Teststraat 12, Ranst)'), '/Title = adres');
 assert.ok(/\/ID \[<[0-9a-f]{32}> <[0-9a-f]{32}>\]/.test(tekst), '/ID in trailer');
 assert.ok(tekst.includes('/DeviceGray'), 'grijswaarde-XObject als DeviceGray');
+assert.ok(tekst.includes('(2,40)') && tekst.includes('(1,34)') /* 1,335 correct afgerond */ && tekst.includes('(1,00)'), 'maten met exact 2 decimalen');
 /* dedupe op fotoId: 9 records in de map (f-gevel1 dossier + hoofdfoto = 1 XObject);
    f-dood staat niet in de map en wordt overgeslagen */
 const nXobj = (tekst.match(/\/Subtype \/Image/g) || []).length;
