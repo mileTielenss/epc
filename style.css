@@ -56,6 +56,20 @@ body{
 }
 #topbar:has(#foutbalk:not([hidden])) .toprij{padding-top:8px}
 
+/* ---------- updatebalk (§9.5): nieuwe versie online, zelfde opbouw als foutbalk ---------- */
+#updatebalk{
+  display:flex;align-items:center;gap:10px;
+  padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;
+  background:var(--acc-dark);color:#fff;font-size:.82rem;font-weight:700;
+}
+#updatebalk span{flex:1;min-width:0}
+#updatebalk button{
+  flex:0 0 auto;font-family:inherit;font-size:.82rem;font-weight:700;
+  border:0;border-radius:8px;background:#fff;color:var(--acc-dark);
+  min-height:34px;padding:4px 10px;
+}
+#topbar:has(#updatebalk:not([hidden])) .toprij{padding-top:8px}
+
 /* ---------- ruimtebalk in de header: op elke tab behalve Algemeen/Afronden ---------- */
 #ruimtebalk{margin-top:8px;padding:0 14px}
 #ruimtebalk .chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}

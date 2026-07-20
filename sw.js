@@ -1,7 +1,7 @@
 'use strict';
 
 /* enige versieconstante van de app; bump bij elke release */
-const VERSIE = 'epc-v10';
+const VERSIE = 'epc-v11';
 
 /* sw.js staat mee in de cache zodat de app er VERSIE uit kan lezen voor /Producer;
    de browser haalt SW-updates zelf op, buiten deze fetch-handler om */
@@ -35,6 +35,9 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  /* versiecheck (§9.5): sw.js mét cache-buster gaat rechtstreeks naar het
+     netwerk — anders las de update-check altijd de oude, gecachete versie */
+  if (e.request.url.includes('sw.js?')) return;
   e.respondWith(
     /* uitsluitend de eigen cache: een nieuwe SW mag nooit oude bestanden serveren */
     caches.open(VERSIE).then(c => c.match(e.request, { ignoreSearch: true })).then(hit => {

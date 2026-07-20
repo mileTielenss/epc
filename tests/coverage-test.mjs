@@ -852,6 +852,32 @@ await scenario('versiefout-en-sw', {}, async (page, ctx) => {
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await page.waitForTimeout(500);
+
+  /* updatemelding (§9.5): herladen zodat de SW de pagina controleert */
+  await page.reload();
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller && !!swVersie);
+  /* zelfde versie online -> geen balk */
+  await page.evaluate(() => controleerVersie());
+  await page.waitForTimeout(300);
+  assert.ok(await page.locator('#updatebalk').isHidden(), 'geen balk bij gelijke versie');
+  /* offline -> check faalt stil */
+  await page.route('**/sw.js?*', route => route.abort());
+  await page.evaluate(() => controleerVersie());
+  await page.waitForTimeout(300);
+  assert.ok(await page.locator('#updatebalk').isHidden(), 'offline: geen balk');
+  /* nieuwere versie online -> balk zichtbaar */
+  await page.unroute('**/sw.js?*');
+  await page.route('**/sw.js?*', route => route.fulfill({ contentType: 'application/javascript', body: "const VERSIE = 'epc-v999';" }));
+  await page.evaluate(() => controleerVersie());
+  await page.waitForSelector('#updatebalk:not([hidden])');
+  /* "Nu bijwerken": registratie + caches weg, pagina herlaadt vers */
+  await page.unroute('**/sw.js?*');
+  await Promise.all([
+    page.waitForEvent('load'),
+    page.click('#btn-bijwerken')
+  ]);
+  await page.waitForSelector('#updatebalk', { state: 'hidden' });
+  assert.ok(await page.locator('#updatebalk').isHidden(), 'balk weg na bijwerken (verse pagina)');
 });
 
 await browser.close();

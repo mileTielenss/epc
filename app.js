@@ -53,7 +53,37 @@ let swVersie = '';
 fetch('./sw.js').then(r => r.text()).then(t => {
   const m = t.match(/VERSIE\s*=\s*'([^']+)'/);
   if (m) swVersie = m[1];
+  controleerVersie();
 }).catch(() => { /* offline zonder cache: PDF krijgt dan geen versienummer */ });
+
+/* ---------- updatemelding (§9.5) ----------
+   De draaiende app kent zijn versie (swVersie, uit de gecachete sw.js) en
+   vergelijkt die met een verse netwerk-fetch van sw.js: cache-buster in de
+   url (de SW laat sw.js?… door, §9.5) plus no-store tegen de http-cache.
+   Eén versieconstante volstaat dus — geen apart version.json. */
+async function controleerVersie() {
+  if (!swVersie || !navigator.serviceWorker.controller) return; /* verse install is al nieuwste */
+  try {
+    const r = await fetch(`sw.js?t=${Date.now()}`, { cache: 'no-store' });
+    const m = (await r.text()).match(/VERSIE\s*=\s*'([^']+)'/);
+    if (m && m[1] !== swVersie) $('#updatebalk').hidden = false;
+  } catch (e) { /* offline: volgende check probeert opnieuw */ }
+}
+setInterval(controleerVersie, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) controleerVersie(); });
+
+/* "Nu bijwerken": SW-registratie en caches weg, dan herladen — het net levert
+   dan de nieuwe bestanden. IndexedDB (woningen, foto's) en localStorage
+   (dossierteller) blijven onaangeroerd. */
+$('#btn-bijwerken').addEventListener('click', async () => {
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map(r => r.unregister()));
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+  } catch (e) { /* herladen haalt hoe dan ook vers van het net */ }
+  location.reload();
+});
 
 /* ============================== balken en save-bolletje (§6) ============================== */
 

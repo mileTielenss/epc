@@ -66,6 +66,15 @@ let e = fetchEvent({ method: 'POST', url: 'https://app.test/x' });
 handlers.fetch(e);
 assert.ok(!e.respondWithAangeroepen, 'POST niet afgehandeld');
 
+/* ---- fetch: versiecheck (sw.js met cache-buster) gaat langs de SW heen ---- */
+e = fetchEvent({ method: 'GET', url: 'https://app.test/sw.js?t=123' });
+handlers.fetch(e);
+assert.ok(!e.respondWithAangeroepen, 'sw.js?t=... niet afgehandeld (§9.5)');
+/* ...maar sw.js zónder query komt gewoon uit de cache */
+e = fetchEvent({ method: 'GET', url: './sw.js' });
+handlers.fetch(e);
+assert.equal(await (await e.antwoord).text(), 'gecachet:./sw.js', 'sw.js zelf uit de cache');
+
 /* ---- fetch: hit uit de eigen cache ---- */
 e = fetchEvent({ method: 'GET', url: './index.html' });
 handlers.fetch(e);

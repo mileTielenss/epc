@@ -434,6 +434,28 @@ woning: {
   bewerkte json op zoals altijd.
 - Mislukt het (geen zip, verkeerd formaat, onleesbaar lid) → toast
   "Importeren mislukt (reden)", er wordt niets half aangemaakt.
+### 9.5 Updatemelding ("Nieuwe versie beschikbaar")
+- **Kern**: de draaiende app kent zijn eigen versie — `swVersie`, gelezen uit de
+  **gecachete** `sw.js` — en vergelijkt die met een **verse netwerk-fetch** van
+  `sw.js`. Er is dus géén apart `version.json` of tweede versieconstante:
+  `VERSIE` in `sw.js` blijft de enige (zie Werkwijze), en de check kan nooit uit
+  de pas lopen met de cache-naam.
+- **Ongecachet ophalen**: de fetch gebruikt een cache-buster (`sw.js?t=<nu>`) én
+  `cache: 'no-store'`. De service worker laat elke url die `sw.js?` bevat
+  **bewust ongemoeid** (vroege `return` in de fetch-handler) — anders zou de
+  check door `ignoreSearch: true` altijd de oude, gecachete versie teruglezen.
+- **Wanneer**: bij het opstarten (zodra `swVersie` gelezen is), elke 5 minuten,
+  en telkens de app weer zichtbaar wordt (`visibilitychange` — op iOS staan
+  timers stil in de achtergrond). Zonder controlerende service worker geen
+  check (verse installatie is per definitie de nieuwste); offline faalt de
+  check stil.
+- **Melding**: verschilt de netwerkversie, dan verschijnt in de topbar de balk
+  `#updatebalk` (accentkleur, opbouw als de foutbalk): "Nieuwe versie
+  beschikbaar" + knop **"Nu bijwerken"**.
+- **"Nu bijwerken"**: deregistreert alle service workers, wist alle caches en
+  herlaadt — de pagina komt dan vers van het net en registreert de nieuwe SW.
+  IndexedDB (woningen, foto's) en localStorage (dossierteller) blijven
+  onaangeroerd. Mislukt het opruimen, dan wordt er toch herladen.
 ## 10. Bewuste keuzes
 - Geen bouwjaar, gebouwtype, kelder, zolder, oriëntatie voorgevel, beschermd volume.
 - Geen backup, export, import, JSON-bijlage. Geen bewerken van PV-installaties.
