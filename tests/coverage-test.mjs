@@ -572,7 +572,9 @@ await scenario('camera', {
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   await page.waitForSelector('#camera', { state: 'hidden' });
 
-  /* ultragroothoek (§7.6): label-mock -> app wisselt naar de 0,5×-lens */
+  /* ultragroothoek (§7.6): label-mock -> app wisselt naar de 0,5×-lens.
+     De hoofdlens meldt torch, de 0,5×-lens niet (caps-rij: eerste peiling
+     true, daarna leeg) -> de flitsknop moet van lens wisselen. */
   await page.evaluate(async () => {
     const echte = (await navigator.mediaDevices.enumerateDevices()).find(a => a.kind === 'videoinput');
     window.__EchteEnum = navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
@@ -581,10 +583,23 @@ await scenario('camera', {
     MediaStreamTrack.prototype.getSettings = () => ({ deviceId: 'hoofdlens' });
     navigator.mediaDevices.enumerateDevices = async () =>
       [{ kind: 'videoinput', label: 'Back Ultra Wide Camera', deviceId: echte.deviceId }];
+    window.__torchFaalt = false;
+    window.__capsRij = [{ torch: true }];
+    MediaStreamTrack.prototype.getCapabilities = () => window.__capsRij.length ? window.__capsRij.shift() : {};
   });
   await page.click('#btn-camera');
   await page.waitForSelector('#camera:not([hidden])');
   await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
+  /* flitsknop zichtbaar dankzij de hoofdlens; aan = wissel naar hoofdlens */
+  await page.waitForSelector('#btn-flits:not([hidden])');
+  await page.click('#btn-flits');
+  await page.waitForSelector('#btn-flits.on');
+  assert.ok(await page.evaluate(() => camFlitsLens), 'hoofdlens staat er tijdelijk voor de flits');
+  /* uit = terug naar de 0,5×-lens */
+  await page.click('#btn-flits');
+  await page.waitForFunction(() => !document.querySelector('#btn-flits').classList.contains('on'));
+  assert.ok(await page.evaluate(() => !camFlitsLens), 'terug naar de ultragroothoek');
+  await page.evaluate(() => { MediaStreamTrack.prototype.getCapabilities = () => ({ torch: true }); });
   await page.click('#btn-camklaar');
   /* lens weigert (onbestaand id) -> catch, standaardlens blijft staan */
   await page.evaluate(() => {

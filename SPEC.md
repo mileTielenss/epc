@@ -268,12 +268,18 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   "ultragroothoek") en de stream wordt heropend met dat `deviceId`. Geen
   ultragroothoek gevonden (ouder toestel, desktop, testomgeving) of de lens
   weigert → de standaard achtercamera blijft stil staan als fallback. Geldt voor
-  dossier- én enkel-modus (zelfde `startCamera`). NB: de ultragroothoek heeft
-  geen torch, de flitsknop verschijnt daar dus niet.
+  dossier- én enkel-modus (zelfde `startCamera`).
+- **Flits mét ultragroothoek**: de 0,5×-lens heeft zelf geen torch; de flitsknop
+  verschijnt als de actieve lens **of de hoofdlens** torch meldt (dat laatste
+  wordt gepeild vóór de lenswissel). Flits aan terwijl 0,5× actief is → de
+  camera wisselt naar de hoofdlens zolang de flits brandt; flits uit → terug
+  naar 0,5×. Mislukt er iets → flits uit, toast "Flits niet beschikbaar op dit
+  toestel".
 - **Dossier-modus** ("Start camera"): ruimtechips bovenaan (wisselen zonder sluiten),
-  flitsknop 🔦 rechtsboven **enkel als `getCapabilities()` torch meldt** (toggle via
-  `applyConstraints({advanced:[{torch}]})`, geel als aan); onderaan teller "N foto's",
-  witte sluiterknop, "Klaar". Elke tik: frame → JPEG → foto in de actieve groep.
+  flitsknop 🔦 rechtsboven **enkel als een lens torch meldt** (zie de flits-bullet
+  hierboven; toggle via `applyConstraints({advanced:[{torch}]})`, geel als aan);
+  onderaan teller "N foto's", witte sluiterknop, "Klaar". Elke tik: frame → JPEG →
+  foto in de actieve groep.
 - **Enkel-modus** (kenplaat, kranen, afstandhouder, toestel): geen chips, knop
   "Annuleer", één tik → foto op zijn plek, camera dicht.
 - **Fallbacks**: enkel-modus → verborgen `<input type="file" accept="image/*"

@@ -1797,6 +1797,9 @@ $('#dossierinput').addEventListener('change', async () => {
 let camStream = null;
 let camFlits = false;
 let camModus = 'dossier'; /* 'dossier' = meerdere foto's; 'enkel' = één foto, meteen dicht */
+let camUltraId = null;    /* deviceId van de 0,5×-lens in deze camerasessie */
+let camHoofdTorch = false; /* kan de hoofdlens torch? (de ultragroothoek niet) */
+let camFlitsLens = false;  /* staat de hoofdlens er tijdelijk voor de flits? */
 
 /* de 0,5×-lens (§7.6): zodra er toestemming is zijn de apparaatlabels leesbaar;
    herken de achterste ultragroothoek aan "ultra" in het label (Engels "Ultra
@@ -1813,6 +1816,24 @@ async function zoekUltrawide(stream) {
   } catch (e) { return null; }
 }
 
+/* wissel de camerastream naar één lens: een deviceId (0,5×) of null voor de
+   standaard achtercamera. De oude tracks stoppen, het beeld loopt gewoon door. */
+async function wisselLens(deviceId) {
+  const video = deviceId
+    ? { deviceId: { exact: deviceId }, width: { ideal: 2560 }, height: { ideal: 1920 } }
+    : { facingMode: 'environment', width: { ideal: 2560 }, height: { ideal: 1920 } };
+  const nieuw = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+  camStream.getTracks().forEach(t => t.stop());
+  camStream = nieuw;
+  $('#camvideo').srcObject = camStream;
+}
+
+function camTorchKan() {
+  const track = camStream && camStream.getVideoTracks()[0];
+  const kan = track && track.getCapabilities ? track.getCapabilities() : {};
+  return !!kan.torch;
+}
+
 async function startCamera(modus) {
   camModus = modus || 'dossier';
   if (!S) return;
@@ -1822,30 +1843,25 @@ async function startCamera(modus) {
       video: { facingMode: 'environment', width: { ideal: 2560 }, height: { ideal: 1920 } },
       audio: false
     });
+    /* de hoofdlens draagt de flits: onthoud of hij torch kan vóór de wissel */
+    camHoofdTorch = camTorchKan();
     /* overal de ultragroothoek (0,5×) gebruiken als het toestel er een heeft */
-    const uwId = await zoekUltrawide(camStream);
-    if (uwId) {
-      try {
-        const uwStream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: uwId }, width: { ideal: 2560 }, height: { ideal: 1920 } },
-          audio: false
-        });
-        camStream.getTracks().forEach(t => t.stop());
-        camStream = uwStream;
-      } catch (e) { /* lens weigert: de standaardlens blijft gewoon staan */ }
+    camUltraId = await zoekUltrawide(camStream);
+    if (camUltraId) {
+      try { await wisselLens(camUltraId); }
+      catch (e) { camUltraId = null; /* lens weigert: de standaardlens blijft */ }
     }
     $('#camvideo').srcObject = camStream;
     $('#camera').hidden = false;
     $('#camruimtes').hidden = camModus === 'enkel';
     $('#btn-camklaar').textContent = camModus === 'enkel' ? 'Annuleer' : 'Klaar';
     updateCamTeller(0);
-    /* flits (torch) alleen tonen als het toestel het via de browser toelaat;
-       iOS doet dat meestal niet: gebruik daar "Kies foto's" voor donkere ruimtes */
+    /* flitsknop tonen als de actieve lens óf de hoofdlens torch kan; de
+       ultragroothoek zelf heeft er geen — dan wisselt de knop van lens (§7.6) */
     camFlits = false;
+    camFlitsLens = false;
     $('#btn-flits').classList.remove('on');
-    const track = camStream.getVideoTracks()[0];
-    const kan = track && track.getCapabilities ? track.getCapabilities() : {};
-    $('#btn-flits').hidden = !kan.torch;
+    $('#btn-flits').hidden = !(camTorchKan() || camHoofdTorch);
   } catch (e) {
     camFallback(e && e.name);
   }
@@ -1868,13 +1884,23 @@ function camFallback(fout) {
 
 $('#btn-flits').addEventListener('click', async () => {
   if (!camStream) return;
-  const track = camStream.getVideoTracks()[0];
   try {
+    /* de ultragroothoek heeft geen flits: zet de hoofdlens ervoor zolang de
+       flits brandt, en keer terug naar 0,5× zodra hij uitgaat (§7.6) */
+    if (!camFlits && !camTorchKan() && camUltraId) {
+      await wisselLens(null);
+      camFlitsLens = true;
+    }
     camFlits = !camFlits;
-    await track.applyConstraints({ advanced: [{ torch: camFlits }] });
+    await camStream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: camFlits }] });
+    if (!camFlits && camFlitsLens) {
+      camFlitsLens = false;
+      await wisselLens(camUltraId);
+    }
     $('#btn-flits').classList.toggle('on', camFlits);
   } catch (e) {
     camFlits = false;
+    camFlitsLens = false;
     $('#btn-flits').classList.remove('on');
     toast('Flits niet beschikbaar op dit toestel');
   }
@@ -1886,6 +1912,7 @@ function stopCamera() {
     camStream = null;
   }
   camFlits = false;
+  camFlitsLens = false;
   $('#btn-flits').classList.remove('on');
   $('#camvideo').srcObject = null;
   $('#camera').hidden = true;
