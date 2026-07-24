@@ -147,7 +147,8 @@
       const toestellen = (E.opwekkers || []).filter(x => isRuimteToestel(x) && x.ruimteId === r.id).map(x => {
         const t = { type: x.type };
         if (x.beschrijving) t.beschrijving = x.beschrijving;
-        const kf = bestand(x.fotoId); if (kf) t.kenplaatFoto = kf;
+        const kfs = (x.fotoIds || []).map(bestand).filter(Boolean);
+        if (kfs.length) t.kenplaatFotos = kfs;
         return t;
       });
       if (toestellen.length) o.toestellen = toestellen;
@@ -175,7 +176,8 @@
       const x = { type: o.type };
       if ((o.functie || []).length) x.functies = o.functie.map(f => FUNCTIE_LABELS[f] || f);
       if (o.beschrijving) x.beschrijving = o.beschrijving;
-      const kf = bestand(o.fotoId); if (kf) x.kenplaatFoto = kf;
+      const kfs = (o.fotoIds || []).map(bestand).filter(Boolean);
+      if (kfs.length) x.kenplaatFotos = kfs;
       const rf = bestand(o.fotoKraanId); if (rf) x.kranenFoto = rf;
       return x;
     });

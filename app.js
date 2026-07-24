@@ -228,7 +228,8 @@ function normaliseer(p) {
     ruimteId: ruimteRef(o.ruimteId, `opwekker ${i + 1}`),
     functie: (Array.isArray(o.functie) ? o.functie : []).filter(f => FUNCTIES.includes(f)),
     beschrijving: o.beschrijving || '',
-    fotoId: fotoRef(o.fotoId, `kenplaat van opwekker ${i + 1}`),
+    fotoIds: (Array.isArray(o.fotoIds) ? o.fotoIds : [])
+      .map((id, j) => fotoRef(id, `kenplaat ${j + 1} van opwekker ${i + 1}`)).filter(Boolean),
     fotoKraanId: fotoRef(o.fotoKraanId, `kranenfoto van opwekker ${i + 1}`)
   }));
   if (!Array.isArray(w.energie.pvPanelen)) w.energie.pvPanelen = [];
@@ -558,6 +559,14 @@ async function importeerDossier(d, leden) {
       for (const pad of (r.fotos || [])) await schrijfFoto(pad, groep);
     }
 
+    /* kenplaatFotos is een lijst; een oudere zip met één kenplaatFoto telt als lijst van één */
+    async function schrijfKenplaten(x) {
+      const paden = x.kenplaatFotos || (x.kenplaatFoto ? [x.kenplaatFoto] : []);
+      const ids = [];
+      for (const pad of paden) { const id = await schrijfFoto(pad, null); if (id) ids.push(id); }
+      return ids;
+    }
+
     /* elementen + ruimtetoestellen per ruimte */
     w.ramen = [];
     const opwekkers = [];
@@ -579,7 +588,7 @@ async function importeerDossier(d, leden) {
         opwekkers.push({
           id: DB.nieuwId(), type: t.type, ruimteId: rid, functie: [],
           beschrijving: t.beschrijving || '',
-          fotoId: await schrijfFoto(t.kenplaatFoto, null), fotoKraanId: null
+          fotoIds: await schrijfKenplaten(t), fotoKraanId: null
         });
       }
     }
@@ -591,7 +600,7 @@ async function importeerDossier(d, leden) {
         id: DB.nieuwId(), type: o.type, ruimteId: null,
         functie: (o.functies || []).map(f => FUNCTIE_TERUG[f] || f).filter(f => FUNCTIES.includes(f)),
         beschrijving: o.beschrijving || '',
-        fotoId: await schrijfFoto(o.kenplaatFoto, null),
+        fotoIds: await schrijfKenplaten(o),
         fotoKraanId: await schrijfFoto(o.kranenFoto, null)
       });
     }
@@ -1066,7 +1075,7 @@ $('#ramenlijst').addEventListener('click', e => {
 function isRuimteToestel(o) { return o.type === 'airco' || o.type === 'kachel' || o.type === 'ruimte-andere'; }
 
 function leegDraftOpwek() {
-  return { type: 'gas', functie: [], fotoId: null, fotoKraanId: null };
+  return { type: 'gas', functie: [], fotoIds: [], fotoKraanId: null };
 }
 let draftOpwek = leegDraftOpwek();
 let bewerkOpwekId = null;
@@ -1081,20 +1090,30 @@ function toonOpwekVelden() {
   $('#opw-kraanfoto-rij').hidden = !draftOpwek.functie.includes('radiatoren');
 }
 
+/* meerdere kenplaatfoto's per opwekker (§7.3): elke nieuwe foto komt erbij */
 $('#btn-opwekfoto').addEventListener('click', () => neemFoto(fotoId => {
-  if (draftOpwek.fotoId) DB.verwijderFoto(draftOpwek.fotoId).catch(() => { });
-  draftOpwek.fotoId = fotoId;
+  draftOpwek.fotoIds.push(fotoId);
   updateOpwekThumb();
 }));
-$('#btn-opwekfoto-del').addEventListener('click', () => {
-  const oud = draftOpwek.fotoId;
-  if (!oud) return;
-  draftOpwek.fotoId = null;
+$('#opwekfotos').addEventListener('click', e => {
+  const del = e.target.closest('.thumbdel');
+  if (!del) return;
+  const id = del.dataset.id;
+  const idx = draftOpwek.fotoIds.indexOf(id);
+  if (idx < 0) return;
+  draftOpwek.fotoIds.splice(idx, 1);
   updateOpwekThumb();
-  undoFoto(oud, () => { draftOpwek.fotoId = oud; updateOpwekThumb(); });
+  undoFoto(id, () => { draftOpwek.fotoIds.splice(idx, 0, id); updateOpwekThumb(); });
 });
 function updateOpwekThumb() {
-  zetFormThumb('#opwekfoto-thumb', '#btn-opwekfoto-del', draftOpwek.fotoId);
+  const c = $('#opwekfotos');
+  c.innerHTML = '';
+  draftOpwek.fotoIds.filter(id => !fotoVerborgen(id)).forEach(id => {
+    const s = document.createElement('span');
+    s.className = 'fotomini';
+    s.innerHTML = `<img class="thumb" src="${DB.fotoUrl(id)}" alt="kenplaat"><button type="button" class="thumbdel" data-id="${id}">&times;</button>`;
+    c.appendChild(s);
+  });
   zetFormThumb('#kraanfoto-thumb', '#btn-kraanfoto-del', draftOpwek.fotoKraanId);
 }
 
@@ -1131,7 +1150,7 @@ $('#btn-opwek-voegtoe').addEventListener('click', () => {
     ruimteId: null,
     functie: [...draftOpwek.functie],
     beschrijving: $('#opw-beschrijving').value.trim(),
-    fotoId: draftOpwek.fotoId,
+    fotoIds: [...draftOpwek.fotoIds],
     fotoKraanId: kraanId
   };
   if (bewerkOpwekId !== null) {
@@ -1159,7 +1178,7 @@ function startBewerkOpwek(id) {
   draftOpwek = {
     type: o.type in { gas: 1, stookolie: 1, andere: 1 } ? o.type : 'andere',
     functie: [...(o.functie || [])],
-    fotoId: o.fotoId || null,
+    fotoIds: [...(o.fotoIds || [])],
     fotoKraanId: o.fotoKraanId || null
   };
   syncOpwekForm();
@@ -1196,7 +1215,7 @@ function renderOpwekkers() {
     const li = document.createElement('li');
     if (o.id === bewerkOpwekId) li.className = 'bewerk';
     li.dataset.id = o.id;
-    const foto = o.fotoId && !fotoVerborgen(o.fotoId) ? DB.fotoUrl(o.fotoId) : null;
+    const fotos = (o.fotoIds || []).filter(id => !fotoVerborgen(id)).map(id => DB.fotoUrl(id));
     const kraan = o.fotoKraanId && !fotoVerborgen(o.fotoKraanId) ? DB.fotoUrl(o.fotoKraanId) : null;
     li.innerHTML =
       `<div class="info">
@@ -1204,7 +1223,7 @@ function renderOpwekkers() {
          <div class="r2">${esc((o.functie || []).map(f => FUNCTIE_NAMEN[f] || f).join(' + ') || '-')}</div>
          <div class="r3">${o.beschrijving ? esc(o.beschrijving) + ' · ' : ''}tik om te wijzigen</div>
        </div>` +
-      (foto ? `<img class="thumb" src="${foto}" alt="kenplaat">` : '') +
+      fotos.map(u => `<img class="thumb" src="${u}" alt="kenplaat">`).join('') +
       (kraan ? `<img class="thumb" src="${kraan}" alt="radiatorkranen">` : '') +
       `<button type="button" class="del" data-id="${o.id}">×</button>`;
     ul.appendChild(li);
@@ -1213,7 +1232,7 @@ function renderOpwekkers() {
 
 function verwijderOpwekker(o) {
   S.energie.opwekkers = S.energie.opwekkers.filter(x => x.id !== o.id);
-  if (o.fotoId) DB.verwijderFoto(o.fotoId).catch(() => { });
+  (o.fotoIds || []).forEach(id => DB.verwijderFoto(id).catch(() => { }));
   if (o.fotoKraanId) DB.verwijderFoto(o.fotoKraanId).catch(() => { });
   wijzig();
 }
@@ -1361,7 +1380,7 @@ $('#btn-rv-voegtoe').addEventListener('click', () => {
     ruimteId: r.id,
     functie: [],
     beschrijving: $('#rv-beschrijving').value.trim(),
-    fotoId: draftRv.fotoId,
+    fotoIds: draftRv.fotoId ? [draftRv.fotoId] : [],
     fotoKraanId: null
   };
   if (bewerkRvId !== null) {
@@ -1385,7 +1404,7 @@ function startBewerkRv(id) {
   const o = S.energie.opwekkers.find(x => x.id === id);
   if (!o) return;
   bewerkRvId = id;
-  draftRv = { type: ['kachel', 'ruimte-andere'].includes(o.type) ? o.type : 'airco', fotoId: o.fotoId || null };
+  draftRv = { type: ['kachel', 'ruimte-andere'].includes(o.type) ? o.type : 'airco', fotoId: (o.fotoIds || [])[0] || null };
   /* de ruimtebalk springt mee naar de ruimte van dit toestel */
   if (o.ruimteId && S.ruimtes.some(x => x.id === o.ruimteId)) ruimteSel = o.ruimteId;
   renderRuimtebalk();
@@ -1423,7 +1442,8 @@ function renderRv() {
       li.dataset.id = o.id;
       const r = S.ruimtes.find(x => x.id === o.ruimteId);
       const det = [o.beschrijving, r && r.afm ? afmTekst(r.afm) : ''].filter(Boolean);
-      const foto = o.fotoId && !fotoVerborgen(o.fotoId) ? DB.fotoUrl(o.fotoId) : null;
+      const fid = (o.fotoIds || [])[0];
+      const foto = fid && !fotoVerborgen(fid) ? DB.fotoUrl(fid) : null;
       li.innerHTML =
         `<div class="info">
            <div class="r1">${esc(OPWEK_NAMEN[o.type] || o.type)}</div>

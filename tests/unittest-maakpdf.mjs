@@ -109,9 +109,9 @@ const woning = {
   ],
   energie: {
     opwekkers: [
-      { id: 'o1', type: 'gas', ruimteId: null, functie: ['radiatoren', 'sww'], beschrijving: 'Vaillant 2015', fotoId: 'f-kenplaat', fotoKraanId: 'f-kraan' },
-      { id: 'o2', type: 'airco', ruimteId: r1, functie: [], beschrijving: 'Daikin split met een behoorlijk lange beschrijving die in de cel moet wrappen', fotoId: null, fotoKraanId: null },
-      { id: 'o3', type: 'kachel', ruimteId: r2, beschrijving: '', fotoId: null, fotoKraanId: null }
+      { id: 'o1', type: 'gas', ruimteId: null, functie: ['radiatoren', 'sww'], beschrijving: 'Vaillant 2015', fotoIds: ['f-kenplaat', 'f-kenplaat2'], fotoKraanId: 'f-kraan' },
+      { id: 'o2', type: 'airco', ruimteId: r1, functie: [], beschrijving: 'Daikin split met een behoorlijk lange beschrijving die in de cel moet wrappen', fotoIds: [], fotoKraanId: null },
+      { id: 'o3', type: 'kachel', ruimteId: r2, beschrijving: '', fotoIds: [], fotoKraanId: null }
     ],
     pvPanelen: [{ id: 'p1', orientatie: 'plat', wp: '4200' }, { id: 'p2', orientatie: 'voor', wp: '2000' }],
     zonneboiler: 'ja', zonneboilerM2: '4,6'
@@ -127,6 +127,7 @@ const fotos = new Map([
   ['f-factuur3', { bytes: factuur, breedte: 800, hoogte: 600, groep: 'algemeen', volgorde: 6 }],
   ['f-raam', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
   ['f-kenplaat', { bytes: grijs, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
+  ['f-kenplaat2', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
   ['f-kraan', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }]
 ]);
 
@@ -159,9 +160,9 @@ assert.ok(!('beglazing' in keukenDeur), 'deur zonder beglazing-sleutel');
 assert.equal(dw.hoofdfoto, 'fotos/0001.jpg', 'hoofdfoto op woningniveau');
 assert.equal(dw.energie.opwekkers.length, 1, 'enkel de centrale opwekker in energie');
 assert.ok(!('ruimte' in dw.energie.opwekkers[0]), 'geen ruimte-string op de centrale opwekker');
-/* dedupe op pad: 9 records → 9 XObjects (f-gevel1 is hoofdfoto én gevelfoto = 1) */
+/* dedupe op pad: 10 records → 10 XObjects (f-gevel1 is hoofdfoto én gevelfoto = 1) */
 const nXobj = (tekst.match(/\/Subtype \/Image/g) || []).length;
-assert.equal(nXobj, 9, `9 unieke foto's -> 9 XObjects (kreeg ${nXobj})`);
+assert.equal(nXobj, 10, `10 unieke foto's -> 10 XObjects (kreeg ${nXobj})`);
 
 /* ---- kale woning: alle "leeg"-takken, geen fotomap, geen opties ---- */
 const kaal = { algemeen: {}, ruimtes: undefined, ramen: undefined, energie: undefined };

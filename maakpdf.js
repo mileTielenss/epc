@@ -492,7 +492,9 @@
       const opwekFotos = [];
       alleOpwek.forEach(o => {
         const naam = `${OPWEK_NAMEN[o.type] || o.type}${o.ruimte ? ' – ' + o.ruimte : ''}`;
-        if (fotoBytes(o.kenplaatFoto)) opwekFotos.push({ pad: o.kenplaatFoto, cap: `${naam}, kenplaat` });
+        (o.kenplaatFotos || []).forEach(pad => {
+          if (fotoBytes(pad)) opwekFotos.push({ pad, cap: `${naam}, kenplaat` });
+        });
         if (fotoBytes(o.kranenFoto)) opwekFotos.push({ pad: o.kranenFoto, cap: `${naam}, radiatorkranen` });
       });
       fotoRaster(opwekFotos, 4, 82, true);

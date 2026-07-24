@@ -199,7 +199,11 @@ textarea{resize:vertical}
 .lijst li.bewerk{outline:3px solid var(--acc);outline-offset:-1.5px}
 
 /* ---------- photo row ---------- */
-.fotorow{display:flex;align-items:center;gap:10px}
+.fotorow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* meerdere kenplaatfoto's naast elkaar, elk met een eigen kruisje (§7.3) */
+.fotominis{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fotomini{display:flex;align-items:center;gap:4px}
+.fotomini .thumbdel{width:28px;height:28px;font-size:1rem}
 .thumb{width:40px;height:40px;object-fit:cover;border-radius:8px;border:1.5px solid var(--line);cursor:zoom-in}
 
 /* ---------- roterende knop: tik om door de opties te draaien ---------- */

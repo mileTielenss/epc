@@ -110,7 +110,9 @@ woning = {
                        | 'airco'|'kachel'|'ruimte-andere',  // ruimtegebonden
                    ruimteId | null,
                    functie: ['radiatoren'|'vloer'|'sww'],
-                   beschrijving, fotoId, fotoKraanId } ],
+                   beschrijving,
+                   fotoIds: [fotoId, ...],   // kenplaatfoto's, 0..n (§7.3)
+                   fotoKraanId } ],
     pvPanelen: [ { id, orientatie: 'plat'|'voor'|'achter'|'links'|'rechts'|'', wp } ],
     zonneboiler: 'nee'|'ja', zonneboilerM2
   }
@@ -203,9 +205,13 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
    een tik. Datum plaatsbezoek (date-input, default vandaag).
 2. **Verwarming** (centraal, `ruimteId: null`): cycle Gas/Stookolie/Andere; chips
    Radiatoren/Vloerverwarming/Sanitair warm water (meerkeuze); beschrijving;
-   📷 Foto kenplaat; 📷 Foto radiatorkranen (rij enkel zichtbaar bij "radiatoren"; bij
-   bewaren wordt `fotoKraanId` genuld en de blob gewist als radiatoren weg is);
-   "Voeg verwarming toe" + lijst (nieuwste eerst, tik = bewerken, × = confirm).
+   📷 Foto kenplaat — **meerdere foto's toegelaten**: elke nieuwe foto komt erbij
+   (`fotoIds`), de miniaturen staan naast de knop en elke foto heeft een eigen ×
+   met de gewone undo-toast van 6 s; 📷 Foto radiatorkranen (één foto; rij enkel
+   zichtbaar bij "radiatoren"; bij bewaren wordt `fotoKraanId` genuld en de blob
+   gewist als radiatoren weg is);
+   "Voeg verwarming toe" + lijst (nieuwste eerst, alle kenplaatminiaturen
+   zichtbaar, tik = bewerken, × = confirm).
 3. **Extra installaties**: Zonnepanelen (cycle Plat dak/Voor/Achter/Links/Rechts +
    Wp-veld + ronde "+", lijst met ×, geen bewerken). Zonneboiler (cycle Nee/Ja,
    default Nee; bij Ja veld "Oppervlakte zonnecollector (m²)").
@@ -216,7 +222,8 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   ander`. Bij "ander" een beschrijvingsveld onder de knop, met focus, geen popup.
 - **Verwarming in deze ruimte**: cycle Airco/Kachel/Andere (`ruimte-andere`);
   **Afmetingen ruimte (m)** b × d × h met live m³, opgeslagen op de ruimte (één keer
-  per ruimte; leeg = `afm: null`); beschrijving; 📷 Foto kenplaat; "Voeg toestel toe".
+  per ruimte; leeg = `afm: null`); beschrijving; 📷 Foto kenplaat (één foto; het
+  record gebruikt hetzelfde `fotoIds`-veld met 0 of 1 foto); "Voeg toestel toe".
   Lijst toont enkel de toestellen van deze ruimte, met volume. Tik = bewerken.
   - Afmetingen zijn enkel nodig voor ruimtes met een eigen toestel: die vormen een
     aparte ruimtecluster die van het totale volume afgetrokken wordt. Ruimtes zonder
@@ -401,8 +408,9 @@ opgeslagen:
 - **"Gevels" en "Algemeen" zijn gewone ruimtes** met enkel een `fotos`-lijst,
   geen ventilatie of elementen. Eén structuur voor "een naam met foto's
   eronder"; geen aparte fotogroepen-lijst. Beide zijn gereserveerde namen.
-- **De opwekkerfoto's staan enkel op de opwekker** (`kenplaatFoto`,
-  `kranenFoto`), niet nog eens in een ruimte.
+- **De opwekkerfoto's staan enkel op de opwekker** (`kenplaatFotos` — een
+  lijst, want een kenplaat kan uit meerdere plaatjes bestaan — en `kranenFoto`),
+  niet nog eens in een ruimte.
 - **Eén `hoofdfoto` op woningniveau** (pad naar een gevelfoto).
 - **Geen afgeleide waarden**: geen oppervlakte per element, geen totaalblok,
   geen volume bij afmetingen. De maten staan er (`breedteM`, `hoogteM`,
@@ -422,12 +430,12 @@ woning: {
     { naam, ventilatie?, ventilatieBeschrijving?, opmerking?,
       afmetingen?: { breedteM, diepteM, hoogteM },
       elementen?: [ { type, gevel, breedteM, hoogteM, aantal, beglazing?, kader, rolluik, foto? } ],
-      toestellen?: [ { type, beschrijving?, kenplaatFoto? } ],
+      toestellen?: [ { type, beschrijving?, kenplaatFotos? } ],
       fotos?: [ … ] },
     { naam: "Algemeen", fotos: [ … ] }
   ],
   energie?: {
-    opwekkers?: [ { type, functies?, beschrijving?, kenplaatFoto?, kranenFoto? } ],
+    opwekkers?: [ { type, functies?, beschrijving?, kenplaatFotos?, kranenFoto? } ],
     zonnepanelen?: [ { orientatie?, wp } ],
     zonneboiler?: { collectorM2? }
   }
@@ -446,6 +454,9 @@ woning: {
   fotobestand wordt maar één keer geschreven (dedupe op pad); dimensies uit de
   JPEG-header. Daarna opent de woning; `normaliseer()` vangt rommel in een
   bewerkte json op zoals altijd.
+- Eén leesuitzondering: een oudere zip met een enkelvoudige `kenplaatFoto` wordt
+  aanvaard als `kenplaatFotos` met één foto — zo blijven eerder geëxporteerde
+  dossiers importeerbaar zonder fotoverlies.
 - Mislukt het (geen zip, verkeerd formaat, onleesbaar lid) → toast
   "Importeren mislukt (reden)", er wordt niets half aangemaakt.
 ### 9.5 Updatemelding ("Nieuwe versie beschikbaar")

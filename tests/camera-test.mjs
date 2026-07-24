@@ -56,7 +56,7 @@ check('enkel-modus: geen chips', await page.locator('#camruimtes').isHidden());
 check('enkel-modus: knop Annuleer', (await page.textContent('#btn-camklaar')) === 'Annuleer');
 await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
 await page.click('#btn-sluiter');
-await page.waitForSelector('#opwekfoto-thumb:not([hidden])');
+await page.waitForSelector('#opwekfotos .fotomini');
 check('kenplaatfoto op zijn plek, camera dicht', await page.locator('#camera').isHidden());
 
 /* persistentie van de camerafoto's na reload */

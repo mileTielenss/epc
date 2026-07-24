@@ -48,8 +48,8 @@ const woning = {
   ],
   energie: {
     opwekkers: [
-      { id: 'o', type: 'stookolie', ruimteId: null, functie: ['radiatoren'], beschrijving: 'ACV', fotoId: null, fotoKraanId: null },
-      { id: 'a1', type: 'airco', ruimteId: 'r1', functie: [], beschrijving: 'Daikin', fotoId: null, fotoKraanId: null }
+      { id: 'o', type: 'stookolie', ruimteId: null, functie: ['radiatoren'], beschrijving: 'ACV', fotoIds: ['fD', 'fE'], fotoKraanId: null },
+      { id: 'a1', type: 'airco', ruimteId: 'r1', functie: [], beschrijving: 'Daikin', fotoIds: [], fotoKraanId: null }
     ],
     pvPanelen: [{ id: 'p', orientatie: 'plat', wp: '4200' }],
     zonneboiler: 'ja', zonneboilerM2: '4,6'
@@ -58,9 +58,14 @@ const woning = {
 const fotos = new Map([
   ['fA', { bytes: rgb, breedte: 640, hoogte: 480, groep: 'gevels', volgorde: 1 }],
   ['fB', { bytes: rgb.slice(0, 5000), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
-  ['fC', { bytes: rgb.slice(0, 4000), breedte: 640, hoogte: 480, groep: 'r1', volgorde: 2 }]
+  ['fC', { bytes: rgb.slice(0, 4000), breedte: 640, hoogte: 480, groep: 'r1', volgorde: 2 }],
+  ['fD', { bytes: rgb.slice(0, 3000), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
+  ['fE', { bytes: rgb.slice(0, 2000), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }]
 ]);
-const bestandVan = new Map([['fA', 'fotos/0001.jpg'], ['fB', 'fotos/0002.jpg'], ['fC', 'fotos/0003.jpg']]);
+const bestandVan = new Map([
+  ['fA', 'fotos/0001.jpg'], ['fB', 'fotos/0002.jpg'], ['fC', 'fotos/0003.jpg'],
+  ['fD', 'fotos/0004.jpg'], ['fE', 'fotos/0005.jpg']
+]);
 const e = Z.woningExport(woning, globalThis.sorteerRamen, fotos, bestandVan).woning;
 assert.equal(e.adres, 'Exportstraat 3');
 assert.equal(e.hoofdfoto, 'fotos/0001.jpg', 'hoofdfoto op woningniveau');
@@ -78,6 +83,8 @@ const keuken = e.ruimtes.find(r => r.naam === 'Keuken');
 assert.ok(!('ventilatie' in keuken), 'ventilatie ontbreekt bij geen');
 assert.ok(!('beglazing' in keuken.elementen[0]), 'deur zonder beglazing-sleutel');
 assert.equal(e.energie.opwekkers.length, 1, 'enkel de centrale opwekker in energie');
+assert.deepEqual(e.energie.opwekkers[0].kenplaatFotos, ['fotos/0004.jpg', 'fotos/0005.jpg'], 'meerdere kenplaatfoto\'s als lijst');
+assert.ok(!('kenplaatFotos' in living.toestellen[0]), 'toestel zonder foto: sleutel ontbreekt');
 assert.ok(!('ruimteEnDeuren' in e) && !('fotos' in e), 'geen platte lijsten meer');
 assert.equal(e.energie.zonneboiler.collectorM2, 4.6, 'komma-decimaal als getal');
 assert.equal(e.energie.zonnepanelen[0].orientatie, 'plat dak');

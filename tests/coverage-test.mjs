@@ -148,21 +148,22 @@ await scenario('hoofdflow', {
   await page.click('#chips-opwekfunctie button[data-v="radiatoren"]');
   await page.click('#btn-opwekfoto');
   await page.setInputFiles('#fotoinput', FOTO);
-  await page.waitForSelector('#opwekfoto-thumb:not([hidden])');
-  await page.click('#btn-opwekfoto');           /* vervangen: oude blob weg */
+  await page.waitForSelector('#opwekfotos .fotomini');
+  await page.click('#btn-opwekfoto');           /* tweede kenplaatfoto komt erbij (§7.3) */
   await page.setInputFiles('#fotoinput', FOTO);
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => document.querySelectorAll('#opwekfotos .fotomini').length === 2);
   await page.click('#btn-kraanfoto');
   await page.setInputFiles('#fotoinput', FOTO);
   await page.waitForSelector('#kraanfoto-thumb:not([hidden])');
   await page.fill('#opw-beschrijving', 'Vaillant 2015');
   await page.locator('#opw-beschrijving').blur();
   await page.click('#btn-opwek-voegtoe');
-  /* bewerken: radiatoren uit -> kranenfoto genuld; daarna annuleren-tak */
-  await page.click('#opweklijst li');
+  /* bewerken: radiatoren uit -> kranenfoto genuld; daarna annuleren-tak
+     (klik op .info: de rij draagt nu meerdere fotominiaturen, §7.3) */
+  await page.click('#opweklijst li .info');
   await page.click('#chips-opwekfunctie button[data-v="radiatoren"]');
   await page.click('#btn-opwek-voegtoe');
-  await page.click('#opweklijst li');
+  await page.click('#opweklijst li .info');
   await page.click('#btn-annuleer-opwek');
   /* kraanfoto del + undo-herstel */
   await page.click('#chips-opwekfunctie button[data-v="radiatoren"]');
@@ -174,7 +175,11 @@ await scenario('hoofdflow', {
   await page.click('#btn-opwekfoto');
   await page.setInputFiles('#fotoinput', FOTO);
   await page.waitForTimeout(300);
-  await page.click('#btn-opwekfoto-del');       /* undo... */
+  /* kenplaatfoto weg via het kruisje op de miniatuur, met undo-herstel */
+  await page.click('#opwekfotos .fotomini .thumbdel');
+  await page.click('#btn-undo');
+  await page.waitForFunction(() => document.querySelectorAll('#opwekfotos .fotomini').length >= 1);
+  await page.click('#opwekfotos .fotomini .thumbdel'); /* undo... */
   await page.click('#btn-kraanfoto-del');       /* ...en meteen nog één: commit van de vorige */
   await page.click('#btn-undo');
   /* tweede opwekker en weer weg via de kruisjes op de lijst */
@@ -640,7 +645,7 @@ await scenario('camera', {
   await page.waitForSelector('#camera:not([hidden])');
   await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
   await page.click('#btn-sluiter');
-  await page.waitForSelector('#opwekfoto-thumb:not([hidden])');
+  await page.waitForSelector('#opwekfotos .fotomini');
 
   /* dossier-modus zonder cameratoegang: toast + bibliotheek */
   await page.evaluate(() => {

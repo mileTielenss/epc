@@ -207,7 +207,7 @@ const DB = (() => {
         const verwezen = new Set();
         (w.ramen || []).forEach(r => { if (r.fotoId) verwezen.add(r.fotoId); });
         (((w.energie || {}).opwekkers) || []).forEach(o => {
-          if (o.fotoId) verwezen.add(o.fotoId);
+          (o.fotoIds || []).forEach(id => verwezen.add(id));
           if (o.fotoKraanId) verwezen.add(o.fotoKraanId);
         });
         if (w.algemeen && w.algemeen.hoofdFotoId) verwezen.add(w.algemeen.hoofdFotoId);
