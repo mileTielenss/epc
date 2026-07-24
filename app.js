@@ -1798,6 +1798,21 @@ let camStream = null;
 let camFlits = false;
 let camModus = 'dossier'; /* 'dossier' = meerdere foto's; 'enkel' = één foto, meteen dicht */
 
+/* de 0,5×-lens (§7.6): zodra er toestemming is zijn de apparaatlabels leesbaar;
+   herken de achterste ultragroothoek aan "ultra" in het label (Engels "Ultra
+   Wide" én Nederlands "ultragroothoek"). Geen ultragroothoek (ouder toestel,
+   desktop, testomgeving) of al actief -> null, de standaardlens blijft. */
+async function zoekUltrawide(stream) {
+  try {
+    const apparaten = await navigator.mediaDevices.enumerateDevices();
+    const uw = apparaten.find(a => a.kind === 'videoinput' && /ultra/i.test(a.label));
+    if (!uw) return null;
+    const track = stream.getVideoTracks()[0];
+    const actief = track && track.getSettings ? track.getSettings().deviceId : null;
+    return uw.deviceId === actief ? null : uw.deviceId;
+  } catch (e) { return null; }
+}
+
 async function startCamera(modus) {
   camModus = modus || 'dossier';
   if (!S) return;
@@ -1807,6 +1822,18 @@ async function startCamera(modus) {
       video: { facingMode: 'environment', width: { ideal: 2560 }, height: { ideal: 1920 } },
       audio: false
     });
+    /* overal de ultragroothoek (0,5×) gebruiken als het toestel er een heeft */
+    const uwId = await zoekUltrawide(camStream);
+    if (uwId) {
+      try {
+        const uwStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: uwId }, width: { ideal: 2560 }, height: { ideal: 1920 } },
+          audio: false
+        });
+        camStream.getTracks().forEach(t => t.stop());
+        camStream = uwStream;
+      } catch (e) { /* lens weigert: de standaardlens blijft gewoon staan */ }
+    }
     $('#camvideo').srcObject = camStream;
     $('#camera').hidden = false;
     $('#camruimtes').hidden = camModus === 'enkel';

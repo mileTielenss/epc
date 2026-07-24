@@ -262,6 +262,14 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
 - Verplaats je de hoofdfoto weg uit `gevels`, dan wordt `hoofdFotoId` gewist.
 ### 7.6 Camerascherm (fullscreen overlay)
 - `getUserMedia` achtercamera, ideal 2560×1920; `<video playsinline autoplay muted>`.
+- **Altijd de ultragroothoek (0,5×)** als het toestel er een heeft: na de eerste
+  toestemming zijn de apparaatlabels leesbaar; de achterste ultragroothoek wordt
+  herkend aan "ultra" in het label (Engels "Ultra Wide" én Nederlands
+  "ultragroothoek") en de stream wordt heropend met dat `deviceId`. Geen
+  ultragroothoek gevonden (ouder toestel, desktop, testomgeving) of de lens
+  weigert → de standaard achtercamera blijft stil staan als fallback. Geldt voor
+  dossier- én enkel-modus (zelfde `startCamera`). NB: de ultragroothoek heeft
+  geen torch, de flitsknop verschijnt daar dus niet.
 - **Dossier-modus** ("Start camera"): ruimtechips bovenaan (wisselen zonder sluiten),
   flitsknop 🔦 rechtsboven **enkel als `getCapabilities()` torch meldt** (toggle via
   `applyConstraints({advanced:[{torch}]})`, geel als aan); onderaan teller "N foto's",

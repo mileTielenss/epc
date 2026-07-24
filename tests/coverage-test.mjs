@@ -572,6 +572,38 @@ await scenario('camera', {
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   await page.waitForSelector('#camera', { state: 'hidden' });
 
+  /* ultragroothoek (§7.6): label-mock -> app wisselt naar de 0,5×-lens */
+  await page.evaluate(async () => {
+    const echte = (await navigator.mediaDevices.enumerateDevices()).find(a => a.kind === 'videoinput');
+    window.__EchteEnum = navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
+    window.__EchteSettings = MediaStreamTrack.prototype.getSettings;
+    /* de actieve lens meldt een ander id, zodat de wissel doorgaat */
+    MediaStreamTrack.prototype.getSettings = () => ({ deviceId: 'hoofdlens' });
+    navigator.mediaDevices.enumerateDevices = async () =>
+      [{ kind: 'videoinput', label: 'Back Ultra Wide Camera', deviceId: echte.deviceId }];
+  });
+  await page.click('#btn-camera');
+  await page.waitForSelector('#camera:not([hidden])');
+  await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
+  await page.click('#btn-camklaar');
+  /* lens weigert (onbestaand id) -> catch, standaardlens blijft staan */
+  await page.evaluate(() => {
+    navigator.mediaDevices.enumerateDevices = async () =>
+      [{ kind: 'videoinput', label: 'Achtercamera met ultragroothoek', deviceId: 'bestaat-niet' }];
+  });
+  await page.click('#btn-camera');
+  await page.waitForSelector('#camera:not([hidden])');
+  await page.click('#btn-camklaar');
+  /* enumerateDevices kapot -> zoekUltrawide-catch, camera opent gewoon */
+  await page.evaluate(() => { navigator.mediaDevices.enumerateDevices = () => Promise.reject(new Error('kapot')); });
+  await page.click('#btn-camera');
+  await page.waitForSelector('#camera:not([hidden])');
+  await page.click('#btn-camklaar');
+  await page.evaluate(() => {
+    navigator.mediaDevices.enumerateDevices = window.__EchteEnum;
+    MediaStreamTrack.prototype.getSettings = window.__EchteSettings;
+  });
+
   /* enkel-modus: annuleren, en toBlob die faalt bij de sluiter */
   await page.click('#tabbar button[data-tab="algemeen"]');
   await page.click('#tab-algemeen details:nth-of-type(2) summary');
