@@ -77,17 +77,19 @@ assert.throws(() => M.leesJpegInfo(geenSof), /Geen SOF/, 'SOS vóór SOF -> fout
 const afgekapt = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 assert.throws(() => M.leesJpegInfo(afgekapt), /Geen SOF/, 'afgekapte JPEG -> fout');
 
-/* ---- sorteerRamen: deuren eerst, gevel voor->achter->links->rechts, dan aanmaakvolgorde ---- */
+/* ---- sorteerRamen: type -> gevel -> beglazing -> kader -> aanmaakvolgorde (§7.4) ---- */
 const ramen = [
   { id: 'a', element: 'raam', gevel: 'achter' },
   { id: 'b', element: 'deur', gevel: 'rechts' },
-  { id: 'c', element: 'raam', gevel: 'voor' },
+  { id: 'c', element: 'raam', gevel: 'voor', beglazing: 'hr-dubbel', kader: 'pvc' },
   { id: 'd', element: 'deur', gevel: 'voor' },
-  { id: 'e', element: 'raam', gevel: 'voor' },
+  { id: 'e', element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'hout' },
   { id: 'f', element: 'dakraam', gevel: 'links' },
-  { id: 'g', element: 'raam', gevel: 'onbekend' }
+  { id: 'g', element: 'raam', gevel: 'onbekend' },
+  { id: 'h', element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc' }
 ];
-assert.deepEqual(M.sorteerRamen(ramen).map(r => r.id), ['d', 'b', 'c', 'e', 'a', 'f', 'g'], 'sorteervolgorde §7.4 (onbekende gevel laatst)');
+assert.deepEqual(M.sorteerRamen(ramen).map(r => r.id), ['d', 'b', 'h', 'e', 'c', 'a', 'g', 'f'],
+  'deuren -> ramen (gevel, dan glas, dan kader; onbekend laatst) -> dakramen');
 
 /* ---- volledige bouw: voorbeeldwoning met dossier, facturen en elementfoto's ---- */
 const r1 = 'ruimte-living', r2 = 'ruimte-keuken', r3 = 'ruimte-badkamer', r4 = 'ruimte-bureau';
@@ -144,10 +146,12 @@ assert.ok(tekst.includes('/Title (Teststraat 12, Ranst)'), '/Title = adres');
 assert.ok(/\/ID \[<[0-9a-f]{32}> <[0-9a-f]{32}>\]/.test(tekst), '/ID in trailer');
 assert.ok(tekst.includes('/DeviceGray'), 'grijswaarde-XObject als DeviceGray');
 assert.ok(tekst.includes('(2,40)') && tekst.includes('(1,34)') /* 1,335 correct afgerond */ && tekst.includes('(1,00)'), 'maten met exact 2 decimalen');
-/* m² per exemplaar (§9.2): raam 2,40 × 1,335 aantal 2 -> 3,20 per stuk, nooit 6,41 */
+/* m² per exemplaar (§9.2): raam 2,40 × 1,335 aantal 2 -> 3,20 per stuk;
+   de groepstotalen tellen wél aantal × m² op, met een slotregel over alles */
 assert.ok(tekst.includes('(3,20)'), 'm² is de oppervlakte van één exemplaar');
-assert.ok(!tekst.includes('(6,41)'), 'geen aantal × m² meer per rij');
-assert.ok(tekst.includes('(8,51)'), 'totaalregel telt wél aantal × m² op (6,41 + 2,10)');
+assert.ok(tekst.includes('(6,41)'), 'groepstotaal Ramen = aantal × m²');
+assert.ok(tekst.includes('(Deuren)') && tekst.includes('(Ramen)'), 'één tabel per type met subkopje');
+assert.ok(tekst.includes('(Alle elementen samen)') && tekst.includes('(3 stuks · 8,51 m²)'), 'slotregel over alle types (6,41 + 2,10)');
 /* json-controle: genest, geen afgeleide waarden, geen ruis (§9.3.1) */
 const dw = dossier.woning;
 assert.equal(dossier.formaat, 'epc-plaatsbezoek-dossier');

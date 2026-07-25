@@ -243,9 +243,12 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
     beglazingswaarde voor vaste panelen die als raam worden ingegeven (zo gaat
     het ook in de VEKA-software). Deuren hebben geen beglazingswaarde; een
     poort wordt als deur ingegeven.
-- **Sorteervolgorde** (één functie, gebruikt door lijst, PDF en nummering): eerst alle
-  deuren, dan de rest; binnen elk blok gevel voor → achter → links → rechts; dan
-  aanmaakvolgorde. `#nr` = 1-gebaseerde index in die volgorde.
+- **Sorteervolgorde** (één functie, gebruikt door lijst, PDF en nummering):
+  type deur → raam → dakraam; binnen elk type gevel voor → achter → links →
+  rechts; dan beglazing enkel → dubbel → HR dubbel → drievoudig → vol paneel;
+  dan kader pvc → alu → hout; ten slotte aanmaakvolgorde. Identieke ramen
+  (zelfde gevel, glas en kader) staan zo altijd naast elkaar. `#nr` =
+  1-gebaseerde index in die volgorde.
 - De lijst toont enkel de elementen van de gekozen ruimte (net als de
   toestellen); het `#nr` blijft het huisbrede volgnummer uit §7.4 (matcht de PDF).
 - Rij toont "#nr Element · Gevel · n×", "b × h m = x m² (totaal)", tags (beglazing ·
@@ -343,12 +346,18 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
 ### 9.2 Indeling
 1. **Kop**: klein grijs "EPC Plaatsbezoek", adres (vet 15 pt, gewrapt), "Datum
    plaatsbezoek: …". Hoofdfoto rechtsboven, 130 pt breed, max 100 pt hoog.
-2. **RAMEN & DEUREN** (hoofdletters + lijn): tabel #, Type, Ruimte, Gevel, Aant.,
-   m², Beglazing (leeg bij deuren), Kader, Rolluik, B (m), H (m). De **m² is de
-   oppervlakte van één exemplaar** (zo gaat hij rechtstreeks de VEKA-software
-   in, met Aant. ernaast); B en H staan achteraan enkel als naslag. De
-   **totaalregel** telt wél aantal × m² op (echte totale oppervlakte) naast het
-   totale aantal. 7,5 pt, celranden, wrap per cel, getallen rechts, totaalregel vet.
+2. **RAMEN & DEUREN** (hoofdletters + lijn): **één tabel per type**, in de
+   volgorde Deuren → Ramen → Dakramen (vet subkopje 9 pt boven elke tabel);
+   een tabel verschijnt enkel als dat type voorkomt. Kolommen #, Ruimte, Gevel,
+   Aant., m², Beglazing, Kader, Rolluik, B (m), H (m) — de Type-kolom is weg
+   (het subkopje zegt het al) en de Deuren-tabel heeft géén beglazingskolom
+   (een deur heeft enkel een profiel). De **m² is de oppervlakte van één
+   exemplaar** (zo gaat hij rechtstreeks de VEKA-software in, met Aant.
+   ernaast); B en H staan achteraan enkel als naslag. Elke tabel eindigt met een
+   eigen **totaalregel** die wél aantal × m² optelt; bij meer dan één type volgt
+   daaronder "Alle elementen samen: N stuks · X m²". De nummering (`#`) loopt
+   door over de tabellen en matcht de app (§7.4). 7,5 pt, celranden, wrap per
+   cel, getallen rechts, totaalregel vet.
    Alle maten in de PDF staan met exact twee cijfers na de komma ("1,00");
    de UI toont meters zonder afkapping (1,335). Sortering en nummering exact als
    §7.4. Daaronder de raamfoto's: 4 per rij, cel 82 pt, contain, gecentreerd, grijs

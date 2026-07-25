@@ -149,13 +149,20 @@
      rest; binnen elk blok gevel voor -> achter -> links -> rechts; dan
      aanmaakvolgorde. #nr = 1-gebaseerde index in die volgorde. */
 
+  const TYPE_ORDE = { deur: 0, raam: 1, dakraam: 2 };
   const GEVEL_ORDE = { voor: 0, achter: 1, links: 2, rechts: 3 };
+  const GLAS_ORDE = { enkel: 0, dubbel: 1, 'hr-dubbel': 2, drievoudig: 3, paneel: 4 };
+  const KADER_ORDE = { pvc: 0, alu: 1, hout: 2 };
 
+  /* type → gevel → beglazing → kader → aanmaakvolgorde; identiek aan
+     sorteerElementen in bouwPdf (jsonvorm), hou beide in de pas */
   function sorteerRamen(ramen) {
     return ramen.map((r, i) => ({ r, i }))
       .sort((a, b) =>
-        (a.r.element === 'deur' ? 0 : 1) - (b.r.element === 'deur' ? 0 : 1) ||
+        (TYPE_ORDE[a.r.element] ?? 9) - (TYPE_ORDE[b.r.element] ?? 9) ||
         (GEVEL_ORDE[a.r.gevel] ?? 9) - (GEVEL_ORDE[b.r.gevel] ?? 9) ||
+        (GLAS_ORDE[a.r.beglazing] ?? 9) - (GLAS_ORDE[b.r.beglazing] ?? 9) ||
+        (KADER_ORDE[a.r.kader] ?? 9) - (KADER_ORDE[b.r.kader] ?? 9) ||
         a.i - b.i)
       .map(x => x.r);
   }
@@ -326,10 +333,14 @@
     const volTekst = a => `${fmt(a.breedteM)} × ${fmt(a.diepteM)} × ${fmt(a.hoogteM)} m = ${fmt(a.breedteM * a.diepteM * a.hoogteM, 1)} m³`;
 
     /* alle elementen over alle ruimtes, globaal gesorteerd (§7.4) */
+    /* zelfde orde als sorteerRamen, maar op de jsonvorm (type/beglazing) */
     function sorteerElementen(els) {
       return els.map((e, i) => ({ e, i })).sort((a, b) =>
-        (a.e.type === 'deur' ? 0 : 1) - (b.e.type === 'deur' ? 0 : 1) ||
-        (GEVEL_ORDE[a.e.gevel] ?? 9) - (GEVEL_ORDE[b.e.gevel] ?? 9) || a.i - b.i).map(x => x.e);
+        (TYPE_ORDE[a.e.type] ?? 9) - (TYPE_ORDE[b.e.type] ?? 9) ||
+        (GEVEL_ORDE[a.e.gevel] ?? 9) - (GEVEL_ORDE[b.e.gevel] ?? 9) ||
+        (GLAS_ORDE[a.e.beglazing] ?? 9) - (GLAS_ORDE[b.e.beglazing] ?? 9) ||
+        (KADER_ORDE[a.e.kader] ?? 9) - (KADER_ORDE[b.e.kader] ?? 9) ||
+        a.i - b.i).map(x => x.e);
     }
     const elementen = sorteerElementen(echteRuimtes.flatMap(r => (r.elementen || []).map(el => ({ ...el, ruimte: r.naam }))));
 
@@ -450,25 +461,45 @@
     y += 14;
     y = Math.max(y, kopOnder) + 4;
 
-    /* ---------- ramen & deuren ---------- */
+    /* ---------- ramen & deuren: één tabel per type (§9.2) ---------- */
     sectieKop('Ramen & deuren');
     if (elementen.length) {
       const aant = el => Math.max(1, el.aantal || 1);
-      const totM2 = elementen.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
-      const totAantal = elementen.reduce((a, el) => a + aant(el), 0);
       /* m² is de oppervlakte van één exemplaar (zo gaat hij de VEKA-software in);
-         de totaalrij telt wél aantal × m² op. B en H staan achteraan als naslag. */
-      tabel(
-        [{ kop: '#', b: 16 }, { kop: 'Type', b: 42 }, { kop: 'Ruimte', b: 62 }, { kop: 'Gevel', b: 36 },
-        { kop: 'Aant.', b: 26, uitlijn: 'r' }, { kop: 'm²', b: 32, uitlijn: 'r' },
-        { kop: 'Beglazing', b: 52 }, { kop: 'Kader', b: 34 }, { kop: 'Rolluik', b: 34 },
-        { kop: 'B (m)', b: 32, uitlijn: 'r' }, { kop: 'H (m)', b: 32, uitlijn: 'r' }],
-        elementen.map((el, i) => [i + 1, ELEMENT_NAMEN[el.type] || el.type, el.ruimte || '', GEVEL_NAMEN[el.gevel] || '',
-        aant(el), fmt(el.breedteM * el.hoogteM),
-        el.beglazing ? GLAS_NAMEN[el.beglazing] || '' : '', KADER_NAMEN[el.kader] || '', el.rolluik ? 'ja' : 'nee',
-        fmt(el.breedteM), fmt(el.hoogteM)]),
-        ['Totaal', '', '', '', totAantal, fmt(totM2), '', '', '', '', '']
-      );
+         de totaalrij telt wél aantal × m² op. B en H staan achteraan als naslag.
+         De nummering loopt door over de tabellen en matcht de app (§7.4). */
+      const MEERVOUD = { deur: 'Deuren', raam: 'Ramen', dakraam: 'Dakramen' };
+      const typesHier = [...new Set(elementen.map(el => el.type))]; /* al op typevolgorde */
+      let nr = 0;
+      typesHier.forEach(t => {
+        const groep = elementen.filter(el => el.type === t);
+        const grM2 = groep.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
+        const grAantal = groep.reduce((a, el) => a + aant(el), 0);
+        checkPagina(30);
+        y += 4;
+        doc.tekst(p, M, y, MEERVOUD[t] || capit(t), 9, true);
+        y += 13;
+        /* bij deuren telt enkel het profiel: geen beglazingskolom */
+        const metGlas = t !== 'deur';
+        tabel(
+          [{ kop: '#', b: 16 }, { kop: 'Ruimte', b: 62 }, { kop: 'Gevel', b: 36 },
+          { kop: 'Aant.', b: 26, uitlijn: 'r' }, { kop: 'm²', b: 32, uitlijn: 'r' },
+          ...(metGlas ? [{ kop: 'Beglazing', b: 52 }] : []),
+          { kop: 'Kader', b: 34 }, { kop: 'Rolluik', b: 34 },
+          { kop: 'B (m)', b: 32, uitlijn: 'r' }, { kop: 'H (m)', b: 32, uitlijn: 'r' }],
+          groep.map(el => [++nr, el.ruimte || '', GEVEL_NAMEN[el.gevel] || '',
+          aant(el), fmt(el.breedteM * el.hoogteM),
+          ...(metGlas ? [el.beglazing ? GLAS_NAMEN[el.beglazing] || '' : ''] : []),
+          KADER_NAMEN[el.kader] || '', el.rolluik ? 'ja' : 'nee',
+          fmt(el.breedteM), fmt(el.hoogteM)]),
+          ['Totaal', '', '', grAantal, fmt(grM2), ...(metGlas ? [''] : []), '', '', '', '']
+        );
+      });
+      if (typesHier.length > 1) {
+        const totM2 = elementen.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
+        const totAantal = elementen.reduce((a, el) => a + aant(el), 0);
+        kvRegel('Alle elementen samen', `${totAantal} stuks · ${fmt(totM2)} m²`);
+      }
       fotoRaster(elementen.filter(el => fotoBytes(el.foto)).map(el => ({
         pad: el.foto,
         cap: `${ELEMENT_NAMEN[el.type] || el.type} ${(GEVEL_NAMEN[el.gevel] || '').toLowerCase()}${el.ruimte ? ' – ' + el.ruimte : ''}, ${el.type === 'dakraam' ? 'kenplaatje' : 'afstandhouder'}`
