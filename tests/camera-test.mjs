@@ -31,15 +31,15 @@ check('ruimtechips in camera', await page.locator('#camruimtes button').count() 
    voor deze flow eerst expliciet naar Gevels wisselen */
 await page.click('#camruimtes button[data-v="gevels"]');
 await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
-await page.click('#btn-sluiter');
+await page.click('#camvideo');
 await page.waitForFunction(() => document.querySelector('#camteller').textContent.includes('1'));
-await page.click('#btn-sluiter');
+await page.click('#camvideo');
 await page.waitForFunction(() => document.querySelector('#camteller').textContent.includes('2'));
 check('teller telt 2 foto\'s', true);
 /* wisselen van groep zonder sluiten */
 await page.click('#camruimtes button[data-v="algemeen"]');
 await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
-await page.click('#btn-sluiter');
+await page.click('#camvideo');
 await page.waitForTimeout(600);
 await page.click('#btn-camklaar');
 check('camera dicht na Klaar', await page.locator('#camera').isHidden());
@@ -55,7 +55,7 @@ await page.waitForSelector('#camera:not([hidden])');
 check('enkel-modus: geen chips', await page.locator('#camruimtes').isHidden());
 check('enkel-modus: knop Annuleer', (await page.textContent('#btn-camklaar')) === 'Annuleer');
 await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
-await page.click('#btn-sluiter');
+await page.click('#camvideo');
 await page.waitForSelector('#opwekfotos .fotomini');
 check('kenplaatfoto op zijn plek, camera dicht', await page.locator('#camera').isHidden());
 

@@ -87,17 +87,27 @@ async function controleerVersie() {
 setInterval(controleerVersie, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) controleerVersie(); });
 
-/* "Nu bijwerken": SW-registratie en caches weg, dan herladen — het net levert
-   dan de nieuwe bestanden. IndexedDB (woningen, foto's) en localStorage
-   (dossierteller) blijven onaangeroerd. */
+/* "Nu bijwerken" (§9.5): de nieuwe SW eerst álles vers laten cachen (met
+   ?v=VERSIE voorbij elke CDN-cache), dan pas overschakelen en herladen — een
+   halve update (oude app.js bij nieuwe sw.js) kan zo niet bestaan. IndexedDB
+   (woningen, foto's) en localStorage (dossierteller) blijven onaangeroerd. */
 $('#btn-bijwerken').addEventListener('click', async () => {
+  toast('Bijwerken…');
   try {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(regs.map(r => r.unregister()));
-    const keys = await caches.keys();
-    await Promise.all(keys.map(k => caches.delete(k)));
-  } catch (e) { /* herladen haalt hoe dan ook vers van het net */ }
-  location.reload();
+    const reg = await navigator.serviceWorker.getRegistration();
+    await reg.update(); /* haalt de nieuwe sw.js; die installeert alle bestanden vers */
+    const nieuw = reg.installing || reg.waiting;
+    if (!nieuw) { toast('De update is nog niet overal beschikbaar — probeer zo opnieuw'); return; }
+    const stap = () => {
+      if (nieuw.state === 'installed') nieuw.postMessage('skipWaiting');
+      else if (nieuw.state === 'activated') location.reload();
+      else if (nieuw.state === 'redundant') toast('Bijwerken mislukt — probeer opnieuw');
+    };
+    nieuw.addEventListener('statechange', stap);
+    stap(); /* voor het geval hij al stond te wachten */
+  } catch (e) {
+    location.reload(); /* geen registratie meer: gewoon herladen */
+  }
 });
 
 /* ============================== balken en save-bolletje (§6) ============================== */
@@ -1971,7 +1981,14 @@ function updateCamTeller(n) {
 
 $('#btn-camera').addEventListener('click', () => startCamera('dossier'));
 
-$('#btn-sluiter').addEventListener('click', async () => {
+/* korte witte knip als visuele bevestiging dat er een foto genomen is */
+function camKnipper() {
+  const v = $('#camvideo');
+  v.style.opacity = '0.35';
+  setTimeout(() => { v.style.opacity = ''; }, 140);
+}
+
+async function neemCamFoto() {
   const v = $('#camvideo');
   if (!S || !camStream || !v.videoWidth) return;
   if (camModus === 'enkel') {
@@ -1988,7 +2005,7 @@ $('#btn-sluiter').addEventListener('click', async () => {
     }
     return;
   }
-  flash($('#btn-sluiter'));
+  camKnipper();
   try {
     const jpeg = await canvasNaarJpeg(v, v.videoWidth, v.videoHeight, tierVoorGroep(ruimteSel));
     const rec = await voegFotoToe(ruimteSel, jpeg);
@@ -1997,6 +2014,13 @@ $('#btn-sluiter').addEventListener('click', async () => {
       renderDossier();
     }
   } catch (e) { toast('Foto niet bewaard'); }
+}
+
+/* heel het beeld is de sluiter (§7.6): elke tik neemt een foto, behalve op de
+   echte knoppen (Klaar/Annuleer, flits, ruimtechips) */
+$('#camera').addEventListener('click', e => {
+  if (e.target.closest('button')) return;
+  neemCamFoto();
 });
 
 $('#btn-camklaar').addEventListener('click', () => {

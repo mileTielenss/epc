@@ -14,9 +14,11 @@ const cacheStores = new Map(); /* naam -> Map(url -> Response) */
 let geclaimd = false;
 const handlers = {};
 
+let geskipt = false;
 globalThis.self = {
   addEventListener: (t, f) => { handlers[t] = f; },
   clients: { claim: async () => { geclaimd = true; } },
+  skipWaiting: async () => { geskipt = true; },
   location: { origin: 'https://app.test' }
 };
 globalThis.caches = {
@@ -34,7 +36,18 @@ globalThis.caches = {
   delete: async naam => cacheStores.delete(naam)
 };
 let fetchAntwoord = null; /* per test ingesteld */
-globalThis.fetch = async () => { if (fetchAntwoord instanceof Error) throw fetchAntwoord; return fetchAntwoord; };
+const installUrls = [];   /* urls die de install-fase ophaalt */
+let installModus = true;  /* tijdens install: per asset een vers Response-object */
+let installFout = false;  /* simuleert een 404 tijdens de install */
+globalThis.fetch = async (url) => {
+  if (installModus) {
+    if (installFout) return new Response('weg', { status: 404 });
+    installUrls.push(String(url));
+    return new Response('gecachet:' + String(url).split('?')[0], { status: 200 });
+  }
+  if (fetchAntwoord instanceof Error) throw fetchAntwoord;
+  return fetchAntwoord;
+};
 
 require(join(REPO, 'sw.js'));
 
@@ -44,14 +57,31 @@ function fetchEvent(req) {
   return e;
 }
 
-/* ---- install: alle assets in de versie-cache, geen skipWaiting ---- */
+/* ---- install: alle assets vers (met ?v=VERSIE-cachebuster) in de versie-cache ---- */
 let klaar = null;
 handlers.install({ waitUntil: p => { klaar = p; } });
 await klaar;
+installModus = false;
 const cacheNaam = [...cacheStores.keys()][0];
 assert.match(cacheNaam, /^epc-v\d+$/, 'cache heet naar de versie');
 assert.ok(cacheStores.get(cacheNaam).has('./index.html'), 'index.html gecachet');
 assert.ok(cacheStores.get(cacheNaam).has('./sw.js'), 'sw.js zelf gecachet (voor /Producer)');
+assert.ok(installUrls.length >= 10 && installUrls.every(u => u.includes('?v=' + cacheNaam)),
+  'elk asset opgehaald met ?v=VERSIE (voorbij elke CDN-cache)');
+
+/* ---- message: skipWaiting enkel op het juiste bericht ---- */
+handlers.message({ data: 'iets anders' });
+assert.ok(!geskipt, 'vreemd bericht genegeerd');
+handlers.message({ data: 'skipWaiting' });
+assert.ok(geskipt, 'skipWaiting aangeroepen op verzoek');
+
+/* ---- install die een 404 tegenkomt: de hele installatie verwerpt ---- */
+installModus = true;
+installFout = true;
+handlers.install({ waitUntil: p => { klaar = p; } });
+await assert.rejects(() => klaar, /installatie mislukt/, 'niet-ok antwoord breekt de install af');
+installModus = false;
+installFout = false;
 
 /* ---- activate: andere caches weg, clients geclaimd ---- */
 cacheStores.set('epc-oud', new Map());

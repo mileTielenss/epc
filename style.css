@@ -310,11 +310,12 @@ textarea{resize:vertical}
   padding:16px 24px calc(env(safe-area-inset-bottom) + 16px);
 }
 #camteller{color:#fff;font-weight:700;font-size:1rem;min-width:72px;text-shadow:0 1px 3px #000}
-#btn-sluiter{
-  width:74px;height:74px;border-radius:50%;
-  background:#fff;border:5px solid rgba(255,255,255,.45);background-clip:padding-box;
+/* heel het beeld is de sluiter (§7.6): de hint vervangt de witte knop */
+#camhint{
+  flex:1;text-align:center;color:rgba(255,255,255,.85);
+  font-size:.82rem;font-weight:700;text-shadow:0 1px 3px #000;
+  padding:0 8px;pointer-events:none;
 }
-#btn-sluiter:active{background:#cfd6db}
 #btn-camklaar{min-width:72px}
 
 /* ---------- lightbox ---------- */

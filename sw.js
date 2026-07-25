@@ -1,7 +1,7 @@
 'use strict';
 
 /* enige versieconstante van de app; bump bij elke release */
-const VERSIE = 'epc-v20';
+const VERSIE = 'epc-v21';
 
 /* sw.js staat mee in de cache zodat de app er VERSIE uit kan lezen voor /Producer;
    de browser haalt SW-updates zelf op, buiten deze fetch-handler om */
@@ -22,7 +22,20 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSIE).then(c => c.addAll(ASSETS)));
+  /* elk asset met ?v=VERSIE: uniek per release, dus gegarandeerd vers voorbij
+     elke http- én CDN-cache; opgeslagen onder de kale url (§9.5). Zo kan een
+     update nooit half zijn: oude app.js bij nieuwe sw.js bestaat niet meer. */
+  e.waitUntil(caches.open(VERSIE).then(c => Promise.all(ASSETS.map(u =>
+    fetch(u + '?v=' + VERSIE, { cache: 'no-store' }).then(res => {
+      if (!res.ok) throw new Error('installatie mislukt: ' + u);
+      return c.put(u, res);
+    })
+  ))));
+});
+
+/* "Nu bijwerken" (§9.5): de wachtende SW meteen laten overnemen */
+self.addEventListener('message', e => {
+  if (e.data === 'skipWaiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {

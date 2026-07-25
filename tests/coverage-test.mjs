@@ -549,7 +549,7 @@ await scenario('camera', {
   await page.evaluate(() => { window.__torchFaalt = true; });
   await page.click('#btn-flits');                        /* catch-tak */
   await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
-  await page.click('#btn-sluiter');
+  await page.click('#camvideo');
   await page.waitForFunction(() => document.querySelector('#camteller').textContent.includes('1'));
   await page.click('#camruimtes button[data-v="algemeen"]');   /* wisselen zonder sluiten */
   /* mislukkende opslag: putFoto weigert even */
@@ -557,7 +557,7 @@ await scenario('camera', {
     window.__EchtePutFoto = DB.putFoto;
     DB.putFoto = () => Promise.reject(new DOMException('x', 'UnknownError'));
   });
-  await page.click('#btn-sluiter');                      /* 'Foto niet bewaard' */
+  await page.click('#camvideo');                      /* 'Foto niet bewaard' */
   await page.waitForTimeout(300);
   await page.evaluate(() => { DB.putFoto = window.__EchtePutFoto; });
   /* achtergrond: visibilitychange stopt de camera en bewaart */
@@ -637,14 +637,14 @@ await scenario('camera', {
     window.__EchteToBlob = HTMLCanvasElement.prototype.toBlob;
     HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); };
   });
-  await page.click('#btn-sluiter');                      /* JPEG maken mislukt -> catch */
+  await page.click('#camvideo');                      /* JPEG maken mislukt -> catch */
   await page.waitForSelector('#camera', { state: 'hidden' });
   await page.evaluate(() => { HTMLCanvasElement.prototype.toBlob = window.__EchteToBlob; });
   /* enkel-modus geslaagd via de echte nepcamera */
   await page.click('#btn-opwekfoto');
   await page.waitForSelector('#camera:not([hidden])');
   await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
-  await page.click('#btn-sluiter');
+  await page.click('#camvideo');
   await page.waitForSelector('#opwekfotos .fotomini');
 
   /* dossier-modus zonder cameratoegang: toast + bibliotheek */
@@ -924,14 +924,22 @@ await scenario('versiefout-en-sw', {}, async (page, ctx) => {
   await page.evaluate(() => controleerVersie());
   await page.waitForSelector('#updatebalk:not([hidden])');
   assert.match(await page.textContent('#versieregel'), /— update beschikbaar/, 'versieregel meldt update');
-  /* "Nu bijwerken": registratie + caches weg, pagina herlaadt vers */
+  /* "Nu bijwerken" terwijl er online (nog) niets nieuws staat: reg.update()
+     vindt geen nieuwe SW -> toast, er verandert niets */
   await page.unroute('**/sw.js?*');
+  await page.click('#btn-bijwerken');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('nog niet overal beschikbaar'));
+  /* nu staat er écht een nieuwe versie online (server-override): de nieuwe SW
+     installeert alles vers, skipWaiting, activatie en de pagina herlaadt */
+  const echteSw = readFileSync(join(HIER, '..', 'sw.js'), 'utf8');
+  server.zetOverride('/sw.js', echteSw.replace(/const VERSIE = '[^']+';/, "const VERSIE = 'epc-v999';"));
   await Promise.all([
     page.waitForEvent('load'),
     page.click('#btn-bijwerken')
   ]);
-  await page.waitForSelector('#updatebalk', { state: 'hidden' });
-  assert.ok(await page.locator('#updatebalk').isHidden(), 'balk weg na bijwerken (verse pagina)');
+  await page.waitForFunction(() => swVersie === 'epc-v999', null, { timeout: 15000 });
+  assert.match(await page.textContent('#versieregel'), /Versie epc-v999/, 'na bijwerken draait de nieuwe versie echt (geen halve update)');
+  server.zetOverride('/sw.js', null);
 });
 
 await browser.close();

@@ -288,11 +288,16 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   camera wisselt naar de hoofdlens zolang de flits brandt; flits uit → terug
   naar 0,5×. Mislukt er iets → flits uit, toast "Flits niet beschikbaar op dit
   toestel".
+- **Heel het beeld is de sluiter**: er is geen witte sluiterknop; elke tik op de
+  overlay neemt een foto (frame → JPEG), behálve op de echte knoppen — Klaar/
+  Annuleer, de flitsknop en de ruimtechips doen gewoon hun werk. Onderaan staat
+  als hint "Tik eender waar voor een foto" (klikt niet, `pointer-events:none`).
+  Bij een foto in dossier-modus knippert het beeld even (opacity-dip 140 ms) als
+  bevestiging.
 - **Dossier-modus** ("Start camera"): ruimtechips bovenaan (wisselen zonder sluiten),
   flitsknop 🔦 rechtsboven **enkel als een lens torch meldt** (zie de flits-bullet
   hierboven; toggle via `applyConstraints({advanced:[{torch}]})`, geel als aan);
-  onderaan teller "N foto's", witte sluiterknop, "Klaar". Elke tik: frame → JPEG →
-  foto in de actieve groep.
+  onderaan teller "N foto's", de hint en "Klaar". Elke tik: foto in de actieve groep.
 - **Enkel-modus** (kenplaat, kranen, afstandhouder, toestel): geen chips, knop
   "Annuleer", één tik → foto op zijn plek, camera dicht.
 - **Fallbacks**: enkel-modus → verborgen `<input type="file" accept="image/*"
@@ -504,10 +509,20 @@ woning: {
   beschikbaar" + knop **"Nu bijwerken"**. Elke uitkomst van de check voedt ook
   de versieregel op de woningenlijst (§7.1: "— laatste versie" of "— update
   beschikbaar").
-- **"Nu bijwerken"**: deregistreert alle service workers, wist alle caches en
-  herlaadt — de pagina komt dan vers van het net en registreert de nieuwe SW.
-  IndexedDB (woningen, foto's) en localStorage (dossierteller) blijven
-  onaangeroerd. Mislukt het opruimen, dan wordt er toch herladen.
+- **Atomische installatie**: de SW haalt bij de install élk asset op met
+  `?v=VERSIE` en `cache: 'no-store'` — een per release unieke url, dus
+  gegarandeerd vers voorbij de http-cache én de CDN-cache van GitHub Pages
+  (die tot 10 min oude bestanden kan geven). Opgeslagen onder de kale url.
+  Eén niet-ok antwoord breekt de hele install af. Zo bestaat een **halve
+  update** (oude `app.js` naast een nieuwe `sw.js`) niet meer.
+- **"Nu bijwerken"**: toast "Bijwerken…", dan `registration.update()` — de
+  nieuwe SW installeert eerst alles vers; daarna stuurt de pagina
+  `skipWaiting`, en zodra de nieuwe SW **activated** is herlaadt de pagina,
+  bediend uit de nieuwe cache. Vindt `update()` (nog) geen nieuwe SW (CDN nog
+  niet bijgewerkt) → toast "De update is nog niet overal beschikbaar — probeer
+  zo opnieuw". Mislukt de installatie (`redundant`) → toast "Bijwerken
+  mislukt". IndexedDB (woningen, foto's) en localStorage (dossierteller)
+  blijven onaangeroerd.
 ## 10. Bewuste keuzes
 - Geen bouwjaar, gebouwtype, kelder, zolder, oriëntatie voorgevel, beschermd volume.
 - Geen backup, export, import, JSON-bijlage. Geen bewerken van PV-installaties.
