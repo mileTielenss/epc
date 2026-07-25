@@ -456,14 +456,18 @@
       const aant = el => Math.max(1, el.aantal || 1);
       const totM2 = elementen.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
       const totAantal = elementen.reduce((a, el) => a + aant(el), 0);
+      /* m² is de oppervlakte van één exemplaar (zo gaat hij de VEKA-software in);
+         de totaalrij telt wél aantal × m² op. B en H staan achteraan als naslag. */
       tabel(
         [{ kop: '#', b: 16 }, { kop: 'Type', b: 42 }, { kop: 'Ruimte', b: 62 }, { kop: 'Gevel', b: 36 },
-        { kop: 'Aant.', b: 26, uitlijn: 'r' }, { kop: 'B (m)', b: 32, uitlijn: 'r' }, { kop: 'H (m)', b: 32, uitlijn: 'r' },
-        { kop: 'm²', b: 32, uitlijn: 'r' }, { kop: 'Beglazing', b: 52 }, { kop: 'Kader', b: 34 }, { kop: 'Rolluik', b: 34 }],
+        { kop: 'Aant.', b: 26, uitlijn: 'r' }, { kop: 'm²', b: 32, uitlijn: 'r' },
+        { kop: 'Beglazing', b: 52 }, { kop: 'Kader', b: 34 }, { kop: 'Rolluik', b: 34 },
+        { kop: 'B (m)', b: 32, uitlijn: 'r' }, { kop: 'H (m)', b: 32, uitlijn: 'r' }],
         elementen.map((el, i) => [i + 1, ELEMENT_NAMEN[el.type] || el.type, el.ruimte || '', GEVEL_NAMEN[el.gevel] || '',
-        aant(el), fmt(el.breedteM), fmt(el.hoogteM), fmt(el.breedteM * el.hoogteM * aant(el)),
-        el.beglazing ? GLAS_NAMEN[el.beglazing] || '' : '', KADER_NAMEN[el.kader] || '', el.rolluik ? 'ja' : 'nee']),
-        ['Totaal', '', '', '', totAantal, '', '', fmt(totM2), '', '', '']
+        aant(el), fmt(el.breedteM * el.hoogteM),
+        el.beglazing ? GLAS_NAMEN[el.beglazing] || '' : '', KADER_NAMEN[el.kader] || '', el.rolluik ? 'ja' : 'nee',
+        fmt(el.breedteM), fmt(el.hoogteM)]),
+        ['Totaal', '', '', '', totAantal, fmt(totM2), '', '', '', '', '']
       );
       fotoRaster(elementen.filter(el => fotoBytes(el.foto)).map(el => ({
         pad: el.foto,

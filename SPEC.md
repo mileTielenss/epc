@@ -344,8 +344,11 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
 1. **Kop**: klein grijs "EPC Plaatsbezoek", adres (vet 15 pt, gewrapt), "Datum
    plaatsbezoek: …". Hoofdfoto rechtsboven, 130 pt breed, max 100 pt hoog.
 2. **RAMEN & DEUREN** (hoofdletters + lijn): tabel #, Type, Ruimte, Gevel, Aant.,
-   B (m), H (m), m² (aantal meegerekend), Beglazing (leeg bij deuren), Kader,
-   Rolluik. 7,5 pt, celranden, wrap per cel, getallen rechts, totaalregel vet.
+   m², Beglazing (leeg bij deuren), Kader, Rolluik, B (m), H (m). De **m² is de
+   oppervlakte van één exemplaar** (zo gaat hij rechtstreeks de VEKA-software
+   in, met Aant. ernaast); B en H staan achteraan enkel als naslag. De
+   **totaalregel** telt wél aantal × m² op (echte totale oppervlakte) naast het
+   totale aantal. 7,5 pt, celranden, wrap per cel, getallen rechts, totaalregel vet.
    Alle maten in de PDF staan met exact twee cijfers na de komma ("1,00");
    de UI toont meters zonder afkapping (1,335). Sortering en nummering exact als
    §7.4. Daaronder de raamfoto's: 4 per rij, cel 82 pt, contain, gecentreerd, grijs

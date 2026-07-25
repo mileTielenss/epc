@@ -144,6 +144,10 @@ assert.ok(tekst.includes('/Title (Teststraat 12, Ranst)'), '/Title = adres');
 assert.ok(/\/ID \[<[0-9a-f]{32}> <[0-9a-f]{32}>\]/.test(tekst), '/ID in trailer');
 assert.ok(tekst.includes('/DeviceGray'), 'grijswaarde-XObject als DeviceGray');
 assert.ok(tekst.includes('(2,40)') && tekst.includes('(1,34)') /* 1,335 correct afgerond */ && tekst.includes('(1,00)'), 'maten met exact 2 decimalen');
+/* m² per exemplaar (§9.2): raam 2,40 × 1,335 aantal 2 -> 3,20 per stuk, nooit 6,41 */
+assert.ok(tekst.includes('(3,20)'), 'm² is de oppervlakte van één exemplaar');
+assert.ok(!tekst.includes('(6,41)'), 'geen aantal × m² meer per rij');
+assert.ok(tekst.includes('(8,51)'), 'totaalregel telt wél aantal × m² op (6,41 + 2,10)');
 /* json-controle: genest, geen afgeleide waarden, geen ruis (§9.3.1) */
 const dw = dossier.woning;
 assert.equal(dossier.formaat, 'epc-plaatsbezoek-dossier');
