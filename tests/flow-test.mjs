@@ -52,22 +52,29 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.locator('#adres').blur();
   check('titel volgt adres met nummerprefix', (await page.textContent('#titel')) === '1. Teststraat 12, Ranst');
 
-  /* verstopt knopje (§7.1): lange druk op de titel corrigeert het dossiernummer */
+  /* verstopt knopje (§7.1): lange druk op de woningnaam in de lijst corrigeert
+     het dossiernummer; de klik die volgt opent de woning niet */
+  await page.click('#btn-terug');
+  await page.waitForSelector('#woninglijst li.woning');
   promptAntwoord = '7';
-  await page.locator('#titel').hover();
+  await page.locator('#woninglijst li.woning .r1').hover();
   await page.mouse.down();
   await page.waitForTimeout(900);
   await page.mouse.up();
-  await page.waitForFunction(() => document.querySelector('#titel').textContent === '7. Teststraat 12, Ranst');
-  check('lange druk zet dossiernummer', (await page.textContent('#titel')) === '7. Teststraat 12, Ranst');
+  await page.waitForFunction(() => document.querySelector('#woninglijst .r1').textContent.startsWith('7. '));
+  check('lange druk op de lijstnaam zet dossiernummer', (await page.textContent('#woninglijst .r1')) === '7. Teststraat 12, Ranst');
+  check('lange druk opent de woning niet', await page.locator('#app').isHidden());
   /* terug naar het standaardnummer voor de rest van de flow (zip-naam) */
   promptAntwoord = '1';
-  await page.locator('#titel').hover();
+  await page.locator('#woninglijst li.woning .r1').hover();
   await page.mouse.down();
   await page.waitForTimeout(900);
   await page.mouse.up();
-  await page.waitForFunction(() => document.querySelector('#titel').textContent === '1. Teststraat 12, Ranst');
+  await page.waitForFunction(() => document.querySelector('#woninglijst .r1').textContent.startsWith('1. '));
   promptAntwoord = '';
+  await page.click('#woninglijst li.woning .info');
+  await page.waitForSelector('#app:not([hidden])');
+  check('gewone tik opent de woning weer', (await page.textContent('#titel')) === '1. Teststraat 12, Ranst');
 
   /* verwarming (accordeon) */
   await page.click('#tab-algemeen details:nth-of-type(2) summary');

@@ -85,10 +85,8 @@ await scenario('hoofdflow', {
   await page.goto(BASIS);
   await page.waitForSelector('#woninglijst .leeg');
 
-  /* verstopt knopje (§7.1): op de lijst (geen open dossier) doet een druk op de
-     titel niets — start() valt uit op !S, stop() ziet geen actieve timer */
-  const titel = page.locator('#titel');
-  await titel.hover();
+  /* verstopt knopje (§7.1): druk op de lege lijst (geen li.woning) doet niets */
+  await page.locator('#woninglijst .leeg').hover();
   await page.mouse.down();
   await page.mouse.up();
 
@@ -105,32 +103,49 @@ await scenario('hoofdflow', {
   assert.equal(await page.evaluate(() => S.nummer), 1, 'nieuwe woning krijgt nummer 1');
   assert.equal(await page.evaluate(() => localStorage.getItem('epc-volgindex')), '2', 'teller op 2');
 
-  /* lange druk op de editortitel corrigeert het nummer van dit dossier (§7.1) */
-  /* korte druk: timer gewist vóór 800 ms (stop met actieve timer) */
-  await titel.hover();
+  /* lange druk op de woningnaam in de lijst corrigeert het nummer (§7.1) */
+  await page.click('#btn-terug');
+  await page.waitForSelector('#woninglijst li.woning');
+  const rij = page.locator('#woninglijst li.woning');
+  /* korte druk: timer gewist vóór 800 ms, en de klik opent de woning gewoon */
+  await rij.hover();
   await page.mouse.down();
   await page.mouse.up();
+  await page.waitForSelector('#app:not([hidden])');
+  await page.click('#btn-terug');
+  await page.waitForSelector('#woninglijst li.woning');
   /* ongeldige invoer -> toast, nummer blijft 1 */
   antwoord({ doe: 'accept', tekst: 'abc' });
-  await titel.hover();
+  await rij.hover();
   await page.mouse.down();
   await page.waitForTimeout(900);
   await page.mouse.up();
-  assert.equal(await page.evaluate(() => S.nummer), 1, 'ongeldig nummer genegeerd');
+  assert.ok((await page.textContent('#woninglijst .r1')).startsWith('1. '), 'ongeldig nummer genegeerd');
   /* geannuleerd -> geen wijziging */
   antwoord({ doe: 'dismiss' });
-  await titel.hover();
+  await rij.hover();
   await page.mouse.down();
   await page.waitForTimeout(900);
   await page.mouse.up();
+  /* DB-fout tijdens het laden -> toast "Nummer aanpassen mislukt" */
+  await page.evaluate(() => { window.__EchteGetW = DB.getWoning; DB.getWoning = () => Promise.reject(new Error('x')); });
+  await rij.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Nummer aanpassen mislukt'));
+  await page.evaluate(() => { DB.getWoning = window.__EchteGetW; });
   /* geldig nummer -> nummer gezet, globale teller volgt op nummer+1 */
   antwoord({ doe: 'accept', tekst: '30' });
-  await titel.hover();
+  await rij.hover();
   await page.mouse.down();
   await page.waitForTimeout(900);
   await page.mouse.up();
-  await page.waitForFunction(() => S.nummer === 30);
+  await page.waitForFunction(() => document.querySelector('#woninglijst .r1').textContent.startsWith('30. '));
   assert.equal(await page.evaluate(() => localStorage.getItem('epc-volgindex')), '31', 'teller volgt op 31');
+  /* gewone tik opent de woning weer */
+  await page.click('#woninglijst li.woning .info');
+  await page.waitForSelector('#app:not([hidden])');
 
   /* locatieknop: adres, dan 500 -> coördinaten, dan offline -> coördinaten */
   await page.click('#btn-locatie');

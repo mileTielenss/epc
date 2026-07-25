@@ -179,15 +179,16 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   staat **niet** in de pdf of `woning.json`, zodat de zip-inhoud
   nummeronafhankelijk en reproduceerbaar blijft.
 - **Verstopt: nummer corrigeren.** Klopt de teller ooit niet, dan corrigeer je het
-  nummer van het **geopende** dossier met een **lange druk** (± 0,8 s) op de titel
-  in de editorheader: `prompt()` "Dossiernummer van deze woning:" met het huidige
-  nummer voorin. Een geheel getal > 0 wordt het nieuwe `nummer` en zet de globale
-  teller op nummer+1 (zodat de volgende woning verder telt); anders toast
-  "Ongeldig nummer".
+  nummer met een **lange druk** (± 0,8 s) op de **woningnaam in de lijst**:
+  `prompt()` "Dossiernummer van deze woning:" met het huidige nummer voorin. Een
+  geheel getal > 0 wordt het nieuwe `nummer` en zet de globale teller op
+  nummer+1 (zodat de volgende woning verder telt); anders toast "Ongeldig
+  nummer". De klik die op het loslaten volgt opent de woning **niet**. Mislukt
+  het bewaren → toast "Nummer aanpassen mislukt".
 ### 7.2 Header (editor)
 - Groene sticky balk: terugpijl `‹`, titel `<nummer>. <adres>` (ellipsis),
-  save-bolletje. Rode balk daarboven. Lang indrukken op de titel corrigeert het
-  dossiernummer (§7.1).
+  save-bolletje. Rode balk daarboven. De titel is geen knop; het nummer pas je
+  aan via de lijst (§7.1).
 - Tabs: Algemeen · Details · Foto's · Afronden.
 - Op **Details** en **Foto's**: ruimtebalk, horizontaal scrollbare chip-rij
   (outline-chips, actieve gevuld). Actieve chip scrollt in beeld.

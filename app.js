@@ -451,39 +451,43 @@ async function renderLijst() {
   }
 }
 
+let lijstNummerDruk = false; /* na een lange druk mag de klik de woning niet openen */
+
 $('#woninglijst').addEventListener('click', e => {
+  if (lijstNummerDruk) { lijstNummerDruk = false; return; }
   if (e.target.closest('img.thumb')) return; /* tik op fotominiatuur: enkel lightbox */
   const li = e.target.closest('li.woning');
   if (li) openWoning(li.dataset.id);
 });
 
-/* verstopt knopje (§7.1): lang drukken op de titel van het geopende dossier
-   corrigeert het nummer van dít dossier; de globale teller volgt zodat het
-   volgende nieuwe dossier verder telt vanaf nummer+1. */
+/* verstopt knopje (§7.1): lang drukken op een woningnaam in de lijst corrigeert
+   het dossiernummer van díe woning; de globale teller volgt zodat het volgende
+   nieuwe dossier verder telt vanaf nummer+1. */
 (() => {
-  const titel = $('#titel');
   let timer = null;
-  const start = () => {
-    if (!S) return; /* enkel zinvol met een geopend dossier */
-    timer = setTimeout(() => {
-      timer = null;
-      const inv = prompt('Dossiernummer van deze woning:', String(S.nummer));
-      if (inv === null) return;
-      const n = parseInt(inv, 10);
-      if (!Number.isFinite(n) || n <= 0) { toast('Ongeldig nummer'); return; }
-      S.nummer = n;
-      zetVolgendeIndex(n + 1);
-      wijzig();
-      bewaar();
-      zetTitel();
-      toast(`Dossiernummer: ${n}`);
+  $('#woninglijst').addEventListener('pointerdown', e => {
+    const li = e.target.closest('li.woning');
+    lijstNummerDruk = false;
+    if (!li) return;
+    timer = setTimeout(async () => {
+      lijstNummerDruk = true;
+      try {
+        const w = await DB.getWoning(li.dataset.id);
+        if (!w) return;
+        const inv = prompt('Dossiernummer van deze woning:', String(w.nummer));
+        if (inv === null) return;
+        const n = parseInt(inv, 10);
+        if (!Number.isFinite(n) || n <= 0) { toast('Ongeldig nummer'); return; }
+        w.nummer = n;
+        zetVolgendeIndex(n + 1);
+        await DB.putWoning(w);
+        renderLijst();
+        toast(`Dossiernummer: ${n}`);
+      } catch (e) { toast('Nummer aanpassen mislukt'); }
     }, 800);
-  };
-  const stop = () => { if (timer) { clearTimeout(timer); timer = null; } };
-  titel.addEventListener('pointerdown', start);
-  titel.addEventListener('pointerup', stop);
-  titel.addEventListener('pointerleave', stop);
-  titel.addEventListener('pointercancel', stop);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(t =>
+    $('#woninglijst').addEventListener(t, () => clearTimeout(timer)));
 })();
 
 $('#btn-nieuwewoning').addEventListener('click', async () => {
