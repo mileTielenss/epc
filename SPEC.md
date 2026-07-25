@@ -466,6 +466,10 @@ woning: {
   doet, blijven onaangeroerd liggen. Andere compressiemethodes → duidelijke
   fout. `woning.json` wordt gecontroleerd op
   `formaat: 'epc-plaatsbezoek-dossier'`.
+- **Finder-tolerant**: macOS zipt de map zelf mee (`Map/woning.json`) en voegt
+  `__MACOSX/`, `._x`-bestanden en `.DS_Store` toe. De import negeert die
+  metadata, zoekt `woning.json` óók onder een prefix (kortste pad wint) en
+  rekent alle paden (`fotos/…`, `hoofdfoto.jpg`) vanaf diezelfde map.
 - Er wordt een **nieuwe** woning aangemaakt (nieuwe ids, `pdfBewaardOp: null`, het
   volgende vrije dossiernummer volgens §7.1):
   de geneste structuur wordt teruggevouwen — "Gevels"/"Algemeen" worden weer

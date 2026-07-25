@@ -501,9 +501,19 @@ $('#zipinput').addEventListener('change', async () => {
   if (!f) return;
   toast('Importeren…');
   try {
-    const leden = await leesZip(new Uint8Array(await f.arrayBuffer()));
-    const jsonLid = leden.find(l => l.naam === 'woning.json');
+    /* macOS-metadata negeren (Finder stopt __MACOSX/, ._x en .DS_Store in de zip) */
+    const alle = (await leesZip(new Uint8Array(await f.arrayBuffer()))).filter(l => {
+      const basis = l.naam.split('/').pop();
+      return !l.naam.startsWith('__MACOSX/') && !basis.startsWith('._') && basis !== '.DS_Store';
+    });
+    /* Finder zipt de map zelf mee: zoek woning.json ook onder een prefix en
+       reken alle paden (fotos/…) vanaf diezelfde map */
+    const jsonLid = alle.filter(l => /(^|\/)woning\.json$/.test(l.naam))
+      .sort((a, b) => a.naam.length - b.naam.length)[0];
     if (!jsonLid) throw new Error('geen woning.json in de zip');
+    const prefix = jsonLid.naam.slice(0, jsonLid.naam.length - 'woning.json'.length);
+    const leden = alle.filter(l => l.naam.startsWith(prefix))
+      .map(l => ({ naam: l.naam.slice(prefix.length), bytes: l.bytes }));
     const dossier = JSON.parse(new TextDecoder().decode(jsonLid.bytes));
     if (dossier.formaat !== 'epc-plaatsbezoek-dossier') throw new Error('onbekend formaat');
     await importeerDossier(dossier.woning || {}, new Map(leden.map(l => [l.naam, l.bytes])));

@@ -282,6 +282,21 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('herzipt dossier (deflate + extra bestand) importeert', await page.inputValue('#adres') === 'Teststraat 12, Ranst');
   await page.click('#tabbar button[data-tab="details"]');
   check('ramen ook terug uit het herzipte dossier', await page.locator('#ramenlijst li').count() === 2);
+
+  /* Finder-stijl (§9.4): macOS zipt de mápp mee (prefix "dossier/") en voegt
+     __MACOSX/, ._x en .DS_Store toe — de import moet daar dwars doorheen kijken */
+  execSync(`cd "${MAP}" && rm -rf macstijl macstijl.zip && mkdir macstijl && cp -r herzip macstijl/dossier` +
+    ` && touch "macstijl/dossier/.DS_Store" && mkdir -p "macstijl/__MACOSX/dossier"` +
+    ` && printf 'AppleDouble' > "macstijl/__MACOSX/dossier/._woning.json"` +
+    ` && cd macstijl && zip -r -q ../macstijl.zip .`);
+  await page.click('#btn-terug');
+  await page.waitForSelector('#view-lijst:not([hidden])');
+  await page.setInputFiles('#zipinput', `${MAP}/macstijl.zip`);
+  await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
+  check('Finder-zip met map-prefix en macOS-metadata importeert', await page.inputValue('#adres') === 'Teststraat 12, Ranst');
+  await page.click('#tabbar button[data-tab="fotos"]');
+  await page.click('#ruimtechips button[data-v="gevels"]');
+  check('foto\'s gevonden ondanks map-prefix', await page.locator('#dossiergrid .dfoto').count() === 2);
   await ctx.close();
 }
 
