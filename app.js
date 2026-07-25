@@ -501,7 +501,7 @@ $('#zipinput').addEventListener('change', async () => {
   if (!f) return;
   toast('Importeren…');
   try {
-    const leden = leesZip(new Uint8Array(await f.arrayBuffer()));
+    const leden = await leesZip(new Uint8Array(await f.arrayBuffer()));
     const jsonLid = leden.find(l => l.naam === 'woning.json');
     if (!jsonLid) throw new Error('geen woning.json in de zip');
     const dossier = JSON.parse(new TextDecoder().decode(jsonLid.bytes));

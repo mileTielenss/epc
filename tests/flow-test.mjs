@@ -270,6 +270,18 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#tabbar button[data-tab="afronden"]');
   check('geïmporteerde woning is een nieuw open dossier',
     (await page.locator('#btn-verwijder-woning').textContent()) === 'Bewaar eerst het dossier');
+
+  /* herzipt dossier (§9.4): uitgepakt, extra bestand erbij, opnieuw gezipt met
+     de zip-cli (deflate + mappen) — moet exact zo importeren */
+  execSync(`cp -r "${MAP}/flowzip" "${MAP}/herzip" && echo "losse nota" > "${MAP}/herzip/extra-nota.txt"`);
+  execSync(`cd "${MAP}/herzip" && zip -r -q "${MAP}/herzip.zip" .`);
+  await page.click('#btn-terug');
+  await page.waitForSelector('#view-lijst:not([hidden])');
+  await page.setInputFiles('#zipinput', `${MAP}/herzip.zip`);
+  await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
+  check('herzipt dossier (deflate + extra bestand) importeert', await page.inputValue('#adres') === 'Teststraat 12, Ranst');
+  await page.click('#tabbar button[data-tab="details"]');
+  check('ramen ook terug uit het herzipte dossier', await page.locator('#ramenlijst li').count() === 2);
   await ctx.close();
 }
 

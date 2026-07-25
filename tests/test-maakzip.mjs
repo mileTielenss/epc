@@ -5,6 +5,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { strict as assert } from 'node:assert';
+import { deflateRawSync } from 'node:zlib';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HIER, '..');
@@ -97,9 +98,50 @@ const leden = [
   { naam: 'test.pdf', bytes: new TextEncoder().encode('%PDF-nep') },
   { naam: 'fotos/0001.jpg', bytes: rgb }
 ];
-const terug = Z.leesZip(new Uint8Array(await Z.bouwZip(leden).arrayBuffer()));
+const terug = await Z.leesZip(new Uint8Array(await Z.bouwZip(leden).arrayBuffer()));
 assert.equal(terug.length, 2, 'leesZip vindt alle leden terug');
 assert.deepEqual([...terug[1].bytes], [...rgb], 'fotobytes ongeschonden na de rondreis');
-assert.throws(() => Z.leesZip(new TextEncoder().encode('geen zip hoor')), /geen zip/, 'leesZip weigert niet-zips');
+await assert.rejects(() => Z.leesZip(new TextEncoder().encode('geen zip hoor')), /geen zip/, 'leesZip weigert niet-zips');
+
+/* ---- leesZip: herzipt dossier (deflate, map-lid, extra bestand) — §9.4 ----
+   nagebouwd zoals zip-cli/Finder het schrijven: central directory + deflate */
+function herzip(items) {
+  const enc = new TextEncoder();
+  const stukken = [], cd = [];
+  let offset = 0;
+  const u16 = n => new Uint8Array([n & 255, (n >> 8) & 255]);
+  const u32 = n => new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]);
+  const voeg = (...d) => d.forEach(x => { stukken.push(x); offset += x.length; });
+  items.forEach(({ naam, data, methode }) => {
+    const nm = enc.encode(naam);
+    const ruw = data || new Uint8Array(0);
+    const comp = methode === 8 ? new Uint8Array(deflateRawSync(ruw)) : ruw;
+    const crc = Z.crc32(ruw);
+    cd.push({ nm, methode, crc, compLen: comp.length, ruwLen: ruw.length, kop: offset });
+    voeg(u32(0x04034B50), u16(20), u16(0), u16(methode), u16(0), u16(0),
+      u32(crc), u32(comp.length), u32(ruw.length), u16(nm.length), u16(0), nm, comp);
+  });
+  const cdStart = offset;
+  cd.forEach(c => voeg(u32(0x02014B50), u16(20), u16(20), u16(0), u16(c.methode), u16(0), u16(0),
+    u32(c.crc), u32(c.compLen), u32(c.ruwLen), u16(c.nm.length), u16(0), u16(0), u16(0), u16(0),
+    u32(0), u32(c.kop), c.nm));
+  voeg(u32(0x06054B50), u16(0), u16(0), u16(cd.length), u16(cd.length), u32(offset - cdStart), u32(cdStart), u16(0));
+  const uit = new Uint8Array(offset);
+  let p = 0;
+  stukken.forEach(s => { uit.set(s, p); p += s.length; });
+  return uit;
+}
+const json = new TextEncoder().encode('{"formaat":"epc-plaatsbezoek-dossier"}');
+const herzipt = await Z.leesZip(herzip([
+  { naam: 'extra/', methode: 0 },                            /* map: overslaan */
+  { naam: 'woning.json', data: json, methode: 8 },           /* deflate */
+  { naam: 'fotos/0001.jpg', data: rgb, methode: 0 },         /* store */
+  { naam: 'extra/nota.txt', data: new TextEncoder().encode('los bestand'), methode: 8 }
+]));
+assert.equal(herzipt.length, 3, 'map-lid overgeslagen, extra bestand gewoon mee');
+assert.deepEqual([...herzipt.find(l => l.naam === 'woning.json').bytes], [...json], 'deflate-lid correct uitgepakt');
+assert.deepEqual([...herzipt.find(l => l.naam === 'fotos/0001.jpg').bytes], [...rgb], 'store-lid ongeschonden');
+await assert.rejects(() => Z.leesZip(herzip([{ naam: 'raar.bin', data: rgb, methode: 99 }])),
+  /niet-ondersteunde compressie/, 'onbekende methode geweigerd');
 
 console.log('test-maakzip: alles OK');

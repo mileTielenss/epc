@@ -81,23 +81,45 @@
     return new Blob(chunks, { type: 'application/zip' });
   }
 
-  /* ---------- zip lezen (enkel store-leden: onze eigen dossiers, §9.4) ---------- */
-
-  function leesZip(bytes) {
+  /* ---------- zip lezen (§9.4): eigen dossiers én herzipte dossiers ----------
+     Leest via de central directory (dus ook zips van Finder/Windows/zip-cli,
+     die data descriptors gebruiken) en ondersteunt store (0) en deflate (8,
+     via DecompressionStream). Mappen worden overgeslagen; extra bestanden
+     zijn welkom — de import negeert wat hij niet nodig heeft. */
+  async function leesZip(bytes) {
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const dec = new TextDecoder();
+    /* end-of-central-directory achteraan zoeken (commentaar kan tot 64k zijn) */
+    let eocd = -1;
+    for (let i = bytes.length - 22, min = Math.max(0, bytes.length - 65557); i >= min; i--) {
+      if (dv.getUint32(i, true) === 0x06054B50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('geen zip');
+    const aantal = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
     const leden = [];
-    let p = 0;
-    while (p + 4 <= bytes.length && dv.getUint32(p, true) === 0x04034B50) {
-      const methode = dv.getUint16(p + 8, true);
-      const lengte = dv.getUint32(p + 18, true);
-      const naamLen = dv.getUint16(p + 26, true);
-      const extraLen = dv.getUint16(p + 28, true);
-      const naam = dec.decode(bytes.subarray(p + 30, p + 30 + naamLen));
-      if (methode !== 0) throw new Error('gecomprimeerd lid: geen dossier van deze app');
-      const start = p + 30 + naamLen + extraLen;
-      leden.push({ naam, bytes: bytes.subarray(start, start + lengte) });
-      p = start + lengte;
+    for (let n = 0; n < aantal; n++) {
+      if (dv.getUint32(p, true) !== 0x02014B50) throw new Error('zip beschadigd');
+      const methode = dv.getUint16(p + 10, true);
+      const compLen = dv.getUint32(p + 20, true);
+      const naamLen = dv.getUint16(p + 28, true);
+      const extraLen = dv.getUint16(p + 30, true);
+      const commLen = dv.getUint16(p + 32, true);
+      const kop = dv.getUint32(p + 42, true);
+      const naam = dec.decode(bytes.subarray(p + 46, p + 46 + naamLen));
+      p += 46 + naamLen + extraLen + commLen;
+      if (naam.endsWith('/')) continue; /* map-lid */
+      /* het local header heeft eigen naam/extra-lengtes (extra mag verschillen) */
+      const start = kop + 30 + dv.getUint16(kop + 26, true) + dv.getUint16(kop + 28, true);
+      const data = bytes.subarray(start, start + compLen);
+      if (methode === 0) {
+        leden.push({ naam, bytes: data });
+      } else if (methode === 8) {
+        const uit = new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+        leden.push({ naam, bytes: new Uint8Array(await uit.arrayBuffer()) });
+      } else {
+        throw new Error(`lid "${naam}" gebruikt een niet-ondersteunde compressie`);
+      }
     }
     if (!leden.length) throw new Error('geen zip');
     return leden;

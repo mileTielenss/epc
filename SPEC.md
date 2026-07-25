@@ -458,8 +458,14 @@ woning: {
 ```
 ### 9.4 Importeren
 - "Importeer dossier" op de woningenlijst opent een bestandskiezer (.zip).
-- `maakzip.js` leest de zip (enkel store-leden — dossiers van deze app zelf);
-  `woning.json` wordt gecontroleerd op `formaat: 'epc-plaatsbezoek-dossier'`.
+- `maakzip.js` leest de zip via de **central directory** en aanvaardt store- én
+  deflate-leden (deflate via `DecompressionStream('deflate-raw')`). Een dossier
+  dat je uitpakt, aanvult met extra bestanden en opnieuw zipt (Finder, Windows,
+  zip-cli — die comprimeren en gebruiken data descriptors) importeert dus
+  gewoon: map-leden worden overgeslagen en bestanden waar de import niets mee
+  doet, blijven onaangeroerd liggen. Andere compressiemethodes → duidelijke
+  fout. `woning.json` wordt gecontroleerd op
+  `formaat: 'epc-plaatsbezoek-dossier'`.
 - Er wordt een **nieuwe** woning aangemaakt (nieuwe ids, `pdfBewaardOp: null`, het
   volgende vrije dossiernummer volgens §7.1):
   de geneste structuur wordt teruggevouwen — "Gevels"/"Algemeen" worden weer
