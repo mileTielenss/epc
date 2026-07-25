@@ -908,10 +908,11 @@ await scenario('versiefout-en-sw', {}, async (page, ctx) => {
   /* updatemelding (§9.5): herladen zodat de SW de pagina controleert */
   await page.reload();
   await page.waitForFunction(() => !!navigator.serviceWorker.controller && !!swVersie);
-  /* zelfde versie online -> geen balk */
+  /* zelfde versie online -> geen balk, versieregel meldt "laatste versie" */
   await page.evaluate(() => controleerVersie());
   await page.waitForTimeout(300);
   assert.ok(await page.locator('#updatebalk').isHidden(), 'geen balk bij gelijke versie');
+  assert.match(await page.textContent('#versieregel'), /Versie epc-v\d+ — laatste versie/, 'versieregel actueel');
   /* offline -> check faalt stil */
   await page.route('**/sw.js?*', route => route.abort());
   await page.evaluate(() => controleerVersie());
@@ -922,6 +923,7 @@ await scenario('versiefout-en-sw', {}, async (page, ctx) => {
   await page.route('**/sw.js?*', route => route.fulfill({ contentType: 'application/javascript', body: "const VERSIE = 'epc-v999';" }));
   await page.evaluate(() => controleerVersie());
   await page.waitForSelector('#updatebalk:not([hidden])');
+  assert.match(await page.textContent('#versieregel'), /— update beschikbaar/, 'versieregel meldt update');
   /* "Nu bijwerken": registratie + caches weg, pagina herlaadt vers */
   await page.unroute('**/sw.js?*');
   await Promise.all([

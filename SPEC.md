@@ -165,7 +165,10 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - "+ Nieuwe woning" maakt en opent een record.
 - Daaronder "Importeer dossier": kies een eerder bewaarde dossier-zip en de
   woning wordt integraal teruggeladen (§9.4).
-- Geen Info-blok, geen versielabel, geen updateknop.
+- Geen Info-blok, geen updateknop. Wel een **discrete versieregel** onderaan
+  (klein, grijs, gecentreerd): "Versie epc-vN", aangevuld met "— laatste versie"
+  of "— update beschikbaar" zodra de versiecheck (§9.5) een antwoord heeft;
+  zonder check (offline) blijft alleen het versienummer staan.
 - **Dossiernummer (per woning, app-zijde).** Elk dossier heeft **altijd** een eigen
   `nummer` — er bestaat geen woning zonder (geen fallback-logica; de app hoeft
   nooit backwards compatibel te zijn met records van vóór dit veld). Een **nieuwe
@@ -488,7 +491,9 @@ woning: {
   check stil.
 - **Melding**: verschilt de netwerkversie, dan verschijnt in de topbar de balk
   `#updatebalk` (accentkleur, opbouw als de foutbalk): "Nieuwe versie
-  beschikbaar" + knop **"Nu bijwerken"**.
+  beschikbaar" + knop **"Nu bijwerken"**. Elke uitkomst van de check voedt ook
+  de versieregel op de woningenlijst (§7.1: "— laatste versie" of "— update
+  beschikbaar").
 - **"Nu bijwerken"**: deregistreert alle service workers, wist alle caches en
   herlaadt — de pagina komt dan vers van het net en registreert de nieuwe SW.
   IndexedDB (woningen, foto's) en localStorage (dossierteller) blijven

@@ -53,8 +53,19 @@ let swVersie = '';
 fetch('./sw.js').then(r => r.text()).then(t => {
   const m = t.match(/VERSIE\s*=\s*'([^']+)'/);
   if (m) swVersie = m[1];
+  toonVersieregel();
   controleerVersie();
 }).catch(() => { /* offline zonder cache: PDF krijgt dan geen versienummer */ });
+
+/* versieregel onderaan de woningenlijst (§7.1): draaiende versie, en na een
+   geslaagde check of dat de laatste is */
+let versieActueel = null; /* null = nog niet gecheckt (bv. offline) */
+function toonVersieregel() {
+  const el = $('#versieregel');
+  el.hidden = !swVersie;
+  el.textContent = `Versie ${swVersie}` +
+    (versieActueel === true ? ' — laatste versie' : versieActueel === false ? ' — update beschikbaar' : '');
+}
 
 /* ---------- updatemelding (§9.5) ----------
    De draaiende app kent zijn versie (swVersie, uit de gecachete sw.js) en
@@ -66,7 +77,11 @@ async function controleerVersie() {
   try {
     const r = await fetch(`sw.js?t=${Date.now()}`, { cache: 'no-store' });
     const m = (await r.text()).match(/VERSIE\s*=\s*'([^']+)'/);
-    if (m && m[1] !== swVersie) $('#updatebalk').hidden = false;
+    if (m) {
+      versieActueel = m[1] === swVersie;
+      toonVersieregel();
+      if (!versieActueel) $('#updatebalk').hidden = false;
+    }
   } catch (e) { /* offline: volgende check probeert opnieuw */ }
 }
 setInterval(controleerVersie, 5 * 60 * 1000);

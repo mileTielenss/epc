@@ -69,6 +69,7 @@ body{
   min-height:34px;padding:4px 10px;
 }
 #topbar:has(#updatebalk:not([hidden])) .toprij{padding-top:8px}
+#versieregel{margin:14px 0 4px;text-align:center;font-size:.72rem;color:var(--mut)}
 
 /* ---------- ruimtebalk in de header: op elke tab behalve Algemeen/Afronden ---------- */
 #ruimtebalk{margin-top:8px;padding:0 14px}
