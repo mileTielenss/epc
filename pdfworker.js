@@ -9,7 +9,7 @@
 importScripts('maakpdf.js', 'maakzip.js');
 
 self.onmessage = async e => {
-  const { woning, fotos, versie, naam } = e.data;
+  const { woning, fotos, versie, naam, extra } = e.data;
   try {
     /* 1. interne woning → paden toekennen → woning.json (de enige bron) */
     const bestandVan = new Map();
@@ -32,6 +32,10 @@ self.onmessage = async e => {
     if (hoofd && fotosOpPad.has(hoofd)) leden.push({ naam: 'hoofdfoto.jpg', bytes: fotosOpPad.get(hoofd).bytes });
     leden.push({ naam: 'woning.json', bytes: jsonBytes });
     fotos.forEach((f, id) => leden.push({ naam: bestandVan.get(id), bytes: f.bytes }));
+    /* extra/ zit altijd in de zip (ook leeg): de vaste plek om bestanden bij
+       te leggen die de import daarna gewoon mee terugneemt (§9.3/§9.4) */
+    leden.push({ naam: 'extra/', bytes: new Uint8Array(0) });
+    (extra || []).forEach(x => leden.push({ naam: 'extra/' + x.naam, bytes: x.bytes }));
 
     self.postMessage({ voortgang: 0.97 });
     self.postMessage({ klaar: self.bouwZip(leden) });

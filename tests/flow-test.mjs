@@ -1,7 +1,7 @@
 /* Klikflows op WebKit, iPhone-viewport (SPEC.md §11).
    Draaien: PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node flow-test.mjs */
 import { webkit } from 'playwright-core';
-import { readFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { strict as assert } from 'node:assert';
 import { fileURLToPath } from 'node:url';
@@ -75,6 +75,14 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#woninglijst li.woning .info');
   await page.waitForSelector('#app:not([hidden])');
   check('gewone tik opent de woning weer', (await page.textContent('#titel')) === '1. Teststraat 12, Ranst');
+
+  /* extra bestanden (§7.3): toevoegen via de +, reizen mee in extra/ (§9.3) */
+  writeFileSync(`${MAP}/epb-aangifte.txt`, 'epb-aangifte inhoud');
+  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  check('extra-lijst start leeg', await page.locator('#extralijst .leeg').count() === 1);
+  await page.setInputFiles('#extrainput', `${MAP}/epb-aangifte.txt`);
+  await page.waitForSelector('#extralijst li:not(.leeg)');
+  check('extra bestand in de lijst', (await page.textContent('#extralijst .r1')) === 'epb-aangifte.txt');
 
   /* verwarming (accordeon) */
   await page.click('#tab-algemeen details:nth-of-type(2) summary');
@@ -244,6 +252,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('woning.json: hoofdfoto op woningniveau', dossierJson.woning.hoofdfoto === 'fotos/0001.jpg');
   check('hoofdfoto.jpg zit in de zip', readFileSync(`${MAP}/flowzip/hoofdfoto.jpg`).length > 1000);
   check('fotos/ zit in de zip', readFileSync(`${MAP}/flowzip/fotos/0001.jpg`).length > 1000);
+  check('extra/ zit in de zip met het bestand erin', readFileSync(`${MAP}/flowzip/extra/epb-aangifte.txt`, 'utf8') === 'epb-aangifte inhoud');
 
   await page.waitForSelector('#pdf-bewaard:not([hidden])');
   check('grijze regel "Dossier bewaard op"', (await page.textContent('#pdf-bewaard')).startsWith('Dossier bewaard op'));
@@ -255,14 +264,15 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   const dbLeeg = await page.evaluate(() => new Promise(res => {
     const q = indexedDB.open('epc-db');
     q.onsuccess = () => {
-      const t = q.result.transaction(['woningen', 'fotos'], 'readonly');
-      let w, f;
+      const t = q.result.transaction(['woningen', 'fotos', 'extra'], 'readonly');
+      let w, f, x;
       t.objectStore('woningen').count().onsuccess = e => w = e.target.result;
       t.objectStore('fotos').count().onsuccess = e => f = e.target.result;
-      t.oncomplete = () => res({ w, f });
+      t.objectStore('extra').count().onsuccess = e => x = e.target.result;
+      t.oncomplete = () => res({ w, f, x });
     };
   }));
-  check('stores leeg (één transactie wiste alles)', dbLeeg.w === 0 && dbLeeg.f === 0);
+  check('stores leeg (één transactie wiste alles, ook extra)', dbLeeg.w === 0 && dbLeeg.f === 0 && dbLeeg.x === 0);
 
   /* round-trip: dezelfde zip importeren en alles terugvinden (§9.4) */
   await page.setInputFiles('#zipinput', zipPad);
@@ -277,10 +287,14 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#tabbar button[data-tab="afronden"]');
   check('geïmporteerde woning is een nieuw open dossier',
     (await page.locator('#btn-verwijder-woning').textContent()) === 'Bewaar eerst het dossier');
+  await page.click('#tabbar button[data-tab="algemeen"]');
+  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  check('extra bestand terug na import', (await page.textContent('#extralijst .r1')) === 'epb-aangifte.txt');
 
-  /* herzipt dossier (§9.4): uitgepakt, extra bestand erbij, opnieuw gezipt met
-     de zip-cli (deflate + mappen) — moet exact zo importeren */
-  execSync(`cp -r "${MAP}/flowzip" "${MAP}/herzip" && echo "losse nota" > "${MAP}/herzip/extra-nota.txt"`);
+  /* herzipt dossier (§9.4): uitgepakt, extra bestand erbij (los én in extra/),
+     opnieuw gezipt met de zip-cli (deflate + mappen) — moet exact zo importeren */
+  execSync(`cp -r "${MAP}/flowzip" "${MAP}/herzip" && echo "losse nota" > "${MAP}/herzip/extra-nota.txt"` +
+    ` && echo "factuur" > "${MAP}/herzip/extra/factuur.txt"`);
   execSync(`cd "${MAP}/herzip" && zip -r -q "${MAP}/herzip.zip" .`);
   await page.click('#btn-terug');
   await page.waitForSelector('#view-lijst:not([hidden])');
@@ -289,6 +303,9 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('herzipt dossier (deflate + extra bestand) importeert', await page.inputValue('#adres') === 'Teststraat 12, Ranst');
   await page.click('#tabbar button[data-tab="details"]');
   check('ramen ook terug uit het herzipte dossier', await page.locator('#ramenlijst li').count() === 2);
+  await page.click('#tabbar button[data-tab="algemeen"]');
+  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  check('zelf in extra/ gedropt bestand komt mee bij import', await page.locator('#extralijst li').count() === 2);
 
   /* Finder-stijl (§9.4): macOS zipt de mápp mee (prefix "dossier/") en voegt
      __MACOSX/, ._x en .DS_Store toe — de import moet daar dwars doorheen kijken */
@@ -351,9 +368,9 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await ctx.close();
 }
 
-/* ================= flow 3: DB versie 3, geen upgradepad, geen opslagbanner ================= */
+/* ================= flow 3: DB-migraties — v1 = clean start, v3 = gegevens behouden ================= */
 {
-  console.log('flow 3: DB v3 zonder upgradepad');
+  console.log('flow 3: DB-migraties');
   const { ctx, page } = await nieuwePagina();
   /* oude v1-database zaaien: de app moet die negeren (clean start), niet migreren */
   await page.goto(BASIS + 'manifest.json');
@@ -384,18 +401,47 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
       t.oncomplete = () => res({
         versie: d.version,
         stores: [...d.objectStoreNames].sort(),
-        index: d.transaction('fotos').objectStore('fotos').indexNames.contains('woningId'),
+        index: d.transaction('extra').objectStore('extra').indexNames.contains('woningId'),
         aantalWoningen: w
       });
     };
   }));
-  check('DB op versie 3', info.versie === 3);
-  check('stores woningen + fotos, geen instellingen', info.stores.join(',') === 'fotos,woningen');
-  check('index woningId aanwezig', info.index);
-  check('oude records leeggemaakt (clean start)', info.aantalWoningen === 0);
+  check('DB op versie 4', info.versie === 4);
+  check('stores woningen + fotos + extra, geen instellingen', info.stores.join(',') === 'extra,fotos,woningen');
+  check('index woningId op extra aanwezig', info.index);
+  check('records van vóór v3 leeggemaakt (clean start)', info.aantalWoningen === 0);
   check('lijst toont geen oude woning', await page.locator('#woninglijst .leeg').count() === 1);
   check('geen opslagbanner in de DOM', await page.locator('#opslagbalk').count() === 0);
   check('app start gewoon (nieuwe woning kan)', await page.locator('#btn-nieuwewoning').isVisible());
+  await ctx.close();
+}
+
+/* ================= flow 4: v3 → v4 behoudt de gegevens (echte dossiers!) ================= */
+{
+  console.log('flow 4: v3 -> v4 met behoud van data');
+  const { ctx, page } = await nieuwePagina();
+  await page.goto(BASIS + 'manifest.json');
+  await page.evaluate(() => new Promise((res, rej) => {
+    const q = indexedDB.open('epc-db', 3);
+    q.onupgradeneeded = () => {
+      q.result.createObjectStore('woningen', { keyPath: 'id' });
+      q.result.createObjectStore('fotos', { keyPath: 'id' }).createIndex('woningId', 'woningId');
+    };
+    q.onsuccess = () => {
+      const t = q.result.transaction('woningen', 'readwrite');
+      t.objectStore('woningen').put({
+        id: 'v3-woning', nummer: 12, gemaakt: '2026-01-01', gewijzigd: '2026-01-01',
+        pdfBewaardOp: null, algemeen: { adres: 'Migratiestraat 3', datum: '2026-01-01', notities: '', hoofdFotoId: null },
+        ruimtes: [], ramen: [], energie: { opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '' }, problemen: []
+      });
+      t.oncomplete = () => { q.result.close(); res(); };
+      t.onerror = () => rej(t.error);
+    };
+    q.onerror = () => rej(q.error);
+  }));
+  await page.goto(BASIS);
+  await page.waitForSelector('#woninglijst li.woning');
+  check('v3-woning overleeft de upgrade naar v4', (await page.textContent('#woninglijst .r1')) === '12. Migratiestraat 3');
   await ctx.close();
 }
 

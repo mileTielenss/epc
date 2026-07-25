@@ -51,29 +51,36 @@ Kleuren: accent `#0a6b3d`, accent-donker `#07522e`, inkt `#101418`, gedempt
 - Push naar `main` → upload-pages-artifact → deploy-pages. Direct op `main` werken.
 - Eén versieconstante: `VERSIE` in `sw.js`. `app.js` kent geen versie.
 ## 4. Service worker
-- Install: cachet alle assets in cache `VERSIE`. **Geen `skipWaiting()`.**
+- Install: cachet alle assets in cache `VERSIE`, elk opgehaald met `?v=VERSIE` en
+  `cache:'no-store'` (atomisch en CDN-proof, §9.5); opgeslagen onder de kale url.
+  **Geen automatische `skipWaiting()`** — enkel op verzoek, zie hieronder.
 - Activate: verwijdert alle andere caches, dan `clients.claim()`.
 - Fetch: cache-first, **uitsluitend uit de eigen cache**
   (`caches.open(VERSIE).match(req, {ignoreSearch:true})`). Miss → netwerk, gelukte
   same-origin-responses bijcachen. Offline navigatie → `./index.html` uit eigen cache.
-- Geen `message`-handler.
+  Urls die `sw.js?` bevatten gaan rechtstreeks naar het netwerk (versiecheck, §9.5).
+- `message`-handler: het bericht `'skipWaiting'` (van de knop "Nu bijwerken", §9.5)
+  roept `self.skipWaiting()` aan; al de rest wordt genegeerd.
 - App-kant: `register(..., {updateViaCache:'none'})`, `reg.update()` bij start en bij
-  visibilitychange. Verder niets.
-- De nieuwe versie draait zodra de app uit de app-switcher geveegd en heropend wordt.
-  Geen `controllerchange`-reload: een reload middenin een camerasessie is dataverlies.
+  visibilitychange.
+- Zonder "Nu bijwerken" draait de nieuwe versie zodra de app uit de app-switcher
+  geveegd en heropend wordt. Geen `controllerchange`-reload: een reload middenin
+  een camerasessie is dataverlies.
 - `VERSIE` wordt doorgegeven aan de generator en komt in `/Producer` van de PDF.
   `sw.js` staat daarvoor mee in de asset-cache: de app fetcht `./sw.js` (die uit
   de eigen cache komt en dus bij de draaiende versie hoort) en leest de constante
   eruit. SW-updates gebeuren buiten de fetch-handler om, dus dit blokkeert niets.
 ## 5. Datamodel
-IndexedDB `epc-db`, versie 3. Geen upgradepad: `onupgradeneeded` maakt de stores
-aan en maakt een databank van een oudere versie **leeg** (bewuste keuze — clean
-start; records in het oude formaat zijn onbruikbaar en zouden anders
-onverwijderbaar blijven omdat verwijderen een geslaagde PDF vereist).
+IndexedDB `epc-db`, versie 4. `onupgradeneeded` maakt de stores aan; een databank
+van **vóór v3** wordt daarbij **leeggemaakt** (clean start — records in dat oude
+formaat zijn onbruikbaar en zouden anders onverwijderbaar blijven omdat
+verwijderen een geslaagde PDF vereist). Vanaf v3 blijven de gegevens bij elke
+upgrade staan: v3 → v4 voegt enkel de `extra`-store toe.
 | Store | keyPath | Index | Inhoud |
 |---|---|---|---|
 | `woningen` | `id` | — | woningrecord, **zonder beeldbytes** |
 | `fotos` | `id` | `woningId` | `{id, woningId, blob, breedte, hoogte, groep, volgorde, gemaakt}` |
+| `extra` | `id` | `woningId` | `{id, woningId, naam, blob, gemaakt}` — bestanden uit `extra/` (§7.3) |
 - Geen `instellingen`-store.
 - Foto's zijn Blobs, geen dataURLs. Een woningrecord is enkele kB; een foto wordt één
   keer geschreven, bij de opname.
@@ -151,8 +158,8 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - **DB open faalt**: niets wissen. Rode balk + read-only geheugenmodus waarin enkel
   "Bewaar PDF" nog werkt.
 - **Verwijderen**: uitgeschakeld zolang `pdfBewaardOp === null` (knop toont "Bewaar
-  eerst het dossier"; de veldnaam blijft historisch `pdfBewaardOp`). Anders confirm met datum en uur. Wist woning + alle `fotos` met die
-  `woningId` in één transactie.
+  eerst het dossier"; de veldnaam blijft historisch `pdfBewaardOp`). Anders confirm met datum en uur. Wist woning + alle `fotos` én `extra`-bestanden
+  met die `woningId` in één transactie.
 - `pdfBewaardOp` wordt enkel gezet nadat `share()` of de download **resolved** heeft.
   `AbortError` zet niets.
 ## 7. Schermen
@@ -203,7 +210,7 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   onder de opmerking, en vraagt een `confirm()`.
 - Groepering: op basisnaam (naam zonder eindcijfer), volgorde van eerste voorkomen,
   binnen een groep numeriek.
-### 7.3 Tab Algemeen — vier accordeons, alleen **Woning** open
+### 7.3 Tab Algemeen — vijf accordeons, alleen **Woning** open
 1. **Woning**: adres + 📍 (geolocation → Nominatim reverse geocoding,
    `accept-language=nl&zoom=18`; mislukt → "lat, lon"). Enige externe call, alleen op
    een tik. Datum plaatsbezoek (date-input, default vandaag).
@@ -220,6 +227,13 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
    Wp-veld + ronde "+", lijst met ×, geen bewerken). Zonneboiler (cycle Nee/Ja,
    default Nee; bij Ja veld "Oppervlakte zonnecollector (m²)").
 4. **Opmerkingen**: textarea.
+5. **Extra bestanden**: hint dat deze bestanden meereizen in `extra/` van de
+   dossier-zip; lijst (naam + grootte, oudste eerst) met per rij een × dat na
+   `confirm()` verwijdert; **"+ Bestand toevoegen"** opent de bestandskiezer
+   (`multiple`, elk bestandstype — zo kies je ook een scan die je met de
+   Bestanden/Notities-scanner van iOS maakte). Bestandsnamen worden ontdaan van
+   tekens die een zip-pad breken; een dubbele naam krijgt " (2)", " (3)", …
+   De bestanden staan in de `extra`-store (§5), los van `woning.json`.
 ### 7.4 Tab Details — per geselecteerde ruimte, drie accordeons
 Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.**
 - **Ventilatie**: cycle `geen → natuurlijk → mechanisch → mechanisch permanent →
@@ -403,6 +417,10 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    - `woning.json` — alle gegevens machineleesbaar, bedoeld om de VEKA-invoer
      later te automatiseren én als bron voor de import. **Genest en zonder
      afgeleide waarden of ruis** (§9.3.1); bevat géén dossiernummer.
+   - `extra/` — **altijd aanwezig** (ook leeg): de vaste plek voor bijlagen. De
+     bestanden uit de `extra`-store (§7.3) staan er als `extra/<naam>`, en wat
+     je er zelf bijlegt vóór het herzippen komt bij een import gewoon mee terug
+     (§9.4). De inhoud staat los van `woning.json`.
 3. **`<adres>`** = het ingevulde adres met tekens die een bestandsnaam breken
    (`/ \ : * ? " < > |`) vervangen door spaties, meervoudige spaties
    samengevouwen (fallback "EPC plaatsbezoek"); spaties, komma's en koppeltekens
@@ -475,7 +493,11 @@ woning: {
 - **Finder-tolerant**: macOS zipt de map zelf mee (`Map/woning.json`) en voegt
   `__MACOSX/`, `._x`-bestanden en `.DS_Store` toe. De import negeert die
   metadata, zoekt `woning.json` óók onder een prefix (kortste pad wint) en
-  rekent alle paden (`fotos/…`, `hoofdfoto.jpg`) vanaf diezelfde map.
+  rekent alle paden (`fotos/…`, `hoofdfoto.jpg`, `extra/…`) vanaf diezelfde map.
+- **`extra/` reist mee**: alles onder `extra/` (ook in submappen) wordt bij de
+  import integraal opgeslagen in de `extra`-store van de nieuwe woning en komt
+  bij de volgende export weer in `extra/` terecht — de backup-lus
+  (unzip → aanvullen → herzip → later importeren) verliest dus niets.
 - Er wordt een **nieuwe** woning aangemaakt (nieuwe ids, `pdfBewaardOp: null`, het
   volgende vrije dossiernummer volgens §7.1):
   de geneste structuur wordt teruggevouwen — "Gevels"/"Algemeen" worden weer

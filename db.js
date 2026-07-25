@@ -9,7 +9,7 @@
 
 const DB = (() => {
   const DB_NAAM = 'epc-db';
-  const DB_VERSIE = 3;
+  const DB_VERSIE = 4;
 
   let db = null;
   let foutmelder = null;   /* door app.js gezet: krijgt de foutnaam bij elke mislukte write */
@@ -28,9 +28,9 @@ const DB = (() => {
   function dbId() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
 
   /* ---------- openen ----------
-     Geen upgradepad: een databank van een oudere versie wordt bij de upgrade
-     leeggemaakt (bewuste keuze — clean start, records in het oude formaat
-     zijn onbruikbaar en zouden anders onverwijderbaar blijven). */
+     Records van vóór v3 zijn onbruikbaar: die databanken worden bij de upgrade
+     leeggemaakt (clean start). Vanaf v3 blijven de gegevens bij elke upgrade
+     staan — v3 → v4 voegt enkel de 'extra'-store toe (§9.4). */
 
   function open() {
     return new Promise((res, rej) => {
@@ -44,9 +44,14 @@ const DB = (() => {
           ? q.transaction.objectStore('fotos')
           : d.createObjectStore('fotos', { keyPath: 'id' });
         if (!fotoStore.indexNames.contains('woningId')) fotoStore.createIndex('woningId', 'woningId');
-        if (e.oldVersion > 0) {
+        const extraStore = d.objectStoreNames.contains('extra')
+          ? q.transaction.objectStore('extra')
+          : d.createObjectStore('extra', { keyPath: 'id' });
+        if (!extraStore.indexNames.contains('woningId')) extraStore.createIndex('woningId', 'woningId');
+        if (e.oldVersion > 0 && e.oldVersion < 3) {
           q.transaction.objectStore('woningen').clear();
           fotoStore.clear();
+          extraStore.clear();
         }
       };
       q.onsuccess = () => { db = q.result; db.onversionchange = () => db.close(); res(); };
@@ -57,7 +62,7 @@ const DB = (() => {
 
   /* geen DB: alles in het geheugen zodat "Bewaar PDF" blijft werken (§6) */
   function startGeheugenmodus() {
-    geheugen = { woningen: new Map(), fotos: new Map() };
+    geheugen = { woningen: new Map(), fotos: new Map(), extra: new Map() };
   }
 
   /* ---------- transacties (geslaagd = tx.oncomplete, §6) ---------- */
@@ -110,22 +115,25 @@ const DB = (() => {
     });
   }
 
-  /* woning + alle bijhorende foto's in één transactie (§6) */
+  /* woning + alle bijhorende foto's en extra bestanden in één transactie (§6) */
   function verwijderWoningMetFotos(woningId) {
-    return schrijf(['woningen', 'fotos'], (t, mem) => {
+    return schrijf(['woningen', 'fotos', 'extra'], (t, mem) => {
       if (mem) {
         mem.woningen.delete(woningId);
         [...mem.fotos.values()].filter(f => f.woningId === woningId).forEach(f => mem.fotos.delete(f.id));
+        [...mem.extra.values()].filter(x => x.woningId === woningId).forEach(x => mem.extra.delete(x.id));
         return;
       }
       t.objectStore('woningen').delete(woningId);
-      const idx = t.objectStore('fotos').index('woningId');
-      idx.openKeyCursor(IDBKeyRange.only(woningId)).onsuccess = e => {
-        const cur = e.target.result;
-        if (!cur) return;
-        t.objectStore('fotos').delete(cur.primaryKey);
-        cur.continue();
-      };
+      ['fotos', 'extra'].forEach(naam => {
+        const store = t.objectStore(naam);
+        store.index('woningId').openKeyCursor(IDBKeyRange.only(woningId)).onsuccess = e => {
+          const cur = e.target.result;
+          if (!cur) return;
+          store.delete(cur.primaryKey);
+          cur.continue();
+        };
+      });
     });
   }
 
@@ -191,6 +199,27 @@ const DB = (() => {
     geladen = new Map();
   }
 
+  /* ---------- extra bestanden (§7.3/§9.3): {id, woningId, naam, blob, gemaakt} ---------- */
+
+  function putExtra(rec) {
+    return schrijf('extra', (t, mem) => {
+      if (mem) { mem.extra.set(rec.id, rec); return; }
+      t.objectStore('extra').put(rec);
+    });
+  }
+
+  function verwijderExtra(id) {
+    return schrijf('extra', (t, mem) => {
+      if (mem) { mem.extra.delete(id); return; }
+      t.objectStore('extra').delete(id);
+    });
+  }
+
+  function extraVanWoning(woningId) {
+    if (geheugen) return Promise.resolve([...geheugen.extra.values()].filter(x => x.woningId === woningId));
+    return lees('extra', s => s.index('woningId').getAll(woningId));
+  }
+
   /* ---------- weesfotosweep (§5.1: op idle, faalt stil) ---------- */
 
   async function weesfotoSweep() {
@@ -215,6 +244,11 @@ const DB = (() => {
         if (!inDossier && !verwezen.has(f.id)) dood.push(f.id);
       });
       for (const id of dood) await verwijderFoto(id);
+      /* extra bestanden van verdwenen woningen ook opruimen */
+      const alleExtra = await lees('extra', s => s.getAll());
+      for (const x of alleExtra) {
+        if (!perId.has(x.woningId)) await verwijderExtra(x.id);
+      }
     } catch (e) { /* faalt stil */ }
   }
 
@@ -224,6 +258,7 @@ const DB = (() => {
     zetFoutmelder: fn => { foutmelder = fn; },
     alleWoningen, getWoning, putWoning, verwijderWoningMetFotos,
     putFoto, getFoto, verwijderFoto, fotosVanWoning, laadFotos, fotoRecord, geladenFotos,
+    putExtra, verwijderExtra, extraVanWoning,
     fotoUrl, revokeUrls, sluitWoning, weesfotoSweep,
     nieuwId: dbId
   };

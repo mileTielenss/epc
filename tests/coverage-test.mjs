@@ -203,6 +203,41 @@ await scenario('hoofdflow', {
   await page.click('#opweklijst li .del');      /* confirm geweigerd */
   await page.click('#opweklijst li .del');      /* echt weg */
 
+  /* extra bestanden (§7.3): +, dubbele naam, verwijderen, foutpaden */
+  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.click('#btn-extra-voegtoe');
+  await page.setInputFiles('#extrainput', FOTO);
+  await page.waitForSelector('#extralijst li:not(.leeg)');
+  await page.setInputFiles('#extrainput', [])
+  await page.setInputFiles('#extrainput', FOTO);   /* zelfde naam -> " (2)" */
+  await page.waitForFunction(() => document.querySelectorAll('#extralijst li').length === 2);
+  assert.ok((await page.textContent('#extralijst')).includes('test-rgb (2).jpg'), 'dubbele naam krijgt volgnummer');
+  /* verwijderen: eerst geweigerd, dan echt */
+  antwoord({ doe: 'dismiss' });
+  await page.click('#extralijst li .del');
+  antwoord({ doe: 'accept' });
+  await page.click('#extralijst li .del');
+  await page.waitForFunction(() => document.querySelectorAll('#extralijst li:not(.leeg)').length === 1);
+  /* toevoegen dat faalt -> toast */
+  await page.evaluate(() => { window.__EchtePutExtra = DB.putExtra; DB.putExtra = () => Promise.reject(new Error('vol')); });
+  await page.setInputFiles('#extrainput', [])
+  await page.setInputFiles('#extrainput', FOTO);
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Bestand toevoegen mislukt'));
+  await page.evaluate(() => { DB.putExtra = window.__EchtePutExtra; });
+  /* verwijderen dat faalt -> toast */
+  await page.evaluate(() => { window.__EchteDelExtra = DB.verwijderExtra; DB.verwijderExtra = () => Promise.reject(new Error('x')); });
+  antwoord({ doe: 'accept' });
+  await page.click('#extralijst li .del');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Verwijderen mislukt'));
+  await page.evaluate(() => { DB.verwijderExtra = window.__EchteDelExtra; });
+  /* wees-extra (woning bestaat niet meer) wordt door de sweep opgeruimd */
+  const weesWeg = await page.evaluate(async () => {
+    await DB.putExtra({ id: 'wees-x', woningId: 'weg', naam: 'wees.txt', blob: new Blob(['x']), gemaakt: '' });
+    await DB.weesfotoSweep();
+    return (await DB.extraVanWoning('weg')).length;
+  });
+  assert.equal(weesWeg, 0, 'wees-extra opgeruimd door de sweep');
+
   /* pv + zonneboiler */
   await page.click('#tab-algemeen details:nth-of-type(3) summary');
   await page.click('#btn-pv-voegtoe');          /* zonder Wp -> toast */
@@ -702,6 +737,16 @@ await scenario('geheugen', {
   await page.locator('#adres').blur();
   await page.waitForTimeout(700);
   assert.ok(await page.locator('#foutbalk:not([hidden])').count(), 'balk blijft in geheugenmodus');
+  /* extra bestand op het geheugen (mem-takken van putExtra/verwijderExtra/extraVanWoning) */
+  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.setInputFiles('#extrainput', FOTO);
+  await page.waitForSelector('#extralijst li:not(.leeg)');
+  antwoord({ doe: 'accept' });
+  await page.click('#extralijst li .del');
+  await page.waitForSelector('#extralijst .leeg');
+  await page.setInputFiles('#extrainput', []);
+  await page.setInputFiles('#extrainput', FOTO);   /* blijft staan voor de nood-zip */
+  await page.waitForSelector('#extralijst li:not(.leeg)');
   await page.click('#tabbar button[data-tab="fotos"]');
   await page.click('#ruimtechips button[data-v="gevels"]');   /* gevelfoto voor de ster */
   await page.setInputFiles('#dossierinput', FOTO);
@@ -750,7 +795,7 @@ await scenario('cleanstart', { context: { serviceWorkers: 'block' } }, async pag
         e => res({ versie: d.version, aantal: e.target.result, instellingen: d.objectStoreNames.contains('instellingen') });
     };
   }));
-  assert.equal(info.versie, 3, 'DB op v3');
+  assert.equal(info.versie, 4, 'DB op v4');
   assert.equal(info.aantal, 0, 'oud record gewist (clean start)');
   assert.ok(!info.instellingen, 'instellingen-store weg');
 });

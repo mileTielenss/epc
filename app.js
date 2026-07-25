@@ -651,6 +651,14 @@ async function importeerDossier(d, leden) {
     /* hoofdfoto (staat al als gevelfoto; hier enkel koppelen) */
     w.algemeen.hoofdFotoId = d.hoofdfoto ? await schrijfFoto(d.hoofdfoto, 'gevels') : null;
 
+    /* alles onder extra/ komt integraal terug als extra bestand (§9.4) */
+    for (const [pad, bytes] of leden) {
+      if (!pad.startsWith('extra/')) continue;
+      const naam = pad.slice('extra/'.length);
+      if (!naam) continue;
+      await DB.putExtra({ id: DB.nieuwId(), woningId: w.id, naam, blob: new Blob([bytes]), gemaakt: nu() });
+    }
+
     await DB.putWoning(w);
   } catch (e) {
     await DB.verwijderWoningMetFotos(w.id).catch(() => { });
@@ -834,6 +842,80 @@ $('#btn-locatie').addEventListener('click', () => {
 });
 bind('#datum', v => S.algemeen.datum = v);
 bind('#notities', v => S.algemeen.notities = v);
+
+/* ---------- extra bestanden (§7.3): reizen mee in extra/ van de zip ---------- */
+
+/* bestandsnaam die veilig als zip-pad kan dienen; dubbele naam -> " (2)" enz. */
+function schoonExtraNaam(naam, bestaande) {
+  const basis = String(naam).replace(/[\/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim() || 'bestand';
+  if (!bestaande.includes(basis)) return basis;
+  const punt = basis.lastIndexOf('.');
+  const stam = punt > 0 ? basis.slice(0, punt) : basis;
+  const ext = punt > 0 ? basis.slice(punt) : '';
+  let n = 2;
+  while (bestaande.includes(`${stam} (${n})${ext}`)) n++;
+  return `${stam} (${n})${ext}`;
+}
+
+function extraGrootte(b) {
+  return b >= 1024 * 1024 ? fmt(b / (1024 * 1024), 1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' kB';
+}
+
+async function renderExtra() {
+  const ul = $('#extralijst');
+  let lijst = [];
+  try { lijst = await DB.extraVanWoning(S.id); } catch (e) { /* lege lijst tonen */ }
+  lijst.sort((a, b) => (a.gemaakt || '').localeCompare(b.gemaakt || ''));
+  ul.innerHTML = '';
+  if (!lijst.length) {
+    ul.innerHTML = '<li class="leeg">Nog geen extra bestanden.</li>';
+    return;
+  }
+  lijst.forEach(x => {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<div class="info">
+         <div class="r1">${esc(x.naam)}</div>
+         <div class="r3">${esc(extraGrootte(x.blob.size))}</div>
+       </div>
+       <button type="button" class="del" data-id="${x.id}">×</button>`;
+    ul.appendChild(li);
+  });
+}
+
+$('#btn-extra-voegtoe').addEventListener('click', () => {
+  $('#extrainput').value = '';
+  $('#extrainput').click();
+});
+
+$('#extrainput').addEventListener('change', async () => {
+  if (!S) return;
+  const bestanden = [...$('#extrainput').files];
+  if (!bestanden.length) return;
+  try {
+    const bestaande = (await DB.extraVanWoning(S.id)).map(x => x.naam);
+    for (const f of bestanden) {
+      const naam = schoonExtraNaam(f.name, bestaande);
+      bestaande.push(naam);
+      await DB.putExtra({ id: DB.nieuwId(), woningId: S.id, naam, blob: f, gemaakt: nu() });
+    }
+    toast(bestanden.length === 1 ? 'Bestand toegevoegd' : `${bestanden.length} bestanden toegevoegd`);
+  } catch (e) {
+    toast('Bestand toevoegen mislukt');
+  }
+  renderExtra();
+});
+
+$('#extralijst').addEventListener('click', async e => {
+  const del = e.target.closest('.del');
+  if (!del || !S) return;
+  const lijst = await DB.extraVanWoning(S.id).catch(() => []);
+  const x = lijst.find(y => y.id === del.dataset.id);
+  if (!x) return;
+  if (!confirm(`"${x.naam}" verwijderen?`)) return;
+  await DB.verwijderExtra(x.id).catch(() => toast('Verwijderen mislukt'));
+  renderExtra();
+});
 
 /* roterende knop: elke tik schuift naar de volgende optie; '' toont een gedimde — */
 function cycleInit(sel, opties, labels, get, set) {
@@ -2118,7 +2200,7 @@ function verbergVoortgang() {
   $('#pdf-voortgang').hidden = true;
 }
 
-function bouwInWorker(woning, fotos, naam) {
+function bouwInWorker(woning, fotos, naam, extra) {
   return new Promise((res, rej) => {
     let w;
     try { w = new Worker('pdfworker.js'); } catch (e) { rej(e); return; }
@@ -2128,8 +2210,8 @@ function bouwInWorker(woning, fotos, naam) {
       if (ev.data.klaar) { w.terminate(); res(ev.data.klaar); }
     };
     w.onerror = e => { w.terminate(); rej(new Error(e.message || 'Worker-fout')); };
-    const buffers = [...fotos.values()].map(f => f.bytes.buffer);
-    w.postMessage({ woning: JSON.parse(JSON.stringify(woning)), fotos, versie: swVersie, naam }, buffers);
+    const buffers = [...fotos.values()].map(f => f.bytes.buffer).concat(extra.map(x => x.bytes.buffer));
+    w.postMessage({ woning: JSON.parse(JSON.stringify(woning)), fotos, versie: swVersie, naam, extra }, buffers);
   });
 }
 
@@ -2148,7 +2230,12 @@ async function bewaarPdf() {
       const buf = await rec.blob.arrayBuffer();
       fotos.set(id, { bytes: new Uint8Array(buf), breedte: rec.breedte, hoogte: rec.hoogte, groep: rec.groep, volgorde: rec.volgorde });
     }
-    const blob = await bouwInWorker(S, fotos, pdfNaam);
+    /* extra bestanden gaan integraal mee in extra/ (§9.3) */
+    const extra = [];
+    for (const x of await DB.extraVanWoning(S.id)) {
+      extra.push({ naam: x.naam, bytes: new Uint8Array(await x.blob.arrayBuffer()) });
+    }
+    const blob = await bouwInWorker(S, fotos, pdfNaam, extra);
     if (blob.size > 150 * 1024 * 1024 && !confirm('Groot dossier, delen kan mislukken. Toch doorgaan?')) {
       toast('Niet bewaard');
       return;
@@ -2275,6 +2362,7 @@ function syncAlles() {
   $('#adres').value = S.algemeen.adres;
   $('#datum').value = S.algemeen.datum;
   $('#notities').value = S.algemeen.notities;
+  renderExtra();
 
   /* ramen: formulier volgt draft, geen openstaande wijziging */
   stopBewerkRaam();

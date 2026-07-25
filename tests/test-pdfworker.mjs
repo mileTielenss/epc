@@ -26,9 +26,15 @@ const woning = {
   ramen: [], energie: { opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '' }
 };
 
-/* geslaagde bouw: voortgang + zip met pdf, hoofdfoto en json */
+/* geslaagde bouw: voortgang + zip met pdf, hoofdfoto, json en extra/ */
 woning.algemeen.hoofdFotoId = 'g';
-await self.onmessage({ data: { woning, fotos: new Map([['g', { bytes: rgb, breedte: 640, hoogte: 480, groep: 'gevels', volgorde: 1 }]]), versie: 'epc-vW', naam: 'workerstraat-1' } });
+await self.onmessage({
+  data: {
+    woning, fotos: new Map([['g', { bytes: rgb, breedte: 640, hoogte: 480, groep: 'gevels', volgorde: 1 }]]),
+    versie: 'epc-vW', naam: 'workerstraat-1',
+    extra: [{ naam: 'epb.txt', bytes: new TextEncoder().encode('aangifte') }]
+  }
+});
 assert.ok(berichten.some(m => m.voortgang !== undefined), 'voortgang gemeld');
 const klaar = berichten.find(m => m.klaar);
 assert.ok(klaar && klaar.klaar.size > 1000, 'klaar met Blob');
@@ -37,6 +43,10 @@ const zipBytes = new Uint8Array(await klaar.klaar.arrayBuffer());
 assert.deepEqual([...zipBytes.slice(0, 4)], [0x50, 0x4B, 0x03, 0x04], 'zip-magic PK');
 const zipTekst = Buffer.from(zipBytes).toString('latin1');
 assert.ok(zipTekst.includes('workerstraat-1.pdf') && zipTekst.includes('hoofdfoto.jpg') && zipTekst.includes('woning.json') && zipTekst.includes('fotos/0001.jpg'), 'pdf, hoofdfoto, json en fotos/ in de zip');
+assert.ok(zipTekst.includes('extra/epb.txt'), 'extra bestand in extra/');
+const terugLeden = await globalThis.MAAKZIP.leesZip(zipBytes);
+assert.ok(!terugLeden.some(l => l.naam === 'extra/'), 'map-lid extra/ zelf overgeslagen door leesZip');
+assert.equal(new TextDecoder().decode(terugLeden.find(l => l.naam === 'extra/epb.txt').bytes), 'aangifte', 'extra bestand ongeschonden');
 
 /* zonder hoofdfoto: lid ontbreekt */
 berichten.length = 0;

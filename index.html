@@ -137,6 +137,14 @@
   </label>
 </details>
 
+<details class="sectie">
+  <summary>Extra bestanden</summary>
+  <p class="hint">Deze bestanden reizen mee in de map <b>extra/</b> van de dossier-zip
+    (bv. een epb-aangifte of gescande factuur) en komen bij een import gewoon terug.</p>
+  <ul id="extralijst" class="lijst"></ul>
+  <button type="button" class="btn sec" id="btn-extra-voegtoe">+ Bestand toevoegen</button>
+</details>
+
 </section>
 
 <!-- ======================= TAB 2: DETAILS (per ruimte) ======================= -->
@@ -330,6 +338,7 @@
 <input type="file" id="fotoinput" accept="image/*" capture="environment" hidden>
 <input type="file" id="dossierinput" accept="image/*" multiple hidden>
 <input type="file" id="zipinput" accept=".zip,application/zip" hidden>
+<input type="file" id="extrainput" multiple hidden>
 <div id="lightbox" hidden><img alt="foto vergroot"></div>
 
 <script src="maakpdf.js"></script>
