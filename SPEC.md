@@ -14,8 +14,8 @@ per soort (§7.1, §7.3, §7.4, §7.7).
   automatisaties (de json bevat geen beeldbytes, wel verwijzingen naar `fotos/`).
 - Diezelfde zip kan via "Importeer dossier" op de woningenlijst integraal terug
   ingeladen worden — ook jaren later (§9.4).
-- Na oplevering wordt de woning verwijderd. Verwijderen kan pas ná een geslaagd
-  dossier.
+- Na oplevering wordt de woning verwijderd. Mét bewaard dossier volstaat een
+  bevestiging; zonder bewaard dossier geldt een typ-slot (§6).
 - Invoer in de VEKA-software gebeurt manueel of via latere automatisatie op
   basis van `woning.json`; de PDF blijft het leesbare dossier.
 - Eén gebruiker: geen accounts, geen instellingen, geen hulpteksten, geen updateknop.
@@ -98,7 +98,8 @@ upgrade staan: v3 → v4 voegt enkel de `extra`-store toe.
 woning = {
   id: base36-timestamp + '-' + random5,
   soort: 'woning' | 'gemene-delen',   // gekozen bij aanmaak, daarna vast (§7.1)
-  nummer: geheel getal,        // dossiernummer (§7.1), app-zijde; niet in pdf/json
+  nummer: geheel getal | null, // dossiernummer (§7.1): null tot het eerste
+                               // "Bewaar dossier"; app-zijde, niet in pdf/json
   gemaakt, gewijzigd,          // ISO
   pdfBewaardOp: ISO | null,    // enige statusbron
   algemeen: { adres, datum (YYYY-MM-DD, default vandaag), notities,
@@ -169,9 +170,12 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   echt faalt (`QuotaExceededError`).
 - **DB open faalt**: niets wissen. Rode balk + read-only geheugenmodus waarin enkel
   "Bewaar PDF" nog werkt.
-- **Verwijderen**: uitgeschakeld zolang `pdfBewaardOp === null` (knop toont "Bewaar
-  eerst het dossier"; de veldnaam blijft historisch `pdfBewaardOp`). Anders confirm met datum en uur. Wist woning + alle `fotos` én `extra`-bestanden
-  met die `woningId` in één transactie.
+- **Verwijderen**: kan **altijd**, ook zonder bewaard dossier. Mét bewaard
+  dossier (`pdfBewaardOp` gezet): `confirm()` met datum en uur. **Zonder**:
+  extra slot tegen ongelukken — een `prompt()` waarin letterlijk **VERWIJDER**
+  getypt moet worden (hoofdletterongevoelig, gespaties getrimd); iets anders →
+  toast "Niet verwijderd", annuleren → niets. Wist woning + alle `fotos` én
+  `extra`-bestanden met die `woningId` in één transactie.
 - `pdfBewaardOp` wordt enkel gezet nadat `share()` of de download **resolved** heeft.
   `AbortError` zet niets.
 ## 7. Schermen
@@ -191,21 +195,25 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   (klein, grijs, gecentreerd): "Versie epc-vN", aangevuld met "— laatste versie"
   of "— update beschikbaar" zodra de versiecheck (§9.5) een antwoord heeft;
   zonder check (offline) blijft alleen het versienummer staan.
-- **Dossiernummer (per woning, app-zijde).** Elk dossier heeft **altijd** een eigen
-  `nummer` — er bestaat geen woning zonder (geen fallback-logica; de app hoeft
-  nooit backwards compatibel te zijn met records van vóór dit veld). Een **nieuwe
-  woning én een import** krijgen automatisch het volgende vrije nummer uit een
-  globale teller (`localStorage['epc-volgindex']`), die daarbij met 1 ophoogt.
-  Verwijderen raakt de teller niet: nummers worden nooit hergebruikt. Het nummer
-  verschijnt in het overzicht en als prefix van de zip-bestandsnaam (§9.3). Het
-  staat **niet** in de pdf of `woning.json`, zodat de zip-inhoud
-  nummeronafhankelijk en reproduceerbaar blijft.
+- **Dossiernummer (per woning, app-zijde).** Het `nummer` wordt **pas toegekend
+  bij de eerste bewaarpoging** ("Bewaar dossier", §9.3) — zo volgt de nummering
+  de volgorde van afgewerkte dossiers, niet van aangemaakte. Tot dan is het
+  `null` en toont lijst/titel gewoon het adres zonder prefix. Een **import**
+  krijgt het nummer wél meteen (dat dossier wás al bewaard). De bron is een
+  globale teller (`localStorage['epc-volgindex']`), die bij elke toekenning met
+  1 ophoogt. Verwijderen raakt de teller niet: nummers worden nooit
+  hergebruikt. Het nummer verschijnt in het overzicht en als prefix van de
+  zip-bestandsnaam (§9.3); het staat **niet** in de pdf of `woning.json`, zodat
+  de zip-inhoud nummeronafhankelijk en reproduceerbaar blijft. Mislukt de
+  bewaarpoging na de toekenning, dan behoudt het dossier zijn nummer voor de
+  volgende poging.
 - **Verstopt: nummer corrigeren.** Klopt de teller ooit niet, dan corrigeer je het
   nummer met een **lange druk** (± 0,8 s) op de **woningnaam in de lijst**:
   `prompt()` "Dossiernummer van deze woning:" met het huidige nummer voorin. Een
   geheel getal > 0 wordt het nieuwe `nummer` en zet de globale teller op
   nummer+1 (zodat de volgende woning verder telt); anders toast "Ongeldig
-  nummer". De klik die op het loslaten volgt opent de woning **niet**. Mislukt
+  nummer". Bij een dossier zonder nummer staat de tellerstand als voorstel in
+  de prompt. De klik die op het loslaten volgt opent de woning **niet**. Mislukt
   het bewaren → toast "Nummer aanpassen mislukt".
 ### 7.2 Header (editor)
 - Groene sticky balk: terugpijl `‹`, titel `<nummer>. <adres>` — bij gemene
@@ -356,12 +364,14 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   Bij een **woning**: ✅/❌ voor (1) elke ruimte minstens één foto (bij ❌ de
   namen), (2) verwarming ingevuld (≥1 opwekker of toestel), (3) hoofdfoto
   gekozen. Bij **gemene delen** (niets is verplicht in het protocol, dus enkel
-  praktische geheugensteuntjes): (1) ramen & deuren ingegeven (≥1 element),
-  (2) verlichting ingevuld (≥1 regel), (3) hoofdfoto gekozen.
+  praktische geheugensteuntjes): (1) ramen & deuren ingegeven (≥1 gemeen
+  element), (2) privatieve ramen ingegeven (≥1 privatief element — de
+  oppervlakte-aftrek van de gevels), (3) verlichting ingevuld (≥1 regel),
+  (4) hoofdfoto gekozen.
 - **"💾 Bewaar dossier"** met voortgangsbalk uit de worker.
 - Grijze regel "Dossier bewaard op <datum en uur>" indien `pdfBewaardOp`.
 - "Woning sluiten" (navigeert terug, wijzigt niets).
-- "Woning verwijderen" (rood, gedrag volgens §6).
+- "Woning verwijderen" (rood, altijd actief, gedrag volgens §6).
 ## 8. Foto-pijplijn
 Alles wordt via canvas hergecodeerd naar JPEG en als Blob opgeslagen. Originele bytes
 worden nooit hergebruikt.

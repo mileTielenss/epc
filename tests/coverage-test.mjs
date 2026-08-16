@@ -100,8 +100,8 @@ await scenario('hoofdflow', {
 
   await page.click('#btn-nieuwewoning');
   await page.waitForSelector('#app:not([hidden])');
-  assert.equal(await page.evaluate(() => S.nummer), 1, 'nieuwe woning krijgt nummer 1');
-  assert.equal(await page.evaluate(() => localStorage.getItem('epc-volgindex')), '2', 'teller op 2');
+  assert.equal(await page.evaluate(() => S.nummer), null, 'geen nummer vóór het eerste bewaren');
+  assert.equal(await page.evaluate(() => localStorage.getItem('epc-volgindex')), null, 'teller nog onaangeroerd');
 
   /* lange druk op de woningnaam in de lijst corrigeert het nummer (§7.1) */
   await page.click('#btn-terug');
@@ -120,7 +120,7 @@ await scenario('hoofdflow', {
   await page.mouse.down();
   await page.waitForTimeout(900);
   await page.mouse.up();
-  assert.ok((await page.textContent('#woninglijst .r1')).startsWith('1. '), 'ongeldig nummer genegeerd');
+  assert.ok(!/^\d+\./.test(await page.textContent('#woninglijst .r1')), 'ongeldig nummer genegeerd (nog steeds geen prefix)');
   /* geannuleerd -> geen wijziging */
   antwoord({ doe: 'dismiss' });
   await rij.hover();
@@ -551,11 +551,24 @@ await scenario('gemenedelen', { context: { serviceWorkers: 'block' } }, async pa
   ]);
   const gdPad = join(HIER, 'uitvoer', 'gd-dekking.zip');
   await gdDl.saveAs(gdPad);
+  assert.equal(await page.evaluate(() => S.nummer), 1, 'nummer toegekend bij het eerste bewaren');
+  assert.equal(await page.evaluate(() => localStorage.getItem('epc-volgindex')), '2', 'teller volgt na de toekenning');
   await page.click('#btn-terug');
   await page.waitForSelector('#view-lijst:not([hidden])');
   await page.setInputFiles('#zipinput', gdPad);
   await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
   assert.ok((await page.textContent('#verl-totaal')).includes('lichtpunt'), 'verlichting terug na import');
+
+  /* onbewaard dossier verwijderen: typ-slot — geannuleerd, fout woord, dan goed */
+  await page.click('#tabbar button[data-tab="afronden"]');
+  antwoord({ doe: 'dismiss' });
+  await page.click('#btn-verwijder-woning');
+  antwoord({ doe: 'accept', tekst: 'oeps' });
+  await page.click('#btn-verwijder-woning');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Niet verwijderd'));
+  antwoord({ doe: 'accept', tekst: ' verwijder ' });
+  await page.click('#btn-verwijder-woning');
+  await page.waitForSelector('#view-lijst:not([hidden])');
 });
 
 await scenario('delen', {

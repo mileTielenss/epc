@@ -50,7 +50,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.waitForSelector('#app:not([hidden])');
   await page.fill('#adres', 'Teststraat 12, Ranst');
   await page.locator('#adres').blur();
-  check('titel volgt adres met nummerprefix', (await page.textContent('#titel')) === '1. Teststraat 12, Ranst');
+  check('titel zonder nummer vóór het eerste bewaren', (await page.textContent('#titel')) === 'Teststraat 12, Ranst');
 
   /* verstopt knopje (§7.1): lange druk op de woningnaam in de lijst corrigeert
      het dossiernummer; de klik die volgt opent de woning niet */
@@ -75,6 +75,8 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#woninglijst li.woning .info');
   await page.waitForSelector('#app:not([hidden])');
   check('gewone tik opent de woning weer', (await page.textContent('#titel')) === '1. Teststraat 12, Ranst');
+  /* het nummer is hier al handmatig gezet via de lange druk; een vers dossier
+     zou het pas bij "Bewaar dossier" krijgen (§7.1) */
 
   /* extra bestanden (§7.3): toevoegen via de +, reizen mee in extra/ (§9.3) */
   writeFileSync(`${MAP}/epb-aangifte.txt`, 'epb-aangifte inhoud');
@@ -222,7 +224,12 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('3 controlepunten', await page.locator('#checklijst li').count() === 3);
   check('hoofdfoto-check ok', (await page.locator('#checklijst li').nth(2).textContent()).includes('✅'));
   const delKnop = page.locator('#btn-verwijder-woning');
-  check('verwijderen geblokkeerd zonder dossier', await delKnop.isDisabled() && (await delKnop.textContent()) === 'Bewaar eerst het dossier');
+  check('verwijderen kan ook vóór het bewaren', !(await delKnop.isDisabled()));
+  promptAntwoord = 'fout woord';
+  await delKnop.click();
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Niet verwijderd'));
+  check('typ-slot houdt een ongelukje tegen', await page.locator('#app:not([hidden])').count() === 1);
+  promptAntwoord = '';
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 30000 }),
@@ -286,7 +293,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('hoofdfoto terug na import', await page.locator('#dossiergrid .ster.hoofd').count() === 1);
   await page.click('#tabbar button[data-tab="afronden"]');
   check('geïmporteerde woning is een nieuw open dossier',
-    (await page.locator('#btn-verwijder-woning').textContent()) === 'Bewaar eerst het dossier');
+    await page.locator('#pdf-bewaard').isHidden());
   await page.click('#tabbar button[data-tab="algemeen"]');
   await page.click('#tab-algemeen details:nth-of-type(6) summary');
   check('extra bestand terug na import', (await page.textContent('#extralijst .r1')) === 'epb-aangifte.txt');
@@ -509,9 +516,10 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   /* afronden: GD-controlelijst */
   await page.click('#tabbar button[data-tab="afronden"]');
   const checks = await page.locator('#checklijst li').allTextContents();
-  check('GD-checklist: ramen ingegeven ✅', checks[0].includes('✅') && checks[0].includes('Ramen & deuren'));
-  check('GD-checklist: verlichting ✅', checks[1].includes('✅') && checks[1].includes('Verlichting'));
-  check('GD-checklist: hoofdfoto ❌', checks[2].includes('❌') && checks[2].includes('Hoofdfoto'));
+  check('GD-checklist: gemene ramen ✅', checks[0].includes('✅') && checks[0].includes('Ramen & deuren'));
+  check('GD-checklist: privatieve ramen ✅', checks[1].includes('✅') && checks[1].includes('Privatieve ramen'));
+  check('GD-checklist: verlichting ✅', checks[2].includes('✅') && checks[2].includes('Verlichting'));
+  check('GD-checklist: hoofdfoto ❌', checks[3].includes('❌') && checks[3].includes('Hoofdfoto'));
 
   /* export: json bevat soort, privatief en verlichting */
   const [gdDownload] = await Promise.all([
@@ -540,6 +548,16 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#btn-terug');
   await page.waitForSelector('#view-lijst:not([hidden])');
   check('lijst toont "GD " voor het adres bij gemene delen', /\d+\. GD Residentie Zonnedauw/.test(await page.textContent('#woninglijst')));
+
+  /* het geïmporteerde (nog niet bewaarde) dossier weg via het typ-slot */
+  await page.click('#woninglijst li.woning .info');
+  await page.waitForSelector('#app:not([hidden])');
+  await page.click('#tabbar button[data-tab="afronden"]');
+  promptAntwoord = ' verwijder ';
+  await page.click('#btn-verwijder-woning');
+  await page.waitForSelector('#view-lijst:not([hidden])');
+  promptAntwoord = '';
+  check('typ-slot aanvaardt VERWIJDER (hoofdletterongevoelig)', await page.locator('#woninglijst li.woning').count() === 1);
   await ctx.close();
 }
 

@@ -166,7 +166,7 @@ function leegWoning() {
   return {
     id: DB.nieuwId(),
     soort: 'woning',
-    nummer: 0,
+    nummer: null,   /* wordt pas toegekend bij het eerste "Bewaar dossier" (§7.1) */
     gemaakt: nu(),
     gewijzigd: nu(),
     pdfBewaardOp: null,
@@ -492,7 +492,7 @@ $('#woninglijst').addEventListener('click', e => {
       try {
         const w = await DB.getWoning(li.dataset.id);
         if (!w) return;
-        const inv = prompt('Dossiernummer van deze woning:', String(w.nummer));
+        const inv = prompt('Dossiernummer van deze woning:', String(w.nummer || volgendeIndex()));
         if (inv === null) return;
         const n = parseInt(inv, 10);
         if (!Number.isFinite(n) || n <= 0) { toast('Ongeldig nummer'); return; }
@@ -514,8 +514,6 @@ async function startNieuw(soort) {
   S.soort = soort;
   /* gemene delen starten met enkel Hal (§5); ruimtes toevoegen blijft kunnen */
   if (soort === 'gemene-delen') S.ruimtes = [nieuweRuimte('Hal')];
-  S.nummer = volgendeIndex();          /* automatisch het volgende nummer … */
-  zetVolgendeIndex(S.nummer + 1);      /* … en de teller meteen ophogen */
   volgTeller = 0;
   draft = leegDraft();
   draftOpwek = leegDraftOpwek();
@@ -2270,9 +2268,10 @@ function renderAfronden() {
   const klaar = !!S.pdfBewaardOp;
   $('#pdf-bewaard').hidden = !klaar;
   if (klaar) $('#pdf-bewaard').textContent = `Dossier bewaard op ${datumUur(S.pdfBewaardOp)}`;
+  /* verwijderen kan altijd (§6); zonder bewaard dossier geldt het typ-slot */
   const del = $('#btn-verwijder-woning');
-  del.disabled = !klaar;
-  del.textContent = klaar ? 'Woning verwijderen' : 'Bewaar eerst het dossier';
+  del.disabled = false;
+  del.textContent = 'Woning verwijderen';
 }
 
 /* controlelijstje: informatief, nooit blokkerend, vers berekend bij openen */
@@ -2283,7 +2282,8 @@ function renderChecks() {
   /* gemene delen: niets is verplicht in het protocol, dus enkel praktische
      geheugensteuntjes (§7.7) — geen per-ruimte- of verwarmingscheck */
   const items = isGD() ? [
-    { ok: S.ramen.length > 0, tekst: 'Ramen & deuren ingegeven', detail: 'nog geen enkel element' },
+    { ok: S.ramen.some(r => !r.privatief), tekst: 'Ramen & deuren ingegeven', detail: 'nog geen gemeen element' },
+    { ok: S.ramen.some(r => r.privatief), tekst: 'Privatieve ramen ingegeven', detail: 'oppervlakte-aftrek van de gevels' },
     { ok: S.energie.verlichting.length > 0, tekst: 'Verlichting ingevuld', detail: 'lichtpunten tellen (tab Algemeen)' },
     { ok: !!S.algemeen.hoofdFotoId, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
   ] : [
@@ -2323,7 +2323,7 @@ function zetVolgendeIndex(n) {
    Het nummer is puur app-zijde (overzicht + zip-naam) — het staat NIET in de
    pdf of json, zodat de zip-inhoud nummeronafhankelijk en reproduceerbaar blijft. */
 function nummerPrefix(w) {
-  return w.nummer + '. ';
+  return w.nummer ? w.nummer + '. ' : ''; /* vóór het eerste bewaren is er geen nummer */
 }
 /* volledige naamaanhef: "2. Adres" voor een woning, "2. GD Adres" voor gemene
    delen — zelfde nummering, enkel het GD-voorvoegsel, zodat beide soorten in
@@ -2372,6 +2372,14 @@ async function bewaarPdf() {
   toast('Dossier maken…');
   zetVoortgang(0);
   try {
+    /* het dossiernummer wordt pas bij de eerste bewaarpoging toegekend (§7.1):
+       zo volgt de nummering de volgorde van afgewerkte dossiers */
+    if (!S.nummer) {
+      S.nummer = volgendeIndex();
+      zetVolgendeIndex(S.nummer + 1);
+      zetTitel();
+      wijzig();
+    }
     /* pdf ín de zip: nummervrij (adres); de zip zelf: met nummerprefix */
     const pdfNaam = schoonAdres(S);
     const zipNaam = zipBasisnaam(S) + '.zip';
@@ -2468,8 +2476,15 @@ function downloadBlob(naam, blob) {
 /* ---------- woning verwijderen: pas na een geslaagde PDF (§6) ---------- */
 
 $('#btn-verwijder-woning').addEventListener('click', async () => {
-  if (!S || !S.pdfBewaardOp) return;
-  if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?\nPDF bewaard op ${datumUur(S.pdfBewaardOp)}.`)) return;
+  if (!S) return;
+  if (S.pdfBewaardOp) {
+    if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?\nPDF bewaard op ${datumUur(S.pdfBewaardOp)}.`)) return;
+  } else {
+    /* nog niet bewaard: extra slot tegen een ongelukje — letterlijk VERWIJDER typen (§6) */
+    const inv = prompt(`"${S.algemeen.adres || 'Zonder adres'}" is nog NIET als dossier bewaard.\nTyp VERWIJDER om het toch definitief te verwijderen:`, '');
+    if (inv === null) return;
+    if (inv.trim().toUpperCase() !== 'VERWIJDER') { toast('Niet verwijderd'); return; }
+  }
   commitUndo();
   const w = S;
   S = null;
