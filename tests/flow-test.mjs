@@ -78,7 +78,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
 
   /* extra bestanden (§7.3): toevoegen via de +, reizen mee in extra/ (§9.3) */
   writeFileSync(`${MAP}/epb-aangifte.txt`, 'epb-aangifte inhoud');
-  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.click('#tab-algemeen details:nth-of-type(6) summary');
   check('extra-lijst start leeg', await page.locator('#extralijst .leeg').count() === 1);
   await page.setInputFiles('#extrainput', `${MAP}/epb-aangifte.txt`);
   await page.waitForSelector('#extralijst li:not(.leeg)');
@@ -288,7 +288,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('geïmporteerde woning is een nieuw open dossier',
     (await page.locator('#btn-verwijder-woning').textContent()) === 'Bewaar eerst het dossier');
   await page.click('#tabbar button[data-tab="algemeen"]');
-  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.click('#tab-algemeen details:nth-of-type(6) summary');
   check('extra bestand terug na import', (await page.textContent('#extralijst .r1')) === 'epb-aangifte.txt');
 
   /* herzipt dossier (§9.4): uitgepakt, extra bestand erbij (los én in extra/),
@@ -304,7 +304,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#tabbar button[data-tab="details"]');
   check('ramen ook terug uit het herzipte dossier', await page.locator('#ramenlijst li').count() === 2);
   await page.click('#tabbar button[data-tab="algemeen"]');
-  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.click('#tab-algemeen details:nth-of-type(6) summary');
   check('zelf in extra/ gedropt bestand komt mee bij import', await page.locator('#extralijst li').count() === 2);
 
   /* Finder-stijl (§9.4): macOS zipt de mápp mee (prefix "dossier/") en voegt
@@ -442,6 +442,93 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.goto(BASIS);
   await page.waitForSelector('#woninglijst li.woning');
   check('v3-woning overleeft de upgrade naar v4', (await page.textContent('#woninglijst .r1')) === '12. Migratiestraat 3');
+  await ctx.close();
+}
+
+/* ================= flow 5: gemene delen — Hal, privatief raam, verlichting, rondreis ================= */
+{
+  console.log('flow 5: gemene delen');
+  const { ctx, page } = await nieuwePagina();
+  await page.goto(BASIS);
+  await page.click('#btn-nieuwgd');
+  await page.waitForSelector('#app:not([hidden])');
+  await page.fill('#adres', 'Residentie Zonnedauw, Geel');
+  await page.locator('#adres').blur();
+
+  /* enkel Hal als startruimte */
+  await page.click('#tabbar button[data-tab="details"]');
+  check('gemene delen starten met enkel Hal',
+    (await page.locator('#ruimtechips button:not(.plus)').allTextContents()).join(',') === 'Hal');
+
+  /* verlichting (enkel bij GD zichtbaar) */
+  await page.click('#tabbar button[data-tab="algemeen"]');
+  check('verlichting-accordeon zichtbaar bij GD', await page.locator('#sec-verlichting').isVisible());
+  await page.click('#sec-verlichting summary');
+  await page.click('#cy-lamptype');                       /* led -> tl */
+  await page.fill('#verl-aantal', '5');
+  await page.fill('#verl-watt', '10');
+  await page.locator('#verl-watt').blur();
+  await page.click('#btn-verl-voegtoe');
+  await page.click('#cy-lamptype');                       /* tl -> spaarlamp */
+  await page.click('#cy-lamptype');                       /* spaarlamp -> halogeen */
+  await page.fill('#verl-aantal', '2');
+  await page.locator('#verl-aantal').blur();
+  await page.click('#btn-verl-voegtoe');
+  check('twee verlichtingsregels', await page.locator('#verllijst li').count() === 2);
+  check('totaal lichtpunten en vermogen', (await page.textContent('#verl-totaal')).includes('7 lichtpunten') &&
+    (await page.textContent('#verl-totaal')).includes('50 W'));
+
+  /* ramen: één gemeen, één privatief (enkel oppervlakte) */
+  await page.click('#tabbar button[data-tab="details"]');
+  await page.click('#sec-ramen summary');
+  await page.fill('#breedte', '1');
+  await page.fill('#hoogte', '2,2');
+  await page.locator('#hoogte').blur();
+  await page.click('#btn-voegtoe');
+  check('privatief-cycle zichtbaar bij GD', await page.locator('#cy-privatief').isVisible());
+  await page.click('#cy-privatief');                      /* gemeen -> privatief */
+  check('privatief verbergt beglazing/kader/rolluik',
+    await page.locator('#cy-beglazing').isHidden() && await page.locator('#cy-kader').isHidden() && await page.locator('#cy-rolluik').isHidden());
+  await page.fill('#breedte', '1,2');
+  await page.fill('#hoogte', '1,5');
+  await page.fill('#aantal', '6');
+  await page.locator('#aantal').blur();
+  await page.click('#btn-voegtoe');
+  check('privatief element met tag in de lijst', (await page.textContent('#ramenlijst')).includes('privatief'));
+
+  /* afronden: GD-controlelijst */
+  await page.click('#tabbar button[data-tab="afronden"]');
+  const checks = await page.locator('#checklijst li').allTextContents();
+  check('GD-checklist: ramen ingegeven ✅', checks[0].includes('✅') && checks[0].includes('Ramen & deuren'));
+  check('GD-checklist: verlichting ✅', checks[1].includes('✅') && checks[1].includes('Verlichting'));
+  check('GD-checklist: hoofdfoto ❌', checks[2].includes('❌') && checks[2].includes('Hoofdfoto'));
+
+  /* export: json bevat soort, privatief en verlichting */
+  const [gdDownload] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30000 }),
+    page.click('#btn-print')
+  ]);
+  const gdZip = `${MAP}/gdtest.zip`;
+  await gdDownload.saveAs(gdZip);
+  execSync(`rm -rf ${MAP}/gdzip && mkdir -p ${MAP}/gdzip && unzip -o -q "${gdZip}" -d ${MAP}/gdzip`);
+  const gdJson = JSON.parse(readFileSync(`${MAP}/gdzip/woning.json`, 'utf8')).woning;
+  check('json: soort gemene-delen', gdJson.soort === 'gemene-delen');
+  const gdEls = gdJson.ruimtes.find(r => r.naam === 'Hal').elementen;
+  const priv = gdEls.find(e => e.privatief);
+  check('json: privatief element enkel oppervlakte', priv && priv.aantal === 6 && !('kader' in priv) && !('beglazing' in priv) && !('rolluik' in priv));
+  check('json: verlichting met wattPerLamp', gdJson.energie.verlichting.length === 2 && gdJson.energie.verlichting[0].wattPerLamp === 10 && !('wattPerLamp' in gdJson.energie.verlichting[1]));
+
+  /* rondreis: import geeft opnieuw een gemene-delen-dossier */
+  await page.click('#btn-terug');
+  await page.waitForSelector('#view-lijst:not([hidden])');
+  await page.setInputFiles('#zipinput', gdZip);
+  await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
+  check('import: verlichting terug', (await page.textContent('#verl-totaal')).includes('7 lichtpunten'));
+  await page.click('#tabbar button[data-tab="details"]');
+  check('import: privatief element terug', (await page.textContent('#ramenlijst')).includes('privatief'));
+  await page.click('#btn-terug');
+  await page.waitForSelector('#view-lijst:not([hidden])');
+  check('lijst toont 🏢 bij gemene delen', (await page.textContent('#woninglijst')).includes('\u{1F3E2}'));
   await ctx.close();
 }
 

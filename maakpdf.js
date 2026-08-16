@@ -154,11 +154,12 @@
   const GLAS_ORDE = { enkel: 0, dubbel: 1, 'hr-dubbel': 2, drievoudig: 3, paneel: 4 };
   const KADER_ORDE = { pvc: 0, alu: 1, hout: 2 };
 
-  /* type → gevel → beglazing → kader → aanmaakvolgorde; identiek aan
-     sorteerElementen in bouwPdf (jsonvorm), hou beide in de pas */
+  /* gemeen vóór privatief → type → gevel → beglazing → kader → aanmaakvolgorde;
+     identiek aan sorteerElementen in bouwPdf (jsonvorm), hou beide in de pas */
   function sorteerRamen(ramen) {
     return ramen.map((r, i) => ({ r, i }))
       .sort((a, b) =>
+        (a.r.privatief ? 1 : 0) - (b.r.privatief ? 1 : 0) ||
         (TYPE_ORDE[a.r.element] ?? 9) - (TYPE_ORDE[b.r.element] ?? 9) ||
         (GEVEL_ORDE[a.r.gevel] ?? 9) - (GEVEL_ORDE[b.r.gevel] ?? 9) ||
         (GLAS_ORDE[a.r.beglazing] ?? 9) - (GLAS_ORDE[b.r.beglazing] ?? 9) ||
@@ -336,6 +337,7 @@
     /* zelfde orde als sorteerRamen, maar op de jsonvorm (type/beglazing) */
     function sorteerElementen(els) {
       return els.map((e, i) => ({ e, i })).sort((a, b) =>
+        (a.e.privatief ? 1 : 0) - (b.e.privatief ? 1 : 0) ||
         (TYPE_ORDE[a.e.type] ?? 9) - (TYPE_ORDE[b.e.type] ?? 9) ||
         (GEVEL_ORDE[a.e.gevel] ?? 9) - (GEVEL_ORDE[b.e.gevel] ?? 9) ||
         (GLAS_ORDE[a.e.beglazing] ?? 9) - (GLAS_ORDE[b.e.beglazing] ?? 9) ||
@@ -451,7 +453,7 @@
       doc.foto(p, reg.naam, M + binnenB() - bw + (bw - bb) / 2, M, bb, bh);
       kopOnder = M + bh;
     }
-    doc.tekst(p, M, y, 'EPC Plaatsbezoek', 9, false, true);
+    doc.tekst(p, M, y, w.soort === 'gemene-delen' ? 'EPC Plaatsbezoek — gemene delen' : 'EPC Plaatsbezoek', 9, false, true);
     y += 14;
     pdfWrap(w.adres || 'Adres onbekend', 15, true, binnenB() - 150).forEach(r => {
       doc.tekst(p, M, y, r, 15, true);
@@ -469,10 +471,12 @@
          de totaalrij telt wél aantal × m² op. B en H staan achteraan als naslag.
          De nummering loopt door over de tabellen en matcht de app (§7.4). */
       const MEERVOUD = { deur: 'Deuren', raam: 'Ramen', dakraam: 'Dakramen' };
-      const typesHier = [...new Set(elementen.map(el => el.type))]; /* al op typevolgorde */
+      const gemene = elementen.filter(el => !el.privatief);
+      const privatieve = elementen.filter(el => el.privatief);
+      const typesHier = [...new Set(gemene.map(el => el.type))]; /* al op typevolgorde */
       let nr = 0;
       typesHier.forEach(t => {
-        const groep = elementen.filter(el => el.type === t);
+        const groep = gemene.filter(el => el.type === t);
         const grM2 = groep.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
         const grAantal = groep.reduce((a, el) => a + aant(el), 0);
         checkPagina(30);
@@ -496,13 +500,38 @@
         );
       });
       if (typesHier.length > 1) {
-        const totM2 = elementen.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
-        const totAantal = elementen.reduce((a, el) => a + aant(el), 0);
+        const totM2 = gemene.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
+        const totAantal = gemene.reduce((a, el) => a + aant(el), 0);
         kvRegel('Alle elementen samen', `${totAantal} stuks · ${fmt(totM2)} m²`);
+      }
+      /* privatieve elementen (gemene delen, §7.4): één tabel, enkel oppervlakte;
+         daaronder per gevel het aftrekgetal voor de VEKA-invoer */
+      if (privatieve.length) {
+        checkPagina(30);
+        y += 4;
+        doc.tekst(p, M, y, 'Privatieve vensters (enkel oppervlakte)', 9, true);
+        y += 13;
+        const privM2 = privatieve.reduce((a, el) => a + el.breedteM * el.hoogteM * aant(el), 0);
+        const privAantal = privatieve.reduce((a, el) => a + aant(el), 0);
+        tabel(
+          [{ kop: '#', b: 16 }, { kop: 'Type', b: 42 }, { kop: 'Gevel', b: 36 },
+          { kop: 'Aant.', b: 26, uitlijn: 'r' }, { kop: 'm²', b: 32, uitlijn: 'r' },
+          { kop: 'B (m)', b: 32, uitlijn: 'r' }, { kop: 'H (m)', b: 32, uitlijn: 'r' }],
+          privatieve.map(el => [++nr, ELEMENT_NAMEN[el.type] || el.type, GEVEL_NAMEN[el.gevel] || '',
+          aant(el), fmt(el.breedteM * el.hoogteM), fmt(el.breedteM), fmt(el.hoogteM)]),
+          ['Totaal', '', '', privAantal, fmt(privM2), '', '']
+        );
+        const perGevel = new Map();
+        privatieve.forEach(el => {
+          perGevel.set(el.gevel, (perGevel.get(el.gevel) || 0) + el.breedteM * el.hoogteM * aant(el));
+        });
+        [...perGevel.entries()]
+          .sort((a, b) => (GEVEL_ORDE[a[0]] ?? 9) - (GEVEL_ORDE[b[0]] ?? 9))
+          .forEach(([g, m2]) => kvRegel(`Privatief ${(GEVEL_NAMEN[g] || g).toLowerCase()}`, `${fmt(m2)} m²`));
       }
       fotoRaster(elementen.filter(el => fotoBytes(el.foto)).map(el => ({
         pad: el.foto,
-        cap: `${ELEMENT_NAMEN[el.type] || el.type} ${(GEVEL_NAMEN[el.gevel] || '').toLowerCase()}${el.ruimte ? ' – ' + el.ruimte : ''}, ${el.type === 'dakraam' ? 'kenplaatje' : 'afstandhouder'}`
+        cap: `${ELEMENT_NAMEN[el.type] || el.type} ${(GEVEL_NAMEN[el.gevel] || '').toLowerCase()}${el.ruimte ? ' – ' + el.ruimte : ''}, ${el.privatief ? 'privatief' : el.type === 'dakraam' ? 'kenplaatje' : 'afstandhouder'}`
       })), 4, 82, true);
     } else {
       kvRegel('Geen elementen opgemeten.', '');
@@ -535,6 +564,24 @@
       fotoRaster(opwekFotos, 4, 82, true);
     } else {
       kvRegel('Geen opwekkers genoteerd.', '');
+    }
+    /* verlichting van de gemene delen (§9.2): lichtpunten per lamptype */
+    const verlichting = E.verlichting || [];
+    if (verlichting.length) {
+      checkPagina(30);
+      y += 4;
+      doc.tekst(p, M, y, 'Verlichting', 9, true);
+      y += 13;
+      const LAMP_NAMEN = { led: 'Led', tl: 'TL', spaarlamp: 'Spaarlamp', halogeen: 'Halogeen', gloeilamp: 'Gloeilamp', andere: 'Andere' };
+      const totPunten = verlichting.reduce((a, v) => a + (v.aantal || 1), 0);
+      const totWatt = verlichting.reduce((a, v) => a + (v.aantal || 1) * (v.wattPerLamp || 0), 0);
+      tabel(
+        [{ kop: '#', b: 16 }, { kop: 'Lamptype', b: 60 }, { kop: 'Aantal', b: 32, uitlijn: 'r' },
+        { kop: 'W per lamp', b: 44, uitlijn: 'r' }, { kop: 'Totaal W', b: 44, uitlijn: 'r' }],
+        verlichting.map((v, i) => [i + 1, LAMP_NAMEN[v.type] || v.type, v.aantal || 1,
+        v.wattPerLamp ? fmt(v.wattPerLamp, 0) : '', v.wattPerLamp ? fmt((v.aantal || 1) * v.wattPerLamp, 0) : '']),
+        ['Totaal', '', totPunten, '', totWatt ? fmt(totWatt, 0) : '']
+      );
     }
     const pv = E.zonnepanelen || [];
     kvRegel('Zonnepanelen', pv.length

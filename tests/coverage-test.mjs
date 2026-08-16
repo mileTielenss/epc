@@ -204,7 +204,7 @@ await scenario('hoofdflow', {
   await page.click('#opweklijst li .del');      /* echt weg */
 
   /* extra bestanden (§7.3): +, dubbele naam, verwijderen, foutpaden */
-  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.click('#tab-algemeen details:nth-of-type(6) summary');
   await page.click('#btn-extra-voegtoe');
   await page.setInputFiles('#extrainput', FOTO);
   await page.waitForSelector('#extralijst li:not(.leeg)');
@@ -491,6 +491,64 @@ await scenario('hoofdflow', {
 });
 
 /* ============ 2. delen: share-paden, workerfouten, grote PDF, races ============ */
+/* ============ 1b. gemene delen: verlichting, privatief, GD-checks, rondreis ============ */
+await scenario('gemenedelen', { context: { serviceWorkers: 'block' } }, async page => {
+  await page.goto(BASIS);
+  await page.waitForSelector('#btn-nieuwgd');
+  await page.click('#btn-nieuwgd');
+  await page.waitForSelector('#app:not([hidden])');
+  await page.fill('#adres', 'Blok B, Geel');
+  await page.locator('#adres').blur();
+
+  /* verlichting: leeg aantal -> toast; twee regels; del geweigerd + echt */
+  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.click('#btn-verl-voegtoe');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('aantal'));
+  await page.click('#cy-lamptype');                    /* led -> tl */
+  await page.fill('#verl-aantal', '5');
+  await page.fill('#verl-watt', '10');
+  await page.click('#btn-verl-voegtoe');
+  await page.fill('#verl-aantal', '2');
+  await page.click('#btn-verl-voegtoe');               /* zonder watt */
+  assert.equal(await page.locator('#verllijst li').count(), 2, 'twee verlichtingsregels');
+  assert.ok((await page.textContent('#verl-totaal')).includes('7 lichtpunten'), 'totaalregel');
+  antwoord({ doe: 'dismiss' });
+  await page.click('#verllijst li .del');              /* confirm geweigerd */
+  antwoord({ doe: 'accept' });
+  await page.click('#verllijst li .del');
+  await page.waitForFunction(() => document.querySelectorAll('#verllijst li').length === 1);
+
+  /* privatief element: toevoegen, bewerken (draft volgt privatief), annuleren */
+  await page.click('#tabbar button[data-tab="details"]');
+  await page.click('#sec-ramen summary');
+  await page.click('#cy-privatief');                   /* gemeen -> privatief */
+  await page.fill('#breedte', '1,2');
+  await page.fill('#hoogte', '1,5');
+  await page.fill('#aantal', '6');
+  await page.locator('#aantal').blur();
+  await page.click('#btn-voegtoe');
+  await page.click('#ramenlijst li .info');
+  assert.ok(await page.locator('#cy-beglazing').isHidden(), 'bewerken van privatief element houdt beglazing verborgen');
+  await page.click('#btn-annuleer-raam');
+
+  /* afronden: GD-controlelijst */
+  await page.click('#tabbar button[data-tab="afronden"]');
+  assert.ok((await page.textContent('#checklijst')).includes('Ramen & deuren ingegeven'), 'GD-check aanwezig');
+
+  /* export + import: dekt de import- en normaliseer-takken van verlichting/privatief */
+  const [gdDl] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30000 }),
+    page.click('#btn-print')
+  ]);
+  const gdPad = join(HIER, 'uitvoer', 'gd-dekking.zip');
+  await gdDl.saveAs(gdPad);
+  await page.click('#btn-terug');
+  await page.waitForSelector('#view-lijst:not([hidden])');
+  await page.setInputFiles('#zipinput', gdPad);
+  await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
+  assert.ok((await page.textContent('#verl-totaal')).includes('lichtpunt'), 'verlichting terug na import');
+});
+
 await scenario('delen', {
   context: { serviceWorkers: 'block' },
   init: [`
@@ -607,8 +665,9 @@ await scenario('camera', {
     window.__EchtePutFoto = DB.putFoto;
     DB.putFoto = () => Promise.reject(new DOMException('x', 'UnknownError'));
   });
+  await page.waitForFunction(() => document.querySelector('#camvideo').videoWidth > 0);
   await page.click('#camvideo');                      /* 'Foto niet bewaard' */
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Foto niet bewaard'));
   await page.evaluate(() => { DB.putFoto = window.__EchtePutFoto; });
   /* achtergrond: visibilitychange stopt de camera en bewaart */
   await page.evaluate(() => {
@@ -738,7 +797,7 @@ await scenario('geheugen', {
   await page.waitForTimeout(700);
   assert.ok(await page.locator('#foutbalk:not([hidden])').count(), 'balk blijft in geheugenmodus');
   /* extra bestand op het geheugen (mem-takken van putExtra/verwijderExtra/extraVanWoning) */
-  await page.click('#tab-algemeen details:nth-of-type(5) summary');
+  await page.click('#tab-algemeen details:nth-of-type(6) summary');
   await page.setInputFiles('#extrainput', FOTO);
   await page.waitForSelector('#extralijst li:not(.leeg)');
   antwoord({ doe: 'accept' });

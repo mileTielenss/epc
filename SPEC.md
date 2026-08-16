@@ -4,6 +4,9 @@ Geen versienummers of regelaantallen in dit bestand.
 ## 1. Doel
 Mobile-first offline PWA voor één energiedeskundige type A (Vlaanderen), op één
 iPhone. Verzamelt tijdens het plaatsbezoek gegevens en foto's per ruimte.
+Twee soorten dossiers: een **woning** en de **gemene delen** van een
+appartementsgebouw (EPC GD) — zelfde app, zelfde flow, met kleine verschillen
+per soort (§7.1, §7.3, §7.4, §7.7).
 - Nieuwe woning starten, al wandelend invullen. Dagen later aanvullen kan.
 - Op het einde "Bewaar dossier": een **zip** met de PDF (het eigenlijke dossier,
   10 jaar bewaarplicht), de hoofdfoto als losse `hoofdfoto.jpg`, alle foto's als
@@ -94,6 +97,7 @@ upgrade staan: v3 → v4 voegt enkel de `extra`-store toe.
 ```
 woning = {
   id: base36-timestamp + '-' + random5,
+  soort: 'woning' | 'gemene-delen',   // gekozen bij aanmaak, daarna vast (§7.1)
   nummer: geheel getal,        // dossiernummer (§7.1), app-zijde; niet in pdf/json
   gemaakt, gewijzigd,          // ISO
   pdfBewaardOp: ISO | null,    // enige statusbron
@@ -110,6 +114,9 @@ woning = {
              beglazing: 'enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel'
                         | null,   // deur: altijd null, enkel het profiel telt
              kader: 'pvc'|'alu'|'hout', rolluik (bool),
+             privatief (bool),  // enkel bij gemene delen (§7.4): raam van een
+                                // privatief appartement — alleen oppervlakte
+                                // telt; beglazing=null, kader=null, rolluik=false
              fotoId | null } ],
   energie: {
     opwekkers: [ { id,
@@ -121,11 +128,16 @@ woning = {
                    fotoIds: [fotoId, ...],   // kenplaatfoto's, 0..n (§7.3)
                    fotoKraanId } ],
     pvPanelen: [ { id, orientatie: 'plat'|'voor'|'achter'|'links'|'rechts'|'', wp } ],
-    zonneboiler: 'nee'|'ja', zonneboilerM2
+    zonneboiler: 'nee'|'ja', zonneboilerM2,
+    verlichting: [ { id,               // enkel zinvol bij gemene delen (§7.3)
+                     type: 'led'|'tl'|'spaarlamp'|'halogeen'|'gloeilamp'|'andere',
+                     aantal (>=1), watt } ]   // watt = vermogen per lamp, string
   }
 }
 ```
 Nieuwe woning start met Living, Keuken, Badkamer, WC, Slaapkamer 1 en Hal.
+Nieuwe gemene delen starten met enkel **Hal** (ruimtes toevoegen blijft kunnen:
+traphal, kelder, stookplaats, …).
 Bewust niet ingevoerd: bouwjaar, gebouwtype, kelder, zolder, oriëntatie van de
 voorgevel, beschermd volume. Die komen uit documenten, plannen of de VEKA-software.
 ### 5.1 `normaliseer()` bij elke load
@@ -165,9 +177,11 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 ## 7. Schermen
 ### 7.1 Woningenlijst
 - Titelbalk "EPC Plaatsbezoek". Gesorteerd op laatst gewijzigd.
-- Per rij: hoofdfoto-thumb, **`<nummer>. <adres>`** ("Zonder adres"), datum,
-  statuspill afgeleid uit `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen
-  knop**).
+- Per rij: hoofdfoto-thumb, **`<nummer>. <adres>`** ("Zonder adres") — bij
+  gemene delen met 🏢 tussen nummer en adres —, datum, statuspill afgeleid uit
+  `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen knop**).
+- Twee aanmaakknoppen: **"+ Nieuwe woning"** en **"+ Gemene delen"** (zelfde
+  flow en dezelfde nummerteller; `soort` ligt daarna vast).
 - Verwijderen kan niet vanuit de lijst, enkel op de tab Afronden.
 - "+ Nieuwe woning" maakt en opent een record.
 - Daaronder "Importeer dossier": kies een eerder bewaarde dossier-zip en de
@@ -234,6 +248,13 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
    Bestanden/Notities-scanner van iOS maakte). Bestandsnamen worden ontdaan van
    tekens die een zip-pad breken; een dubbele naam krijgt " (2)", " (3)", …
    De bestanden staan in de `extra`-store (§5), los van `woning.json`.
+6. **Verlichting** — accordeon **enkel zichtbaar bij gemene delen** (voor het
+   hele gebouw, niet per ruimte): cycle lamptype (Led / TL / Spaarlamp /
+   Halogeen / Gloeilamp / Andere), veld "aantal", veld "vermogen per lamp (W)"
+   (optioneel), knop "Voeg verlichting toe". Lijst met regels
+   "n × Type · x W per lamp" en een ×; totaalregel "N lichtpunten · X W
+   totaal" (aantal × watt gesommeerd, regels zonder watt tellen niet mee in
+   het vermogen). Opgeslagen in `energie.verlichting`.
 ### 7.4 Tab Details — per geselecteerde ruimte, drie accordeons
 Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.**
 - **Ventilatie**: cycle `geen → natuurlijk → mechanisch → mechanisch permanent →
@@ -261,6 +282,14 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
     beglazingswaarde voor vaste panelen die als raam worden ingegeven (zo gaat
     het ook in de VEKA-software). Deuren hebben geen beglazingswaarde; een
     poort wordt als deur ingegeven.
+  - **Privatief (enkel bij gemene delen)**: extra cycle "Deel: Gemeen/Privatief"
+    in het formulier. Privatief = een raam/deur van een privatief appartement
+    (inspectieprotocol: telt enkel mee als oppervlakte-aftrek van de gevel) —
+    beglazing-, kader- en rolluik-knoppen verdwijnen; enkel element, gevel,
+    b × h en aantal, plus de foto-optie. Opgeslagen met `privatief: true`,
+    `beglazing/kader = null`, `rolluik = false`. In de lijst draagt de rij de
+    tag "privatief". Sorteervolgorde: privatieve elementen komen ná alle
+    gemene (§7.4-sortering krijgt privatief als eerste sleutel).
 - **Sorteervolgorde** (één functie, gebruikt door lijst, PDF en nummering):
   type deur → raam → dakraam; binnen elk type gevel voor → achter → links →
   rechts; dan beglazing enkel → dubbel → HR dubbel → drievoudig → vol paneel;
@@ -319,9 +348,12 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   capture="environment">`; dossier-modus → toast met foutnaam, bibliotheekkiezer opent.
 - Tracks stoppen bij Klaar/Annuleer, visibilitychange (met save) en pagehide.
 ### 7.7 Tab Afronden
-- **Controlelijstje** (informatief, nooit blokkerend, vers berekend bij openen):
-  ✅/❌ voor (1) elke ruimte minstens één foto (bij ❌ de namen), (2) verwarming
-  ingevuld (≥1 opwekker of toestel), (3) hoofdfoto gekozen.
+- **Controlelijstje** (informatief, nooit blokkerend, vers berekend bij openen).
+  Bij een **woning**: ✅/❌ voor (1) elke ruimte minstens één foto (bij ❌ de
+  namen), (2) verwarming ingevuld (≥1 opwekker of toestel), (3) hoofdfoto
+  gekozen. Bij **gemene delen** (niets is verplicht in het protocol, dus enkel
+  praktische geheugensteuntjes): (1) ramen & deuren ingegeven (≥1 element),
+  (2) verlichting ingevuld (≥1 regel), (3) hoofdfoto gekozen.
 - **"💾 Bewaar dossier"** met voortgangsbalk uit de worker.
 - Grijze regel "Dossier bewaard op <datum en uur>" indien `pdfBewaardOp`.
 - "Woning sluiten" (navigeert terug, wijzigt niets).
@@ -367,8 +399,9 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
 - **Geen PDF/A**: base-14 fonts worden niet ingebed. Bewust; embedding vraagt een
   fontbestand en een build-stap.
 ### 9.2 Indeling
-1. **Kop**: klein grijs "EPC Plaatsbezoek", adres (vet 15 pt, gewrapt), "Datum
-   plaatsbezoek: …". Hoofdfoto rechtsboven, 130 pt breed, max 100 pt hoog.
+1. **Kop**: klein grijs "EPC Plaatsbezoek" — bij gemene delen "EPC Plaatsbezoek
+   — gemene delen" —, adres (vet 15 pt, gewrapt), "Datum plaatsbezoek: …".
+   Hoofdfoto rechtsboven, 130 pt breed, max 100 pt hoog.
 2. **RAMEN & DEUREN** (hoofdletters + lijn): **één tabel per type**, in de
    volgorde Deuren → Ramen → Dakramen (vet subkopje 9 pt boven elke tabel);
    een tabel verschijnt enkel als dat type voorkomt. Kolommen #, Ruimte, Gevel,
@@ -381,13 +414,23 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    daaronder "Alle elementen samen: N stuks · X m²". De nummering (`#`) loopt
    door over de tabellen en matcht de app (§7.4). 7,5 pt, celranden, wrap per
    cel, getallen rechts, totaalregel vet.
+   **Privatieve elementen** (gemene delen, §7.4) staan ná de gemene tabellen in
+   één eigen tabel **"Privatieve vensters (enkel oppervlakte)"** met kolommen
+   #, Type, Gevel, Aant., m², B (m), H (m) en een totaalregel; daaronder één
+   regel per gevel "Privatief <gevel>: X m²" (aantal × m² per gevel — het
+   aftrekgetal voor de VEKA-invoer). Ze tellen niet mee in "Alle elementen
+   samen".
    Alle maten in de PDF staan met exact twee cijfers na de komma ("1,00");
    de UI toont meters zonder afkapping (1,335). Sortering en nummering exact als
    §7.4. Daaronder de raamfoto's: 4 per rij, cel 82 pt, contain, gecentreerd, grijs
    bijschrift 6,5 pt "Element gevel – ruimte, afstandhouder/kenplaatje".
 3. **ENERGIE**: tabel #, Opwekker, Ruimte, Doet, Beschrijving (bij airco/kachel met
    "ruimte b × d × h m = x m³"). Daaronder kenplaat- en kranenfoto's, zelfde raster,
-   bijschrift "Type – ruimte, kenplaat/radiatorkranen". Dan **Zonnepanelen**
+   bijschrift "Type – ruimte, kenplaat/radiatorkranen". Daarna, als er
+   verlichting genoteerd is (gemene delen): tabel **Verlichting** met kolommen
+   #, Lamptype, Aantal, W per lamp, Totaal W en een vette totaalregel
+   "N lichtpunten · X W" (regels zonder wattage tellen niet mee in het
+   vermogen). Dan **Zonnepanelen**
    ("Plat dak 4200 Wp · Voor 2000 Wp" of "—") en, alleen bij ja, **Zonneboiler**
    ("ja, 4,6 m²").
 4. **VENTILATIE**: tabel met enkel Ruimte en Ventilatie (+ "(beschrijving)" bij
@@ -464,11 +507,13 @@ opgeslagen:
 ```
 woning: {
   adres, datumPlaatsbezoek, notities?, hoofdfoto?,
+  soort?: "gemene-delen",        // ontbreekt bij een gewone woning
   ruimtes: [
     { naam: "Gevels", fotos: ["fotos/0001.jpg", …] },
     { naam, ventilatie?, ventilatieBeschrijving?, opmerking?,
       afmetingen?: { breedteM, diepteM, hoogteM },
-      elementen?: [ { type, gevel, breedteM, hoogteM, aantal, beglazing?, kader, rolluik, foto? } ],
+      elementen?: [ { type, gevel, breedteM, hoogteM, aantal, beglazing?, kader, rolluik, foto? }
+                    | { type, gevel, breedteM, hoogteM, aantal, privatief: true, foto? } ],
       toestellen?: [ { type, beschrijving?, kenplaatFotos? } ],
       fotos?: [ … ] },
     { naam: "Algemeen", fotos: [ … ] }
@@ -476,7 +521,8 @@ woning: {
   energie?: {
     opwekkers?: [ { type, functies?, beschrijving?, kenplaatFotos?, kranenFoto? } ],
     zonnepanelen?: [ { orientatie?, wp } ],
-    zonneboiler?: { collectorM2? }
+    zonneboiler?: { collectorM2? },
+    verlichting?: [ { type, aantal, wattPerLamp? } ]   // wattPerLamp als getal
   }
 }
 ```
@@ -494,6 +540,9 @@ woning: {
   `__MACOSX/`, `._x`-bestanden en `.DS_Store` toe. De import negeert die
   metadata, zoekt `woning.json` óók onder een prefix (kortste pad wint) en
   rekent alle paden (`fotos/…`, `hoofdfoto.jpg`, `extra/…`) vanaf diezelfde map.
+- `soort`, `privatief` en `verlichting` komen bij een import integraal terug;
+  een privatief element wordt heropgebouwd met `beglazing/kader = null` en
+  `rolluik = false`.
 - **`extra/` reist mee**: alles onder `extra/` (ook in submappen) wordt bij de
   import integraal opgeslagen in de `extra`-store van de nieuwe woning en komt
   bij de volgende export weer in `extra/` terecht — de backup-lus

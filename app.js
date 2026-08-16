@@ -140,6 +140,8 @@ const ELEMENTEN = ['raam', 'deur', 'dakraam'];
 const GEVELS = ['voor', 'achter', 'links', 'rechts'];
 const BEGLAZINGEN = ['enkel', 'dubbel', 'hr-dubbel', 'drievoudig', 'paneel'];
 const KADERS = ['pvc', 'alu', 'hout'];
+const LAMP_TYPES = ['led', 'tl', 'spaarlamp', 'halogeen', 'gloeilamp', 'andere'];
+const LAMP_NAMEN = { led: 'Led', tl: 'TL', spaarlamp: 'Spaarlamp', halogeen: 'Halogeen', gloeilamp: 'Gloeilamp', andere: 'Andere' };
 const OPWEK_TYPES = ['gas', 'stookolie', 'andere', 'airco', 'kachel', 'ruimte-andere'];
 const FUNCTIES = ['radiatoren', 'vloer', 'sww'];
 const PV_ORIENTATIES = ['plat', 'voor', 'achter', 'links', 'rechts', ''];
@@ -163,6 +165,7 @@ function standaardRuimtes() {
 function leegWoning() {
   return {
     id: DB.nieuwId(),
+    soort: 'woning',
     nummer: 0,
     gemaakt: nu(),
     gewijzigd: nu(),
@@ -170,10 +173,13 @@ function leegWoning() {
     algemeen: { adres: '', datum: vandaag(), notities: '', hoofdFotoId: null },
     ruimtes: standaardRuimtes(),
     ramen: [],
-    energie: { opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '' },
+    energie: { opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '', verlichting: [] },
     problemen: []
   };
 }
+
+/* gemene delen (§1): zelfde dossier, ander vertrekpunt en kleine verschillen */
+function isGD() { return S && S.soort === 'gemene-delen'; }
 
 /* defaults aanvullen, enums en verwijzingen controleren; elke correctie wordt
    gelogd in woning.problemen[] en gemeld — stil corrigeren is verboden (§5.1).
@@ -194,6 +200,8 @@ function normaliseer(p) {
     if (v !== undefined) fix.push(`${wat}: onbekende waarde "${v}" vervangen door "${def}"`);
     return def;
   };
+
+  w.soort = w.soort === 'gemene-delen' ? 'gemene-delen' : 'woning';
 
   if (!Array.isArray(w.ruimtes) || !w.ruimtes.length) { w.ruimtes = standaardRuimtes(); fix.push('ruimtes ontbraken: standaardruimtes teruggezet'); }
   w.ruimtes = groepeerRuimtes(w.ruimtes.map(r => {
@@ -225,9 +233,10 @@ function normaliseer(p) {
   if (!Array.isArray(w.ramen)) w.ramen = [];
   w.ramen = w.ramen.map((r, i) => {
     const element = enumOf(r.element, ELEMENTEN, 'raam', `element ${i + 1}`);
+    const privatief = !!r.privatief;
     let beglazing;
-    if (element === 'deur') {
-      if (r.beglazing != null) fix.push(`element ${i + 1}: een deur heeft geen beglazing, waarde gewist`);
+    if (privatief || element === 'deur') {
+      if (!privatief && r.beglazing != null) fix.push(`element ${i + 1}: een deur heeft geen beglazing, waarde gewist`);
       beglazing = null;
     } else {
       beglazing = enumOf(r.beglazing, BEGLAZINGEN, 'dubbel', `beglazing van element ${i + 1}`);
@@ -240,8 +249,10 @@ function normaliseer(p) {
       b: num(r.b), h: num(r.h),
       aantal: Math.max(1, Math.round(num(r.aantal)) || 1),
       beglazing,
-      kader: enumOf(r.kader, KADERS, 'pvc', `kader van element ${i + 1}`),
-      rolluik: !!r.rolluik,
+      /* privatief (§7.4): enkel oppervlakte telt — geen kader of rolluik */
+      kader: privatief ? null : enumOf(r.kader, KADERS, 'pvc', `kader van element ${i + 1}`),
+      rolluik: privatief ? false : !!r.rolluik,
+      privatief,
       fotoId: fotoRef(r.fotoId, `foto van element ${i + 1}`)
     };
   });
@@ -262,6 +273,13 @@ function normaliseer(p) {
     id: pv.id || DB.nieuwId(),
     orientatie: PV_ORIENTATIES.includes(pv.orientatie) ? pv.orientatie : '',
     wp: String(pv.wp || '')
+  }));
+  if (!Array.isArray(w.energie.verlichting)) w.energie.verlichting = [];
+  w.energie.verlichting = w.energie.verlichting.map((v, i) => ({
+    id: v.id || DB.nieuwId(),
+    type: enumOf(v.type, LAMP_TYPES, 'andere', `verlichting ${i + 1}`),
+    aantal: Math.max(1, Math.round(num(v.aantal)) || 1),
+    watt: String(v.watt || '')
   }));
   w.energie.zonneboiler = w.energie.zonneboiler === 'ja' ? 'ja' : 'nee';
   if (typeof w.energie.zonneboilerM2 !== 'string') w.energie.zonneboilerM2 = '';
@@ -443,7 +461,7 @@ async function renderLijst() {
     li.innerHTML =
       thumb +
       `<div class="info">
-         <div class="r1">${esc(nummerPrefix(w) + ((w.algemeen && w.algemeen.adres) || 'Zonder adres'))}</div>
+         <div class="r1">${esc(nummerPrefix(w) + (w.soort === 'gemene-delen' ? '\u{1F3E2} ' : '') + ((w.algemeen && w.algemeen.adres) || 'Zonder adres'))}</div>
          <div class="r3">${esc((w.algemeen && w.algemeen.datum) || '')}</div>
        </div>
        <span class="status ${klaar ? 'klaar' : ''}">${klaar ? 'PDF ✓' : 'Open'}</span>`;
@@ -490,9 +508,12 @@ $('#woninglijst').addEventListener('click', e => {
     $('#woninglijst').addEventListener(t, () => clearTimeout(timer)));
 })();
 
-$('#btn-nieuwewoning').addEventListener('click', async () => {
+async function startNieuw(soort) {
   DB.sluitWoning();
   S = leegWoning();
+  S.soort = soort;
+  /* gemene delen starten met enkel Hal (§5); ruimtes toevoegen blijft kunnen */
+  if (soort === 'gemene-delen') S.ruimtes = [nieuweRuimte('Hal')];
   S.nummer = volgendeIndex();          /* automatisch het volgende nummer … */
   zetVolgendeIndex(S.nummer + 1);      /* … en de teller meteen ophogen */
   volgTeller = 0;
@@ -502,7 +523,9 @@ $('#btn-nieuwewoning').addEventListener('click', async () => {
   await bewaar();
   syncAlles();
   toonEditor();
-});
+}
+$('#btn-nieuwewoning').addEventListener('click', () => startNieuw('woning'));
+$('#btn-nieuwgd').addEventListener('click', () => startNieuw('gemene-delen'));
 
 /* ---------- dossier importeren (§9.4): dezelfde zip komt integraal terug ---------- */
 
@@ -543,6 +566,7 @@ const RESERVEERD = ['Gevels', 'Algemeen'];
 /* de geneste woning.json (§9.3.1) terugvouwen naar het interne model */
 async function importeerDossier(d, leden) {
   const w = leegWoning();
+  w.soort = d.soort === 'gemene-delen' ? 'gemene-delen' : 'woning';
   w.algemeen.adres = d.adres || '';
   if (d.datumPlaatsbezoek) w.algemeen.datum = d.datumPlaatsbezoek;
   w.algemeen.notities = d.notities || '';
@@ -613,13 +637,16 @@ async function importeerDossier(d, leden) {
       if (RESERVEERD.includes(r.naam)) continue;
       const rid = idVoorNaam.get(r.naam) || null;
       for (const el of (r.elementen || [])) {
+        const priv = !!el.privatief;
         w.ramen.push({
           id: DB.nieuwId(), ruimteId: rid,
           element: el.type, gevel: el.gevel,
           b: num(el.breedteM), h: num(el.hoogteM),
           aantal: Math.max(1, Math.round(num(el.aantal)) || 1),
-          beglazing: el.type === 'deur' ? null : (el.beglazing || 'dubbel'),
-          kader: el.kader, rolluik: !!el.rolluik,
+          beglazing: priv || el.type === 'deur' ? null : (el.beglazing || 'dubbel'),
+          kader: priv ? null : el.kader,
+          rolluik: !priv && !!el.rolluik,
+          privatief: priv,
           fotoId: await schrijfFoto(el.foto, null)
         });
       }
@@ -645,6 +672,11 @@ async function importeerDossier(d, leden) {
     }
     w.energie.opwekkers = opwekkers;
     w.energie.pvPanelen = (E.zonnepanelen || []).map(p => ({ id: DB.nieuwId(), orientatie: PV_TERUG[p.orientatie] || '', wp: String(p.wp || '') }));
+    w.energie.verlichting = (E.verlichting || []).map(v => ({
+      id: DB.nieuwId(), type: LAMP_TYPES.includes(v.type) ? v.type : 'andere',
+      aantal: Math.max(1, Math.round(num(v.aantal)) || 1),
+      watt: v.wattPerLamp != null ? String(v.wattPerLamp).replace('.', ',') : ''
+    }));
     w.energie.zonneboiler = E.zonneboiler ? 'ja' : 'nee';
     w.energie.zonneboilerM2 = E.zonneboiler && E.zonneboiler.collectorM2 != null ? String(E.zonneboiler.collectorM2).replace('.', ',') : '';
 
@@ -976,12 +1008,14 @@ let bewerkRaamId = null; /* id van het raam dat je aan het wijzigen bent, of nul
 let draft = null;
 
 function leegDraft() {
-  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', fotoId: null, aantal: 1 };
+  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', privatief: 'gemeen', fotoId: null, aantal: 1 };
 }
 draft = leegDraft();
 
 segInit('#seg-element', v => { draft.element = v; updateRaamFotoLabel(); });
 
+const syncCyPrivatief = cycleInit('#cy-privatief', ['gemeen', 'privatief'], { gemeen: 'Gemeen', privatief: 'Privatief' },
+  () => draft.privatief, v => { draft.privatief = v; updateRaamFotoLabel(); });
 const syncCyBeglazing = cycleInit('#cy-beglazing', BEGLAZINGEN, GLAS_NAMEN,
   () => draft.beglazing, v => draft.beglazing = v);
 const syncCyKader = cycleInit('#cy-kader', KADERS, KADER_NAMEN,
@@ -990,10 +1024,16 @@ const syncCyRolluik = cycleInit('#cy-rolluik', ['nee', 'ja'], { nee: 'Nee', ja: 
   () => draft.rolluik, v => draft.rolluik = v);
 
 /* dakramen hebben meestal een kenplaatje i.p.v. een afstandhouder; een deur
-   heeft enkel een profiel, dus geen beglazing-cycle (§7.4) */
+   heeft enkel een profiel, dus geen beglazing-cycle (§7.4). Bij gemene delen
+   kan een element privatief zijn: enkel oppervlakte, dus geen beglazing,
+   kader of rolluik (§7.4). */
 function updateRaamFotoLabel() {
   $('#btn-raamfoto').textContent = draft.element === 'dakraam' ? '\u{1F4F7} Foto kenplaatje' : '\u{1F4F7} Foto afstandhouder';
-  $('#cy-beglazing').hidden = draft.element === 'deur';
+  const priv = isGD() && draft.privatief === 'privatief';
+  $('#cy-privatief').hidden = !isGD();
+  $('#cy-beglazing').hidden = priv || draft.element === 'deur';
+  $('#cy-kader').hidden = priv;
+  $('#cy-rolluik').hidden = priv;
 }
 
 /* aantal-stepper */
@@ -1043,14 +1083,16 @@ $('#btn-voegtoe').addEventListener('click', () => {
   const b = num($('#breedte').value), h = num($('#hoogte').value);
   if (!b || !h) { toast('Vul breedte en hoogte in (m)'); return; }
   const aantal = Math.max(1, Math.round(num($('#aantal').value)) || 1);
+  const priv = isGD() && draft.privatief === 'privatief';
   const velden = {
     element: draft.element,
     gevel: draft.gevel,
     ruimteId: ruimte.id,
     b, h,
-    beglazing: draft.element === 'deur' ? null : draft.beglazing,
-    kader: draft.kader,
-    rolluik: draft.rolluik === 'ja',
+    beglazing: priv || draft.element === 'deur' ? null : draft.beglazing,
+    kader: priv ? null : draft.kader,
+    rolluik: !priv && draft.rolluik === 'ja',
+    privatief: priv,
     aantal,
     fotoId: draft.fotoId
   };
@@ -1083,8 +1125,9 @@ function startBewerkRaam(id) {
   draft.element = r.element;
   draft.gevel = r.gevel;
   draft.beglazing = r.beglazing || draft.beglazing;
-  draft.kader = r.kader;
+  draft.kader = r.kader || draft.kader;
   draft.rolluik = r.rolluik ? 'ja' : 'nee';
+  draft.privatief = r.privatief ? 'privatief' : 'gemeen';
   draft.fotoId = r.fotoId || null;
   draft.aantal = raamAantal(r);
   /* de ruimtebalk springt mee naar de ruimte van dit raam */
@@ -1121,6 +1164,7 @@ $('#btn-annuleer-raam').addEventListener('click', () => {
 
 function syncRaamForm() {
   segSet('#seg-element', draft.element);
+  syncCyPrivatief();
   syncCyBeglazing();
   syncCyKader();
   syncCyRolluik();
@@ -1149,8 +1193,9 @@ function renderRamen() {
     li.dataset.id = r.id;
     const n = raamAantal(r);
     const tags = [];
+    if (r.privatief) tags.push('privatief');
     if (r.beglazing) tags.push(GLAS_NAMEN[r.beglazing] || r.beglazing);
-    tags.push(KADER_NAMEN[r.kader] || r.kader);
+    if (r.kader) tags.push(KADER_NAMEN[r.kader] || r.kader);
     if (r.rolluik) tags.push('rolluik');
     const fotoUrl = r.fotoId && !fotoVerborgen(r.fotoId) ? DB.fotoUrl(r.fotoId) : null;
     li.innerHTML =
@@ -1373,6 +1418,55 @@ $('#opweklijst').addEventListener('click', e => {
   }
   const li = e.target.closest('li[data-id]');
   if (li) startBewerkOpwek(li.dataset.id);
+});
+
+/* ---------- verlichting (§7.3, enkel gemene delen): lichtpunten tellen per lamptype ---------- */
+let draftLamp = 'led';
+const syncCyLamptype = cycleInit('#cy-lamptype', LAMP_TYPES, LAMP_NAMEN,
+  () => draftLamp, v => draftLamp = v);
+
+$('#btn-verl-voegtoe').addEventListener('click', () => {
+  if (!S) return;
+  const aantal = Math.round(num($('#verl-aantal').value));
+  if (!aantal || aantal < 1) { toast('Vul het aantal lichtpunten in'); return; }
+  const watt = num($('#verl-watt').value);
+  S.energie.verlichting.push({ id: DB.nieuwId(), type: draftLamp, aantal, watt: watt ? fmtM(watt) : '' });
+  $('#verl-aantal').value = '';
+  $('#verl-watt').value = '';
+  renderVerlichting();
+  wijzig();
+  toast(`${aantal} × ${LAMP_NAMEN[draftLamp]} toegevoegd`);
+});
+
+function renderVerlichting() {
+  const ul = $('#verllijst');
+  ul.innerHTML = '';
+  S.energie.verlichting.forEach(v => {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<div class="info">
+         <div class="r1">${v.aantal} × ${esc(LAMP_NAMEN[v.type] || v.type)}</div>
+         <div class="r2">${v.watt ? esc(v.watt) + ' W per lamp' : 'vermogen onbekend'}</div>
+       </div>` +
+      `<button type="button" class="del" data-id="${v.id}">×</button>`;
+    ul.appendChild(li);
+  });
+  const punten = S.energie.verlichting.reduce((a, v) => a + v.aantal, 0);
+  const watt = S.energie.verlichting.reduce((a, v) => a + v.aantal * num(v.watt), 0);
+  $('#verl-totaal').textContent = punten
+    ? `Totaal: ${punten} lichtpunt${punten === 1 ? '' : 'en'}${watt ? ` · ${fmtM(watt)} W` : ''}`
+    : '';
+}
+
+$('#verllijst').addEventListener('click', e => {
+  const b = e.target.closest('.del');
+  if (!b || !S) return;
+  const v = S.energie.verlichting.find(x => x.id === b.dataset.id);
+  if (!v) return;
+  if (!confirm(`Verlichting (${v.aantal} × ${LAMP_NAMEN[v.type] || v.type}) verwijderen?`)) return;
+  S.energie.verlichting = S.energie.verlichting.filter(x => x.id !== v.id);
+  renderVerlichting();
+  wijzig();
 });
 
 /* zonnepanelen: meerdere installaties, elk met orientatie en eigen Wp; geen bewerken */
@@ -2141,7 +2235,13 @@ function renderChecks() {
   const ul = $('#checklijst');
   ul.innerHTML = '';
   const zonderFoto = S.ruimtes.filter(r => !dossierFotos(r.id).length).map(r => r.naam);
-  const items = [
+  /* gemene delen: niets is verplicht in het protocol, dus enkel praktische
+     geheugensteuntjes (§7.7) — geen per-ruimte- of verwarmingscheck */
+  const items = isGD() ? [
+    { ok: S.ramen.length > 0, tekst: 'Ramen & deuren ingegeven', detail: 'nog geen enkel element' },
+    { ok: S.energie.verlichting.length > 0, tekst: 'Verlichting ingevuld', detail: 'lichtpunten tellen (tab Algemeen)' },
+    { ok: !!S.algemeen.hoofdFotoId, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
+  ] : [
     { ok: !zonderFoto.length, tekst: 'Elke ruimte minstens één foto', detail: zonderFoto.join(', ') },
     { ok: S.energie.opwekkers.length > 0, tekst: 'Verwarming ingevuld', detail: 'nog geen opwekker of toestel' },
     { ok: !!S.algemeen.hoofdFotoId, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
@@ -2363,6 +2463,13 @@ function syncAlles() {
   $('#datum').value = S.algemeen.datum;
   $('#notities').value = S.algemeen.notities;
   renderExtra();
+
+  /* verlichting: enkel bij gemene delen (§7.3) */
+  $('#sec-verlichting').hidden = !isGD();
+  syncCyLamptype();
+  $('#verl-aantal').value = '';
+  $('#verl-watt').value = '';
+  renderVerlichting();
 
   /* ramen: formulier volgt draft, geen openstaande wijziging */
   stopBewerkRaam();

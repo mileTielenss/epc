@@ -10,9 +10,9 @@
     "dekking": "node dekking.mjs"
   },
   "devDependencies": {
-    "playwright-core": "^1.49.0",
     "c8": "^10.1.2",
-    "v8-to-istanbul": "^9.3.0",
-    "istanbul-lib-coverage": "^3.2.2"
+    "istanbul-lib-coverage": "^3.2.2",
+    "playwright-core": "^1.56.1",
+    "v8-to-istanbul": "^9.3.0"
   }
 }

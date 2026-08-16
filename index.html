@@ -52,6 +52,7 @@
   <h2>Woningen</h2>
   <ul id="woninglijst" class="lijst"></ul>
   <button type="button" class="btn big" id="btn-nieuwewoning">+ Nieuwe woning</button>
+  <button type="button" class="btn sec big" id="btn-nieuwgd">+ Gemene delen</button>
   <button type="button" class="btn sec big" id="btn-importeer">Importeer dossier</button>
   <p id="versieregel" hidden></p>
 </section>
@@ -135,6 +136,23 @@
     <span class="lbl">Notities</span>
     <textarea id="notities" rows="5" placeholder="Vrije notities over de woning..."></textarea>
   </label>
+</details>
+
+<details class="sectie" id="sec-verlichting" hidden>
+  <summary>Verlichting</summary>
+  <p class="hint">Verlichting van de gemene delen, voor het hele gebouw: tel de
+    lichtpunten per lamptype.</p>
+  <button type="button" class="cycle" id="cy-lamptype"><span class="cl">Lamptype</span><span class="cv">Led</span><span class="ci">&#10227;</span></button>
+  <div class="fld">
+    <div class="dims">
+      <input type="text" id="verl-aantal" inputmode="numeric" placeholder="aantal">
+      <span class="x">&times;</span>
+      <input type="text" id="verl-watt" inputmode="decimal" placeholder="vermogen per lamp (W)">
+    </div>
+  </div>
+  <button type="button" class="btn big" id="btn-verl-voegtoe">Voeg verlichting toe</button>
+  <div id="verl-totaal" class="totaal"></div>
+  <ul id="verllijst" class="lijst"></ul>
 </details>
 
 <details class="sectie">
@@ -230,6 +248,7 @@
   </div>
 
   <div class="cyclerij">
+    <button type="button" class="cycle mini" id="cy-privatief" hidden><span class="cl">Deel</span><span class="cv">Gemeen</span><span class="ci">&#10227;</span></button>
     <button type="button" class="cycle mini" id="cy-beglazing"><span class="cl">Beglazing</span><span class="cv">Dubbel</span><span class="ci">&#10227;</span></button>
     <button type="button" class="cycle mini" id="cy-kader"><span class="cl">Kader</span><span class="cv">PVC</span><span class="ci">&#10227;</span></button>
     <button type="button" class="cycle mini" id="cy-rolluik"><span class="cl">Rolluik</span><span class="cv">Nee</span><span class="ci">&#10227;</span></button>

@@ -194,6 +194,42 @@ const tekstKlein = Buffer.from(await blobKlein.arrayBuffer()).toString('latin1')
 assert.ok(tekstKlein.includes('FOTODOSSIER'), 'klein dossier aanwezig');
 assert.ok(/Zonneboiler/.test(tekstKlein) && !/4,6/.test(tekstKlein), 'zonneboiler ja zonder oppervlakte');
 
+/* ---- gemene delen (§7.4/§9.2): privatieve vensters + verlichting ---- */
+const gd = {
+  id: 'gd-1', soort: 'gemene-delen',
+  algemeen: { adres: 'Blok A, Geel', datum: '2026-08-01', notities: '', hoofdFotoId: null },
+  ruimtes: [{ id: 'hal', naam: 'Hal', vent: 'geen', ventBeschrijving: '', opm: '', afm: null }],
+  ramen: [
+    { id: 'g1', ruimteId: 'hal', element: 'deur', gevel: 'voor', b: 1, h: 2.2, aantal: 1, beglazing: null, kader: 'alu', rolluik: false, privatief: false, fotoId: null },
+    { id: 'p1', ruimteId: 'hal', element: 'raam', gevel: 'voor', b: 1.2, h: 1.5, aantal: 6, beglazing: null, kader: null, rolluik: false, privatief: true, fotoId: null },
+    { id: 'p2', ruimteId: 'hal', element: 'raam', gevel: 'achter', b: 2, h: 1, aantal: 4, beglazing: null, kader: null, rolluik: false, privatief: true, fotoId: null }
+  ],
+  energie: {
+    opwekkers: [], pvPanelen: [], zonneboiler: 'nee', zonneboilerM2: '',
+    verlichting: [
+      { id: 'v1', type: 'tl', aantal: 5, watt: '10' },
+      { id: 'v2', type: 'led', aantal: 2, watt: '' }
+    ]
+  },
+  problemen: []
+};
+const gdUit = pdfViaJson(gd, new Map(), {});
+const gdJson = gdUit.dossier.woning;
+assert.equal(gdJson.soort, 'gemene-delen', 'soort in de json');
+const gdEls = gdJson.ruimtes.find(r => r.naam === 'Hal').elementen;
+const privEl = gdEls.find(e => e.privatief);
+assert.ok(privEl && !('beglazing' in privEl) && !('kader' in privEl) && !('rolluik' in privEl), 'privatief element zonder beglazing/kader/rolluik');
+assert.ok(!('privatief' in gdEls[0]) && gdEls[0].kader === 'alu', 'gemeen element behoudt zijn velden');
+assert.deepEqual(gdJson.energie.verlichting, [{ type: 'tl', aantal: 5, wattPerLamp: 10 }, { type: 'led', aantal: 2 }], 'verlichting in de json, wattPerLamp enkel indien gekend');
+const gdTekst = Buffer.from(await gdUit.blob.arrayBuffer()).toString('latin1');
+assert.ok(gdTekst.includes('gemene delen)'), 'PDF-kop vermeldt gemene delen');
+assert.ok(gdTekst.includes('(Privatieve vensters \\(enkel oppervlakte\\))'), 'privatieve tabel aanwezig');
+assert.ok(gdTekst.includes('(Privatief voor)') && gdTekst.includes('(10,80 m'), 'aftrekgetal per gevel (6 × 1,80)');
+assert.ok(gdTekst.includes('(Privatief achter)') && gdTekst.includes('(8,00 m'), 'tweede gevel apart');
+assert.ok(gdTekst.includes('(18,80)'), 'totaalregel van de privatieve tabel');
+assert.ok(gdTekst.includes('(Verlichting)') && gdTekst.includes('(TL)') && gdTekst.includes('(50)'), 'verlichtingstabel met totaal W (5 × 10)');
+assert.ok(gdTekst.includes('(7)'), 'totaal lichtpunten (5 + 2)');
+
 /* ---- lange tabel forceert paginabreuken ---- */
 const veel = {
   ...klein,

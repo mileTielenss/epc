@@ -150,8 +150,15 @@
     }
 
     function elementObj(r) {
-      const o = { type: r.element, gevel: r.gevel, breedteM: r.b, hoogteM: r.h, aantal: r.aantal || 1, kader: r.kader, rolluik: !!r.rolluik };
-      if (r.element !== 'deur' && r.beglazing) o.beglazing = r.beglazing;
+      const o = { type: r.element, gevel: r.gevel, breedteM: r.b, hoogteM: r.h, aantal: r.aantal || 1 };
+      /* privatief (§7.4): enkel oppervlakte telt — geen kader/rolluik/beglazing */
+      if (r.privatief) {
+        o.privatief = true;
+      } else {
+        o.kader = r.kader;
+        o.rolluik = !!r.rolluik;
+        if (r.element !== 'deur' && r.beglazing) o.beglazing = r.beglazing;
+      }
       const f = bestand(r.fotoId); if (f) o.foto = f;
       return o;
     }
@@ -188,6 +195,7 @@
     if (algemeen.length) ruimteLijst.push({ naam: 'Algemeen', fotos: algemeen });
 
     const w = { adres: A.adres || '', datumPlaatsbezoek: A.datum || '' };
+    if (woning.soort === 'gemene-delen') w.soort = 'gemene-delen';
     if (A.notities) w.notities = A.notities;
     const hoofd = bestand(A.hoofdFotoId); if (hoofd) w.hoofdfoto = hoofd;
     w.ruimtes = ruimteLijst;
@@ -210,6 +218,13 @@
       return x;
     });
     if (pv.length) energie.zonnepanelen = pv;
+    const verlichting = (E.verlichting || []).map(v => {
+      const x = { type: v.type, aantal: v.aantal || 1 };
+      const wpl = v.watt ? Number(String(v.watt).replace(',', '.')) : 0;
+      if (wpl) x.wattPerLamp = wpl;
+      return x;
+    });
+    if (verlichting.length) energie.verlichting = verlichting;
     if (E.zonneboiler === 'ja') {
       energie.zonneboiler = {};
       const m2 = E.zonneboilerM2 ? Number(String(E.zonneboilerM2).replace(',', '.')) : 0;
