@@ -254,9 +254,11 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
    hele gebouw, niet per ruimte): cycle lamptype (Led / TL / Spaarlamp /
    Halogeen / Gloeilamp / Andere), veld "aantal", veld "vermogen per lamp (W)"
    (optioneel), knop "Voeg verlichting toe". Lijst met regels
-   "n × Type · x W per lamp" en een ×; totaalregel "N lichtpunten · X W
-   totaal" (aantal × watt gesommeerd, regels zonder watt tellen niet mee in
-   het vermogen). Opgeslagen in `energie.verlichting`.
+   "n × Type · x W per lamp"; **tik = bewerken** (regel komt in het formulier,
+   knop wordt "Bewaar wijziging", met "Annuleer wijziging"), × = `confirm()`.
+   Totaalregel "N lichtpunten · X W totaal" (aantal × watt gesommeerd, regels
+   zonder watt tellen niet mee in het vermogen). Opgeslagen in
+   `energie.verlichting`.
 ### 7.4 Tab Details — per geselecteerde ruimte, drie accordeons
 Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.**
 - **Ventilatie**: cycle `geen → natuurlijk → mechanisch → mechanisch permanent →

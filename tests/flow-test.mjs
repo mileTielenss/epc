@@ -478,6 +478,16 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('totaal lichtpunten en vermogen', (await page.textContent('#verl-totaal')).includes('7 lichtpunten') &&
     (await page.textContent('#verl-totaal')).includes('50 W'));
 
+  /* tik = bewerken: 5 -> 6 TL-lampen, totaal volgt mee */
+  await page.click('#verllijst li .info');
+  check('bewerken laadt de regel in het formulier', (await page.inputValue('#verl-aantal')) === '5' &&
+    (await page.textContent('#btn-verl-voegtoe')) === 'Bewaar wijziging');
+  await page.fill('#verl-aantal', '6');
+  await page.locator('#verl-aantal').blur();
+  await page.click('#btn-verl-voegtoe');
+  check('regel gewijzigd, geen extra regel', await page.locator('#verllijst li').count() === 2 &&
+    (await page.textContent('#verl-totaal')).includes('8 lichtpunten'));
+
   /* ramen: één gemeen, één privatief (enkel oppervlakte) */
   await page.click('#tabbar button[data-tab="details"]');
   await page.click('#sec-ramen summary');
@@ -524,7 +534,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.waitForSelector('#view-lijst:not([hidden])');
   await page.setInputFiles('#zipinput', gdZip);
   await page.waitForSelector('#app:not([hidden])', { timeout: 30000 });
-  check('import: verlichting terug', (await page.textContent('#verl-totaal')).includes('7 lichtpunten'));
+  check('import: verlichting terug', (await page.textContent('#verl-totaal')).includes('8 lichtpunten'));
   await page.click('#tabbar button[data-tab="details"]');
   check('import: privatief element terug', (await page.textContent('#ramenlijst')).includes('privatief'));
   await page.click('#btn-terug');

@@ -1422,6 +1422,7 @@ $('#opweklijst').addEventListener('click', e => {
 
 /* ---------- verlichting (§7.3, enkel gemene delen): lichtpunten tellen per lamptype ---------- */
 let draftLamp = 'led';
+let bewerkVerlId = null; /* id van de regel die je aan het wijzigen bent, of null */
 const syncCyLamptype = cycleInit('#cy-lamptype', LAMP_TYPES, LAMP_NAMEN,
   () => draftLamp, v => draftLamp = v);
 
@@ -1430,12 +1431,47 @@ $('#btn-verl-voegtoe').addEventListener('click', () => {
   const aantal = Math.round(num($('#verl-aantal').value));
   if (!aantal || aantal < 1) { toast('Vul het aantal lichtpunten in'); return; }
   const watt = num($('#verl-watt').value);
-  S.energie.verlichting.push({ id: DB.nieuwId(), type: draftLamp, aantal, watt: watt ? fmtM(watt) : '' });
+  const velden = { type: draftLamp, aantal, watt: watt ? fmtM(watt) : '' };
+  if (bewerkVerlId !== null) {
+    const v = S.energie.verlichting.find(x => x.id === bewerkVerlId);
+    if (v) Object.assign(v, velden);
+    toast('Verlichting gewijzigd');
+    stopBewerkVerl();
+  } else {
+    S.energie.verlichting.push({ id: DB.nieuwId(), ...velden });
+    toast(`${aantal} × ${LAMP_NAMEN[draftLamp]} toegevoegd`);
+  }
   $('#verl-aantal').value = '';
   $('#verl-watt').value = '';
   renderVerlichting();
   wijzig();
-  toast(`${aantal} × ${LAMP_NAMEN[draftLamp]} toegevoegd`);
+});
+
+/* een bestaande regel in het formulier laden om te wijzigen (§7.3) */
+function startBewerkVerl(id) {
+  const v = S.energie.verlichting.find(x => x.id === id);
+  if (!v) return;
+  bewerkVerlId = id;
+  draftLamp = v.type;
+  syncCyLamptype();
+  $('#verl-aantal').value = v.aantal;
+  $('#verl-watt').value = v.watt || '';
+  $('#btn-verl-voegtoe').textContent = 'Bewaar wijziging';
+  $('#btn-annuleer-verl').hidden = false;
+  renderVerlichting();
+}
+
+function stopBewerkVerl() {
+  bewerkVerlId = null;
+  $('#btn-verl-voegtoe').textContent = 'Voeg verlichting toe';
+  $('#btn-annuleer-verl').hidden = true;
+}
+
+$('#btn-annuleer-verl').addEventListener('click', () => {
+  stopBewerkVerl();
+  $('#verl-aantal').value = '';
+  $('#verl-watt').value = '';
+  renderVerlichting();
 });
 
 function renderVerlichting() {
@@ -1443,10 +1479,13 @@ function renderVerlichting() {
   ul.innerHTML = '';
   S.energie.verlichting.forEach(v => {
     const li = document.createElement('li');
+    if (v.id === bewerkVerlId) li.className = 'bewerk';
+    li.dataset.id = v.id;
     li.innerHTML =
       `<div class="info">
          <div class="r1">${v.aantal} × ${esc(LAMP_NAMEN[v.type] || v.type)}</div>
          <div class="r2">${v.watt ? esc(v.watt) + ' W per lamp' : 'vermogen onbekend'}</div>
+         <div class="r3">tik om te wijzigen</div>
        </div>` +
       `<button type="button" class="del" data-id="${v.id}">×</button>`;
     ul.appendChild(li);
@@ -1459,14 +1498,20 @@ function renderVerlichting() {
 }
 
 $('#verllijst').addEventListener('click', e => {
+  if (!S) return;
   const b = e.target.closest('.del');
-  if (!b || !S) return;
-  const v = S.energie.verlichting.find(x => x.id === b.dataset.id);
-  if (!v) return;
-  if (!confirm(`Verlichting (${v.aantal} × ${LAMP_NAMEN[v.type] || v.type}) verwijderen?`)) return;
-  S.energie.verlichting = S.energie.verlichting.filter(x => x.id !== v.id);
-  renderVerlichting();
-  wijzig();
+  if (b) {
+    const v = S.energie.verlichting.find(x => x.id === b.dataset.id);
+    if (!v) return;
+    if (!confirm(`Verlichting (${v.aantal} × ${LAMP_NAMEN[v.type] || v.type}) verwijderen?`)) return;
+    if (bewerkVerlId === v.id) stopBewerkVerl();
+    S.energie.verlichting = S.energie.verlichting.filter(x => x.id !== v.id);
+    renderVerlichting();
+    wijzig();
+    return;
+  }
+  const li = e.target.closest('li[data-id]');
+  if (li) startBewerkVerl(li.dataset.id);
 });
 
 /* zonnepanelen: meerdere installaties, elk met orientatie en eigen Wp; geen bewerken */
@@ -2472,6 +2517,7 @@ function syncAlles() {
 
   /* verlichting: enkel bij gemene delen (§7.3) */
   $('#sec-verlichting').hidden = !isGD();
+  stopBewerkVerl();
   syncCyLamptype();
   $('#verl-aantal').value = '';
   $('#verl-watt').value = '';

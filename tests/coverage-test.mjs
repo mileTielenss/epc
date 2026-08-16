@@ -512,6 +512,15 @@ await scenario('gemenedelen', { context: { serviceWorkers: 'block' } }, async pa
   await page.click('#btn-verl-voegtoe');               /* zonder watt */
   assert.equal(await page.locator('#verllijst li').count(), 2, 'twee verlichtingsregels');
   assert.ok((await page.textContent('#verl-totaal')).includes('7 lichtpunten'), 'totaalregel');
+  /* tik = bewerken; eerst annuleren, dan echt wijzigen */
+  await page.click('#verllijst li .info');
+  await page.click('#btn-annuleer-verl');
+  await page.click('#verllijst li .info');
+  await page.fill('#verl-aantal', '9');
+  await page.click('#btn-verl-voegtoe');
+  await page.waitForFunction(() => (document.querySelector('#verl-totaal').textContent || '').includes('11 lichtpunten'));
+  /* verwijderen tijdens het bewerken: bewerk-stand stopt mee */
+  await page.click('#verllijst li .info');
   antwoord({ doe: 'dismiss' });
   await page.click('#verllijst li .del');              /* confirm geweigerd */
   antwoord({ doe: 'accept' });
