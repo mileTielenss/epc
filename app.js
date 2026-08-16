@@ -396,7 +396,7 @@ function zetTab(naam) {
 }
 
 function zetTitel() {
-  $('#titel').textContent = nummerPrefix(S) + (S.algemeen.adres || 'Nieuwe woning');
+  $('#titel').textContent = naamPrefix(S) + (S.algemeen.adres || 'Nieuwe woning');
 }
 
 async function openWoning(id) {
@@ -461,7 +461,7 @@ async function renderLijst() {
     li.innerHTML =
       thumb +
       `<div class="info">
-         <div class="r1">${esc(nummerPrefix(w) + (w.soort === 'gemene-delen' ? '\u{1F3E2} ' : '') + ((w.algemeen && w.algemeen.adres) || 'Zonder adres'))}</div>
+         <div class="r1">${esc(naamPrefix(w) + ((w.algemeen && w.algemeen.adres) || 'Zonder adres'))}</div>
          <div class="r3">${esc((w.algemeen && w.algemeen.datum) || '')}</div>
        </div>
        <span class="status ${klaar ? 'klaar' : ''}">${klaar ? 'PDF ✓' : 'Open'}</span>`;
@@ -2280,6 +2280,12 @@ function zetVolgendeIndex(n) {
 function nummerPrefix(w) {
   return w.nummer + '. ';
 }
+/* volledige naamaanhef: "2. Adres" voor een woning, "2. GD Adres" voor gemene
+   delen — zelfde nummering, enkel het GD-voorvoegsel, zodat beide soorten in
+   dezelfde map netjes samen sorteren (§7.1/§9.3) */
+function naamPrefix(w) {
+  return nummerPrefix(w) + (w.soort === 'gemene-delen' ? 'GD ' : '');
+}
 /* adres zonder tekens die een bestandsnaam breken; spaties, komma's en
    koppeltekens blijven behouden. Naam van de pdf ín de zip (nummervrij). */
 function schoonAdres(w) {
@@ -2288,7 +2294,7 @@ function schoonAdres(w) {
 }
 /* bestandsnaam van de zip zelf: "<nummer>. <adres>" (§9.3) */
 function zipBasisnaam(w) {
-  return nummerPrefix(w) + schoonAdres(w);
+  return naamPrefix(w) + schoonAdres(w);
 }
 
 function zetVoortgang(v) {

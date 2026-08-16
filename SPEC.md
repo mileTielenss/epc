@@ -178,8 +178,9 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 ### 7.1 Woningenlijst
 - Titelbalk "EPC Plaatsbezoek". Gesorteerd op laatst gewijzigd.
 - Per rij: hoofdfoto-thumb, **`<nummer>. <adres>`** ("Zonder adres") — bij
-  gemene delen met 🏢 tussen nummer en adres —, datum, statuspill afgeleid uit
-  `pdfBewaardOp` (grijs "Open" / groen "PDF ✓", **geen knop**).
+  gemene delen **`<nummer>. GD <adres>`** (zelfde nummering, enkel het
+  GD-voorvoegsel) —, datum, statuspill afgeleid uit `pdfBewaardOp` (grijs
+  "Open" / groen "PDF ✓", **geen knop**).
 - Twee aanmaakknoppen: **"+ Nieuwe woning"** en **"+ Gemene delen"** (zelfde
   flow en dezelfde nummerteller; `soort` ligt daarna vast).
 - Verwijderen kan niet vanuit de lijst, enkel op de tab Afronden.
@@ -207,7 +208,8 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   nummer". De klik die op het loslaten volgt opent de woning **niet**. Mislukt
   het bewaren → toast "Nummer aanpassen mislukt".
 ### 7.2 Header (editor)
-- Groene sticky balk: terugpijl `‹`, titel `<nummer>. <adres>` (ellipsis),
+- Groene sticky balk: terugpijl `‹`, titel `<nummer>. <adres>` — bij gemene
+  delen `<nummer>. GD <adres>` — (ellipsis),
   save-bolletje. Rode balk daarboven. De titel is geen knop; het nummer pas je
   aan via de lijst (§7.1).
 - Tabs: Algemeen · Details · Foto's · Afronden.
@@ -468,8 +470,11 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    (`/ \ : * ? " < > |`) vervangen door spaties, meervoudige spaties
    samengevouwen (fallback "EPC plaatsbezoek"); spaties, komma's en koppeltekens
    blijven behouden. **De zip zelf** heet `"<nummer>. <adres>.zip"` (§7.1), bv.
-   `"24. Pelgrimlaan 15, Hasselt.zip"` — het nummer staat enkel op de
-   buitenverpakking. `File` met die naam → `navigator.share({files})`.
+   `"24. Pelgrimlaan 15, Hasselt.zip"`; bij gemene delen
+   `"<nummer>. GD <adres>.zip"` — zelfde nummering met het GD-voorvoegsel,
+   zodat woningen en gemene delen in dezelfde map samen sorteren. Nummer en
+   voorvoegsel staan enkel op de buitenverpakking. `File` met die naam →
+   `navigator.share({files})`.
 4. **`NotAllowedError`** (iOS eist een user gesture, de bouw zit ertussen): de Blob
    blijft in het geheugen, op de plaats van de knop verschijnt **"Deel dossier"**
    die `share()` rechtstreeks vanuit een tik aanroept.

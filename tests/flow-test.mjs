@@ -508,6 +508,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
     page.waitForEvent('download', { timeout: 30000 }),
     page.click('#btn-print')
   ]);
+  check('zip-naam met GD-voorvoegsel', gdDownload.suggestedFilename() === '1. GD Residentie Zonnedauw, Geel.zip');
   const gdZip = `${MAP}/gdtest.zip`;
   await gdDownload.saveAs(gdZip);
   execSync(`rm -rf ${MAP}/gdzip && mkdir -p ${MAP}/gdzip && unzip -o -q "${gdZip}" -d ${MAP}/gdzip`);
@@ -528,7 +529,7 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('import: privatief element terug', (await page.textContent('#ramenlijst')).includes('privatief'));
   await page.click('#btn-terug');
   await page.waitForSelector('#view-lijst:not([hidden])');
-  check('lijst toont 🏢 bij gemene delen', (await page.textContent('#woninglijst')).includes('\u{1F3E2}'));
+  check('lijst toont "GD " voor het adres bij gemene delen', /\d+\. GD Residentie Zonnedauw/.test(await page.textContent('#woninglijst')));
   await ctx.close();
 }
 
