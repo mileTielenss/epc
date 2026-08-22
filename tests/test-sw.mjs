@@ -118,13 +118,13 @@ assert.equal((await e.antwoord).status, 200, 'netwerkantwoord doorgegeven');
 await new Promise(r => setTimeout(r, 10));
 assert.ok(cacheStores.get(cacheNaam).has('https://app.test/nieuw.png'), 'same-origin bijgecachet');
 
-/* ---- fetch: miss -> netwerk ok, cross-origin -> niet bijgecachet ---- */
-fetchAntwoord = new Response('extern', { status: 200 });
+/* ---- fetch: vreemde oorsprong wordt helemaal niet afgehandeld (§4) ---- */
 e = fetchEvent({ method: 'GET', url: 'https://nominatim.openstreetmap.org/reverse' });
 handlers.fetch(e);
-assert.equal((await e.antwoord).status, 200);
-await new Promise(r => setTimeout(r, 10));
-assert.ok(!cacheStores.get(cacheNaam).has('https://nominatim.openstreetmap.org/reverse'), 'cross-origin niet bijgecachet');
+assert.ok(!e.respondWithAangeroepen, 'cross-origin gaat rechtstreeks naar het netwerk');
+e = fetchEvent({ method: 'GET', url: 'https://192.168.0.200:5006/' });
+handlers.fetch(e);
+assert.ok(!e.respondWithAangeroepen, 'NAS-oproep niet afgehandeld: echte fout blijft zichtbaar');
 
 /* ---- fetch: miss -> netwerk 500 -> doorgegeven, niet bijgecachet ---- */
 fetchAntwoord = new Response('kapot', { status: 500 });

@@ -59,7 +59,10 @@ Kleuren: accent `#0a6b3d`, accent-donker `#07522e`, inkt `#101418`, gedempt
   `cache:'no-store'` (atomisch en CDN-proof, §9.5); opgeslagen onder de kale url.
   **Geen automatische `skipWaiting()`** — enkel op verzoek, zie hieronder.
 - Activate: verwijdert alle andere caches, dan `clients.claim()`.
-- Fetch: cache-first, **uitsluitend uit de eigen cache**
+- Fetch: **vreemde oorsprong (NAS, Nominatim) raakt de SW niet aan** — die
+  gaan rechtstreeks naar het netwerk, zodat de échte browserfout (certificaat,
+  CORS) zichtbaar blijft in plaats van een algemene fout uit deze handler.
+  Voor de eigen oorsprong: cache-first, **uitsluitend uit de eigen cache**
   (`caches.open(VERSIE).match(req, {ignoreSearch:true})`). Miss → netwerk, gelukte
   same-origin-responses bijcachen. Offline navigatie → `./index.html` uit eigen cache.
   Urls die `sw.js?` bevatten gaan rechtstreeks naar het netwerk (versiecheck, §9.5).

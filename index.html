@@ -393,11 +393,12 @@
 
       <button type="button" class="btn sec big" id="btn-nas-test">Verbinding testen</button>
       <div id="nas-uitslag" class="totaal" hidden></div>
-      <p class="hint">Lukt het niet? Open de server eerst in Safari: krijg je een
-        certificaatwaarschuwing, vertrouw dan eerst het certificaat op dit toestel.
-        Werkt Safari wél, dan moet de NAS CORS toelaten voor
-        <b>https://miletielenss.github.io</b> (PUT, MKCOL, DELETE, PROPFIND +
-        headers Authorization en Depth).</p>
+      <p class="hint">Lukt het niet? Doorklikken op een certificaatwaarschuwing in
+        Safari is <b>niet</b> genoeg: het certificaat moet als profiel geïnstalleerd
+        zijn én aan staan bij Instellingen → Algemeen → Info →
+        Certificaatvertrouwensinstellingen. Werkt dat en blijft het mislukken, dan
+        moet de NAS CORS toelaten voor <b>https://miletielenss.github.io</b>
+        (PUT, MKCOL, DELETE, PROPFIND + headers Authorization en Depth).</p>
     </div>
   </div>
 </div>
