@@ -735,6 +735,14 @@ woning: {
 De volledige suite staat in `tests/` (eigen `package.json`; enkel test-tooling,
 de app zelf blijft dependency-vrij). Draaien vanuit `tests/`: `npm install`,
 dan `npm run unit`, `npm run flows`, `npm run camera` en `npm run dekking`.
+`npm run nas` staat daarnaast (niet in de vaste release-set, want hij opent
+poorten): een **echte https-WebDAV-server** met een zelfondertekend certificaat
+waar de echte app tegenaan praat. Hij bewijst twee dingen tegelijk — met een
+**niet-vertrouwd** certificaat blokkeert de browser vóór het netwerk (de server
+ziet niets, de app meldt "niet bereikbaar"), en met een **vertrouwd**
+certificaat loopt de volledige upload (`OPTIONS`, `PUT` met Basic-auth,
+`DELETE`) wél door. Zo blijft aantoonbaar dat een mislukte NAS-upload een
+certificaat- of CORS-kwestie is en geen fout in de app.
 - **100% regeldekking, afgedwongen**: `node tests/dekking.mjs` meet de
   V8-regeldekking van `app.js`, `db.js`, `maakpdf.js`, `maakzip.js`,
   `pdfworker.js` en `sw.js`

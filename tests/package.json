@@ -7,7 +7,8 @@
     "unit": "node unittest-maakpdf.mjs && node test-maakzip.mjs && node test-pdfworker.mjs && node test-sw.mjs",
     "flows": "node flow-test.mjs",
     "camera": "node camera-test.mjs",
-    "dekking": "node dekking.mjs"
+    "dekking": "node dekking.mjs",
+    "nas": "node nas-echt.mjs"
   },
   "devDependencies": {
     "c8": "^10.1.2",
