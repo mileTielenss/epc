@@ -2391,6 +2391,15 @@ function nasInstellingen() {
 function zetNasInstellingen(n) {
   try { localStorage.setItem(NAS_SLEUTEL, JSON.stringify(n)); } catch (e) { /* geen storage */ }
 }
+/* http:// kan nooit werken: de app draait op https en de browser blokkeert
+   gemengde inhoud onherroepelijk — dat vooraf zeggen scheelt zoekwerk (§7.8) */
+function nasProbleem(n) {
+  if (!/^https:\/\//i.test(n.server)) {
+    return 'Server moet met https:// beginnen — http wordt door de browser geblokkeerd';
+  }
+  return '';
+}
+
 /* de schakelaar beslist; server en gebruikersnaam moeten wel ingevuld zijn */
 function nasIngesteld() {
   const n = nasInstellingen();
@@ -2442,6 +2451,8 @@ async function nasBereikbaar(n) {
 }
 
 async function nasDiagnose(n, fout) {
+  const mis = nasProbleem(n);
+  if (mis) return mis;
   if (!fout.startsWith('geen verbinding')) return fout;
   const ruw = fout.slice('geen verbinding'.length).trim();
   return ((await nasBereikbaar(n))
@@ -2497,6 +2508,8 @@ function nasUitslag(tekst, gelukt) {
 async function nasTest() {
   const n = nasInstellingen();
   if (!n.server || !n.gebruiker) { toast('Vul minstens server en gebruikersnaam in'); return; }
+  const mis = nasProbleem(n);
+  if (mis) { nasUitslag(mis, false); toast(mis, 6000); return; }
   toast('Verbinding testen…');
   try {
     const url = await nasVerstuur(n, 'epc-verbindingstest.txt', 'ok', 'text/plain');
@@ -2550,6 +2563,8 @@ let nasLaatsteFout = '';    /* reden van de laatste mislukte upload, voor de mel
 async function toonNasMappen(pad) {
   const n = nasInstellingen();
   if (!n.server || !n.gebruiker) { toast('Vul minstens server en gebruikersnaam in'); return; }
+  const mis = nasProbleem(n);
+  if (mis) { toast(mis, 6000); return; }
   toast('Mappen ophalen…');
   let mappen;
   try { mappen = await nasMappen(n, pad); }

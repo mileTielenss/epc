@@ -1141,6 +1141,14 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   await page.click('#btn-nas-bladeren');
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('minstens server'));
 
+  /* http:// wordt meteen geweigerd: gemengde inhoud kan de browser niet (§7.8) */
+  await page.fill('#nas-server', 'http://192.168.0.200:5005');
+  await page.fill('#nas-gebruiker', 'mile');
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#nas-uitslag').textContent || '').includes('https://'));
+  await page.click('#btn-nas-bladeren');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('https://'));
+
   /* instellingen bewaren zichzelf per toetsaanslag */
   await page.fill('#nas-server', 'https://192.168.0.200/');
   await page.fill('#nas-gebruiker', 'mile');

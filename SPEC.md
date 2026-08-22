@@ -448,6 +448,9 @@ gebruikersnaam ingevuld zijn.
     terugval); staat alles goed, dan staat er grijs "Op de NAS gezet op …";
   - **verwijderen** vraagt dan het typ-slot van §6 in plaats van een gewone
     bevestiging.
+- **Enkel https**: de app draait op een https-oorsprong, dus een `http://`-NAS
+  wordt door de browser geblokkeerd (gemengde inhoud). De app weigert zo'n url
+  meteen met "Server moet met https:// beginnen", vóór er iets geprobeerd wordt.
 - **Diagnose bij "geen verbinding"**: die fout kan drie dingen betekenen, dus
   doet de app een **no-cors-probe** (`GET` op de server) om ze te scheiden.
   Slaagt die → "NAS antwoordt, maar blokkeert de app (CORS)"; faalt die →
