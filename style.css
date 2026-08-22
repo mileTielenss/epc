@@ -69,6 +69,29 @@ body{
   min-height:34px;padding:4px 10px;
 }
 #topbar:has(#updatebalk:not([hidden])) .toprij{padding-top:8px}
+/* discreet tandwiel onderaan het midden: instellingen staan uit de weg (§7.8) */
+#btn-instellingen{
+  display:block;margin:18px auto 0;padding:6px 14px;
+  border:0;background:none;color:var(--mut);font-size:1.5rem;line-height:1;
+}
+#btn-instellingen:active{opacity:.5}
+
+/* instellingenpaneel: schuift over de lijst, zelfde laag als de lightbox */
+#instellingen{
+  position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.45);
+  display:flex;align-items:flex-end;justify-content:center;
+}
+#instellingen .paneel{
+  width:100%;max-width:640px;max-height:92vh;overflow-y:auto;
+  background:var(--bg);border-radius:16px 16px 0 0;
+  padding:14px 14px calc(18px + env(safe-area-inset-bottom));
+}
+#instellingen .paneelkop{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+#instellingen .paneelkop h2{flex:1;margin:0;font-size:1.05rem}
+#instellingen h3{margin:12px 0 4px;font-size:.9rem}
+#nas-mappen li{cursor:pointer}
+#nas-mappen .leeg{display:block;background:none;border:1.5px dashed var(--line);color:var(--mut);text-align:center;padding:14px}
+
 #versieregel{margin:14px 0 4px;text-align:center;font-size:.72rem;color:var(--mut)}
 
 /* ---------- ruimtebalk in de header: op elke tab behalve Algemeen/Afronden ---------- */

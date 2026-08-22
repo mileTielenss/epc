@@ -2426,6 +2426,97 @@ async function nasTest() {
   }
 }
 
+/* ---------- map kiezen op de NAS (§7.8): bladeren met PROPFIND ---------- */
+
+/* het pad dat de server-url zelf al draagt (bv. https://nas:5006/dav) */
+function nasBasisPad(n) {
+  try { return new URL(n.server).pathname.replace(/\/+$/, ''); } catch (e) { return ''; }
+}
+/* absoluut pad uit een href -> pad relatief aan de ingestelde server */
+function nasRelatief(n, absoluut) {
+  const basis = nasBasisPad(n);
+  const p = absoluut.replace(/\/+$/, '');
+  return (basis && p.startsWith(basis) ? p.slice(basis.length) : p).replace(/^\/+/, '');
+}
+
+async function nasMappen(n, pad) {
+  const url = nasUrl({ ...n, map: pad }, '');
+  let r;
+  try {
+    r = await fetch(url, {
+      method: 'PROPFIND',
+      headers: { ...nasKop(n), Depth: '1', 'Content-Type': 'application/xml' },
+      body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>'
+    });
+  } catch (e) { throw new Error('geen verbinding'); }
+  if (!r.ok) throw new Error(nasFoutTekst(r.status));
+  const doc = new DOMParser().parseFromString(await r.text(), 'application/xml');
+  const hier = nasRelatief(n, decodeURIComponent(new URL(url).pathname));
+  const mappen = [];
+  [...doc.getElementsByTagNameNS('DAV:', 'response')].forEach(res => {
+    const href = res.getElementsByTagNameNS('DAV:', 'href')[0];
+    if (!href || !res.getElementsByTagNameNS('DAV:', 'collection').length) return;
+    const p = nasRelatief(n, decodeURIComponent(new URL(href.textContent.trim(), n.server).pathname));
+    if (p && p !== hier) mappen.push(p);
+  });
+  return [...new Set(mappen)].sort();
+}
+
+let nasPad = '';   /* map die je momenteel bekijkt, relatief aan de server */
+
+async function toonNasMappen(pad) {
+  const n = nasInstellingen();
+  if (!n.server || !n.gebruiker) { toast('Vul minstens server en gebruikersnaam in'); return; }
+  toast('Mappen ophalen…');
+  let mappen;
+  try { mappen = await nasMappen(n, pad); }
+  catch (e) { toast(`Bladeren mislukt (${e.message})`); return; }
+  nasPad = pad;
+  $('#nas-blader').hidden = false;
+  $('#nas-blader-pad').textContent = 'Huidige map: ' + (pad || '(hoofdmap)');
+  const ul = $('#nas-mappen');
+  ul.innerHTML = '';
+  if (pad) {
+    const op = document.createElement('li');
+    op.dataset.pad = pad.split('/').slice(0, -1).join('/');
+    op.innerHTML = '<div class="info"><div class="r1">&#11014; Een map omhoog</div></div>';
+    ul.appendChild(op);
+  }
+  mappen.forEach(p => {
+    const li = document.createElement('li');
+    li.dataset.pad = p;
+    li.innerHTML = `<div class="info"><div class="r1">&#128193; ${esc(p.split('/').pop())}</div></div>`;
+    ul.appendChild(li);
+  });
+  if (!mappen.length && !pad) ul.innerHTML = '<li class="leeg">Geen submappen gevonden.</li>';
+  toast(`${mappen.length} map${mappen.length === 1 ? '' : 'pen'}`);
+}
+
+$('#btn-nas-bladeren').addEventListener('click', () => toonNasMappen(nasInstellingen().map));
+$('#nas-mappen').addEventListener('click', e => {
+  const li = e.target.closest('li[data-pad]');
+  if (li) toonNasMappen(li.dataset.pad);
+});
+$('#btn-nas-kies').addEventListener('click', () => {
+  const n = nasInstellingen();
+  n.map = nasPad;
+  zetNasInstellingen(n);
+  syncNasForm();
+  $('#nas-blader').hidden = true;
+  toast(`Map: ${nasPad || '(hoofdmap)'}`);
+});
+$('#btn-nas-blader-dicht').addEventListener('click', () => { $('#nas-blader').hidden = true; });
+
+/* het paneel zelf: verstopt achter het tandwiel onderaan de lijst */
+$('#btn-instellingen').addEventListener('click', () => {
+  syncNasForm();
+  $('#nas-blader').hidden = true;
+  $('#instellingen').hidden = false;
+});
+$('#instellingen').addEventListener('click', e => {
+  if (e.target.id === 'instellingen' || e.target.id === 'btn-instellingen-dicht') $('#instellingen').hidden = true;
+});
+
 const NAS_VELDEN = { server: '#nas-server', gebruiker: '#nas-gebruiker', wachtwoord: '#nas-wachtwoord', map: '#nas-map' };
 function syncNasForm() {
   const n = nasInstellingen();

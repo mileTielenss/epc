@@ -55,23 +55,7 @@
   <button type="button" class="btn sec big" id="btn-nieuwgd">+ Gemene delen</button>
   <button type="button" class="btn sec big" id="btn-importeer">Importeer dossier</button>
 
-  <details class="sectie" id="sec-nas">
-    <summary>NAS-upload (optioneel)</summary>
-    <p class="hint">Vul je NAS in en een bewaard dossier gaat er rechtstreeks naartoe
-      (WebDAV over https). <b>Laat je server of gebruikersnaam leeg, dan volgt de app
-      gewoon de huidige flow</b> met de deelkaart van iOS. Mislukt de upload, dan valt
-      de app ook terug op die deelkaart — een dossier gaat nooit verloren.
-      De gegevens staan enkel op dit toestel.</p>
-    <label class="fld"><span class="lbl">Server</span>
-      <input type="text" id="nas-server" placeholder="https://192.168.0.200" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-    <label class="fld"><span class="lbl">Gebruikersnaam</span>
-      <input type="text" id="nas-gebruiker" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-    <label class="fld"><span class="lbl">Wachtwoord</span>
-      <input type="password" id="nas-wachtwoord" autocomplete="off"></label>
-    <label class="fld"><span class="lbl">Map op de NAS (optioneel)</span>
-      <input type="text" id="nas-map" placeholder="EPC/dossiers" autocapitalize="off" spellcheck="false"></label>
-    <button type="button" class="btn sec" id="btn-nas-test">Verbinding testen</button>
-  </details>
+  <button type="button" id="btn-instellingen" aria-label="Instellingen">&#9881;</button>
 
   <p id="versieregel" hidden></p>
 </section>
@@ -367,6 +351,44 @@
     <span id="camteller"></span>
     <span id="camhint">Tik eender waar voor een foto</span>
     <button type="button" class="btn" id="btn-camklaar">Klaar</button>
+  </div>
+</div>
+
+<div id="instellingen" hidden>
+  <div class="paneel">
+    <div class="paneelkop">
+      <h2>Instellingen</h2>
+      <button type="button" class="btn sec" id="btn-instellingen-dicht">Sluiten</button>
+    </div>
+
+    <h3>NAS-upload</h3>
+    <p class="hint">Vul je NAS in en een bewaard dossier gaat er rechtstreeks naartoe
+      (WebDAV over https). <b>Laat server of gebruikersnaam leeg, dan volgt de app
+      gewoon de deelkaart van iOS</b>, net als vroeger. Mislukt de upload, dan valt
+      de app ook op die deelkaart terug — een dossier gaat nooit verloren.
+      Alles staat enkel op dit toestel.</p>
+    <label class="fld"><span class="lbl">Server (met poort als je NAS die gebruikt)</span>
+      <input type="text" id="nas-server" placeholder="https://192.168.0.200:5006" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label class="fld"><span class="lbl">Gebruikersnaam</span>
+      <input type="text" id="nas-gebruiker" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label class="fld"><span class="lbl">Wachtwoord</span>
+      <input type="password" id="nas-wachtwoord" autocomplete="off"></label>
+
+    <span class="lbl">Map op de NAS</span>
+    <div class="invulrij fld">
+      <input type="text" id="nas-map" placeholder="(hoofdmap)" autocapitalize="off" spellcheck="false">
+      <button type="button" class="btn addmini" id="btn-nas-bladeren" title="Map kiezen op de NAS">&#128193;</button>
+    </div>
+    <div id="nas-blader" hidden>
+      <div id="nas-blader-pad" class="hint"></div>
+      <ul id="nas-mappen" class="lijst"></ul>
+      <div class="knoprij">
+        <button type="button" class="btn" id="btn-nas-kies">Kies deze map</button>
+        <button type="button" class="btn sec" id="btn-nas-blader-dicht">Annuleer</button>
+      </div>
+    </div>
+
+    <button type="button" class="btn sec big" id="btn-nas-test">Verbinding testen</button>
   </div>
 </div>
 

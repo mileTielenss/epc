@@ -394,14 +394,25 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   achter (§6).
 - "Woning sluiten" (navigeert terug, wijzigt niets).
 - "Woning verwijderen" (rood, altijd actief, gedrag volgens §6).
-### 7.8 NAS-upload (optioneel, per toestel)
-Onderaan de woningenlijst staat het dichtgeklapte blok **"NAS-upload
-(optioneel)"** met vier velden — **Server** (bv. `https://192.168.0.200`),
-**Gebruikersnaam**, **Wachtwoord**, **Map op de NAS** — en de knop
-**"Verbinding testen"**. Elke toetsaanslag bewaart in
-`localStorage['epc-nas']` (per toestel; het wachtwoord staat er in leesbare
-vorm, net als de dossierteller — bewuste keuze voor één gebruiker op één
-iPhone).
+### 7.8 Instellingen: NAS-upload (optioneel, per toestel)
+Onderaan de woningenlijst staat één **discreet tandwiel** (⚙, gecentreerd,
+grijs) — verder niets. Het opent het **instellingenpaneel**, een overlay die
+van onderen over de lijst schuift met "Sluiten" rechtsboven; een tik naast het
+paneel sluit het ook. Dat is de enige plek met instellingen, zodat ze niet in
+de dagelijkse flow staan.
+In het paneel: **Server** (mét poort als de NAS die gebruikt, bv.
+`https://192.168.0.200:5006`), **Gebruikersnaam**, **Wachtwoord**, **Map op de
+NAS** (met een 📁-knop, zie hieronder) en de knop **"Verbinding testen"**. Elke
+toetsaanslag bewaart in `localStorage['epc-nas']` (per toestel; het wachtwoord
+staat er in leesbare vorm, net als de dossierteller — bewuste keuze voor één
+gebruiker op één iPhone).
+- **Map kiezen i.p.v. tikken**: de 📁-knop bladert met **`PROPFIND` Depth 1**
+  door de NAS. De lijst toont enkel mappen (`DAV:collection`), met bovenaan
+  "⬆ Een map omhoog" zodra je dieper zit; een tik gaat de map in. **"Kies deze
+  map"** legt het huidige pad vast, **"Annuleer"** sluit de bladeraar. Paden
+  worden altijd relatief aan de server-url bewaard (een basispad in die url,
+  bv. `/dav`, wordt er afgehaald). Mislukt het bladeren → toast "Bladeren
+  mislukt (reden)". Het veld blijft ook gewoon met de hand invulbaar.
 - **Leeg = de gewone flow.** Zonder server óf zonder gebruikersnaam verandert er
   niets: "Bewaar dossier" gaat naar de deelkaart zoals altijd (§9.3).
 - **Ingesteld**: de zip gaat met **WebDAV `PUT`** naar
@@ -420,8 +431,9 @@ iPhone).
   én schrijfrecht in één keer. Toast "Verbinding ok — schrijven lukt" of "Geen
   verbinding (reden)".
 - **Randvoorwaarden aan de NAS-kant** (buiten de app om): de NAS moet CORS
-  toelaten voor `https://miletielenss.github.io` met de methodes `PUT`, `MKCOL`
-  en `DELETE`, de header `Authorization`, en `OPTIONS`-preflights beantwoorden;
+  toelaten voor `https://miletielenss.github.io` met de methodes `PUT`, `MKCOL`,
+  `DELETE` en `PROPFIND`, de headers `Authorization` en `Depth`, en
+  `OPTIONS`-preflights beantwoorden;
   en het https-certificaat van de NAS moet op de iPhone vertrouwd zijn. Zonder
   die twee blokkeert de browser de upload en toont de app "geen verbinding".
 ## 8. Foto-pijplijn

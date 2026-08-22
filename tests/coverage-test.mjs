@@ -1104,15 +1104,32 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
     if (modus === '401' && m === 'PUT') return route.fulfill({ status: 401, body: '' });
     if (modus === '409' && m === 'PUT' && !gezien.includes('MKCOL /EPC')) return route.fulfill({ status: 409, body: '' });
     if (modus === '409' && m === 'DELETE') return route.abort();   /* opruimen faalt: catch */
+    if (m === 'PROPFIND') {
+      if (modus === 'propfout') return route.fulfill({ status: 403, body: '' });
+      const hier = new URL(route.request().url()).pathname.replace(/\/+$/, '');
+      const kinderen = modus === 'leeg' ? [] : [hier + '/EPC', hier + '/Fotos'];
+      return route.fulfill({
+        status: 207, contentType: 'application/xml',
+        body: '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">' +
+          [hier + '/', ...kinderen].map(h =>
+            `<d:response><d:href>${h}</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>`).join('') +
+          `<d:response><d:href>${hier}/nota.txt</d:href><d:propstat><d:prop><d:resourcetype/></d:prop></d:propstat></d:response>` +
+          '</d:multistatus>'
+      });
+    }
     return route.fulfill({ status: m === 'PUT' ? 201 : 204, body: '' });
   });
 
   await page.goto(BASIS);
   await page.waitForSelector('#btn-nieuwewoning');
-  await page.click('#sec-nas summary');
+  /* instellingen zitten achter het tandwiel (§7.8) */
+  await page.click('#btn-instellingen');
+  await page.waitForSelector('#instellingen:not([hidden])');
 
-  /* zonder server: de test weigert meteen */
+  /* zonder server: test én bladeren weigeren meteen */
   await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('minstens server'));
+  await page.click('#btn-nas-bladeren');
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('minstens server'));
 
   /* instellingen bewaren zichzelf per toetsaanslag */
@@ -1144,6 +1161,37 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   modus = 'stuk';
   await page.click('#btn-nas-test');
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('geen verbinding'));
+
+  /* map kiezen door te bladeren (§7.8) */
+  modus = 'ok';
+  await page.click('#btn-nas-bladeren');
+  await page.waitForSelector('#nas-blader:not([hidden])');
+  assert.equal(await page.locator('#nas-mappen li').count(), 3, 'omhoog + twee mappen, geen bestanden');
+  await page.click('#nas-mappen li:nth-child(3)');            /* Fotos in */
+  await page.waitForFunction(() => document.querySelector('#nas-blader-pad').textContent.includes('Fotos'));
+  await page.click('#nas-mappen li:nth-child(1)');            /* weer omhoog */
+  await page.waitForFunction(() => !document.querySelector('#nas-blader-pad').textContent.includes('Fotos'));
+  await page.click('#btn-nas-kies');
+  assert.equal(await page.inputValue('#nas-map'), 'EPC/dossiers', 'gekozen map in het veld');
+  await page.click('#btn-nas-bladeren');
+  await page.click('#btn-nas-blader-dicht');
+  assert.ok(await page.locator('#nas-blader').isHidden(), 'bladeraar sluit met Annuleer');
+  /* hoofdmap zonder submappen, en een weigerende server */
+  await page.evaluate(() => { const n = nasInstellingen(); n.map = ''; zetNasInstellingen(n); syncNasForm(); });
+  modus = 'leeg';
+  await page.click('#btn-nas-bladeren');
+  await page.waitForFunction(() => document.querySelector('#nas-mappen').textContent.includes('Geen submappen'));
+  modus = 'propfout';
+  await page.click('#btn-nas-bladeren');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Bladeren mislukt'));
+  modus = 'ok';
+  await page.evaluate(() => { const n = nasInstellingen(); n.map = 'EPC/dossiers'; zetNasInstellingen(n); syncNasForm(); });
+  /* paneel sluiten: eerst via de knop, later opnieuw openen */
+  await page.click('#btn-instellingen-dicht');
+  await page.waitForSelector('#instellingen', { state: 'hidden' });
+  await page.click('#btn-instellingen');
+  await page.click('#instellingen', { position: { x: 5, y: 5 } });   /* naast het paneel */
+  await page.waitForSelector('#instellingen', { state: 'hidden' });
 
   /* de overige statusteksten */
   assert.deepEqual(await page.evaluate(() => [404, 405, 507, 418].map(nasFoutTekst)),
