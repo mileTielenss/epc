@@ -1228,7 +1228,17 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   assert.ok(gezien.some(g => g.startsWith('PUT /EPC/dossiers/1.%20Nasstraat%201.zip')), 'zip met zijn eigen naam op de NAS');
   assert.ok(await page.evaluate(() => !!S.pdfBewaardOp), 'pdfBewaardOp gezet na een geslaagde upload');
 
-  /* NAS onbereikbaar: terugval op de gewone flow (hier: download) */
+  assert.ok(await page.evaluate(() => !!S.nasBewaardOp), 'nasBewaardOp gezet na de upload');
+  assert.ok((await page.textContent('#nas-status')).startsWith('Op de NAS gezet op'), 'grijze NAS-regel');
+  assert.ok(await page.locator('#btn-nas-opnieuw').isHidden(), 'geen retry-knop als alles goed staat');
+  await page.click('#btn-terug');
+  await page.waitForSelector('#woninglijst li.woning');
+  assert.equal(await page.textContent('#woninglijst .status'), 'PDF ✓', 'pill groen als de NAS bij is');
+  await page.click('#woninglijst li.woning .info');
+  await page.waitForSelector('#app:not([hidden])');
+
+  /* NAS onbereikbaar: terugval op de gewone flow (hier: download), maar de
+     stand blijft zichtbaar staan (§7.8) */
   modus = 'stuk';
   await page.click('#tabbar button[data-tab="algemeen"]');
   await page.fill('#adres', 'Nasstraat 2');
@@ -1239,6 +1249,51 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
     page.click('#btn-print')
   ]);
   await dl.saveAs(join(HIER, 'uitvoer', 'nas-terugval.zip'));
+  await page.waitForFunction(() => document.querySelector('#nas-status').textContent.includes('GEWIJZIGD SINDS DE NAS-KOPIE'));
+  assert.ok((await page.textContent('#nas-status')).includes('geen verbinding'), 'reden staat erbij');
+  assert.ok(await page.locator('#btn-nas-opnieuw').isVisible(), 'retry-knop verschijnt');
+  await page.click('#btn-terug');
+  await page.waitForSelector('#woninglijst li.woning');
+  assert.equal(await page.textContent('#woninglijst .status'), 'Niet op NAS', 'pill meldt de ontbrekende NAS-kopie');
+  await page.click('#woninglijst li.woning .info');
+  await page.waitForSelector('#app:not([hidden])');
+  await page.click('#tabbar button[data-tab="afronden"]');
+
+  /* retry: eerst opnieuw mislukt, dan gelukt */
+  await page.click('#btn-nas-opnieuw');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('NIET op de NAS'));
+  modus = 'ok';
+  await page.click('#btn-nas-opnieuw');
+  await page.waitForFunction(() => document.querySelector('#nas-status').textContent.startsWith('Op de NAS gezet op'));
+  assert.ok(await page.evaluate(() => nasActueel(S)), 'NAS terug bij na de retry');
+
+  /* verwijderen zonder NAS-kopie vraagt het typ-slot (§6) */
+  modus = 'stuk';
+  await page.click('#tabbar button[data-tab="algemeen"]');
+  await page.fill('#adres', 'Nasstraat 3');
+  await page.locator('#adres').blur();
+  await page.click('#tabbar button[data-tab="afronden"]');
+  const [dl2] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30000 }),
+    page.click('#btn-print')
+  ]);
+  await dl2.saveAs(join(HIER, 'uitvoer', 'nas-terugval2.zip'));
+  antwoord({ doe: 'accept', tekst: 'VERWIJDER' });
+  await page.click('#btn-verwijder-woning');
+  await page.waitForSelector('#view-lijst:not([hidden])');
+
+  /* time-out: een NAS die nooit antwoordt (route blijft hangen) */
+  await page.unroute('https://192.168.0.200/**');
+  await page.route('https://192.168.0.200/**', () => { /* nooit antwoorden */ });
+  await page.evaluate(() => { window.__echteAC = AbortController; });
+  await page.click('#btn-instellingen');
+  await page.evaluate(() => {
+    /* de time-out van 15 s versnellen door meteen af te breken */
+    const echte = window.setTimeout;
+    window.setTimeout = (fn, ms) => echte(fn, ms > 5000 ? 50 : ms);
+  });
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('time-out'), null, { timeout: 20000 });
 });
 
 await browser.close();

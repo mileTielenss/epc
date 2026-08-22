@@ -104,6 +104,8 @@ woning = {
   gemaakt, gewijzigd,          // ISO
   pdfBewaardOp: ISO | null,    // enige statusbron; samen met `gewijzigd` bepaalt
                                // hij of het dossier nog actueel is (§6)
+  nasBewaardOp: ISO | null,    // wanneer de zip op de NAS belandde (§7.8);
+                               // ouder dan `gewijzigd` = de NAS loopt achter
   algemeen: { adres, datum (YYYY-MM-DD, default vandaag), notities,
               hoofdFotoId | null },   // moet een foto met groep 'gevels' zijn
   ruimtes: [ { id, naam,
@@ -180,8 +182,9 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   en op Afronden staat "Dossier bewaard op … — nadien gewijzigd, bewaar
   opnieuw" in het rood. Geen extra veld.
 - **Verwijderen**: kan **altijd**, ook zonder bewaard dossier. Bij een
-  **actueel** dossier: `confirm()` met datum en uur. Is er **niets bewaard of
-  zitten er wijzigingen buiten de export**:
+  **actueel** dossier dat (indien een NAS ingesteld is) ook op de NAS staat:
+  `confirm()` met datum en uur. Is er **niets bewaard, zitten er wijzigingen
+  buiten de export, of ontbreekt de NAS-kopie**:
   extra slot tegen ongelukken — een `prompt()` waarin letterlijk **VERWIJDER**
   getypt moet worden (hoofdletterongevoelig, gespaties getrimd); iets anders →
   toast "Niet verwijderd", annuleren → niets. De prompt zegt welke van de twee
@@ -426,6 +429,22 @@ gebruiker op één iPhone).
   507 → "NAS vol", anders "status N"), dan toast de app de reden en **valt terug
   op de deelkaart**. Een dossier gaat dus nooit verloren door een NAS die niet
   antwoordt.
+- **Nooit stilzwijgend mislukken.** Een mislukte upload is niet alleen een
+  toast (die verdwijnt achter de deelkaart), maar een **blijvende stand**:
+  - `nasBewaardOp` wordt enkel gezet ná een geslaagde upload, in dezelfde write
+    als `pdfBewaardOp`;
+  - de **statuspill** in de lijst toont rood **"Niet op NAS"** zolang een
+    bewaard dossier niet (of niet meer) op de NAS staat — die stand overleeft
+    het sluiten van de app;
+  - op **Afronden** staat rood **"NIET OP DE NAS — reden"** (of "GEWIJZIGD
+    SINDS DE NAS-KOPIE") met daaronder de knop **"Opnieuw naar de NAS
+    sturen"**, die de zip vers bouwt en enkel naar de NAS stuurt (geen
+    terugval); staat alles goed, dan staat er grijs "Op de NAS gezet op …";
+  - **verwijderen** vraagt dan het typ-slot van §6 in plaats van een gewone
+    bevestiging.
+- **Time-outs**: elke NAS-oproep heeft een harde limiet (upload 120 s, de rest
+  15 s) via `AbortController`. Een verkeerd ip of een dichte poort geeft dus
+  "geen antwoord (time-out)" in plaats van een app die blijft hangen.
 - **"Verbinding testen"** schrijft echt: `PUT` van `epc-verbindingstest.txt`
   (met dezelfde `MKCOL`-stap) en daarna `DELETE`. Zo test hij aanmelding, CORS
   én schrijfrecht in één keer. Toast "Verbinding ok — schrijven lukt" of "Geen

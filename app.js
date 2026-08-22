@@ -22,6 +22,15 @@ function dossierActueel(w) {
   return !!w.pdfBewaardOp && !((w.gewijzigd || '') > w.pdfBewaardOp);
 }
 
+/* staat de huidige inhoud ook op de NAS? Enkel zinvol als er een NAS ingesteld
+   is; anders is de vraag niet van toepassing (§7.8) */
+function nasActueel(w) {
+  return !!w.nasBewaardOp && !((w.gewijzigd || '') > w.nasBewaardOp);
+}
+function nasAchter(w) {
+  return nasIngesteld() && !!w.pdfBewaardOp && !nasActueel(w);
+}
+
 function num(s) {
   const v = parseFloat(String(s).trim().replace(',', '.'));
   return isFinite(v) && v > 0 ? v : 0;
@@ -176,6 +185,7 @@ function leegWoning() {
     gemaakt: nu(),
     gewijzigd: nu(),
     pdfBewaardOp: null,
+    nasBewaardOp: null,   /* wanneer de zip op de NAS belandde (§7.8) */
     algemeen: { adres: '', datum: vandaag(), notities: '', hoofdFotoId: null },
     ruimtes: standaardRuimtes(),
     ramen: [],
@@ -300,6 +310,7 @@ function normaliseer(p) {
   }
 
   if (w.pdfBewaardOp !== null && typeof w.pdfBewaardOp !== 'string') w.pdfBewaardOp = null;
+  if (w.nasBewaardOp !== null && typeof w.nasBewaardOp !== 'string') w.nasBewaardOp = null;
   if (!w.id) w.id = DB.nieuwId();
 
   if (fix.length) {
@@ -336,6 +347,7 @@ async function bewaar(markeerBewaard) {
   /* na een geslaagde export valt het bewaarmoment samen met de laatste
      wijziging; elke latere wijziging maakt het dossier weer "Gewijzigd" (§6) */
   if (markeerBewaard) S.pdfBewaardOp = S.gewijzigd;
+  if (markeerBewaard === 'nas') S.nasBewaardOp = S.gewijzigd;
   try {
     await DB.putWoning(S);
     if (stand === wijzigStand) dirty = false;
@@ -467,8 +479,11 @@ async function renderLijst() {
       } catch (e) { /* geen thumb */ }
     }
     const actueel = dossierActueel(w);
-    const status = actueel ? 'PDF ✓' : w.pdfBewaardOp ? 'Gewijzigd' : 'Open';
-    const statusKlasse = actueel ? 'klaar' : w.pdfBewaardOp ? 'herzien' : '';
+    /* NAS ingesteld maar de zip staat er (nog) niet op: dat blijft zichtbaar
+       in het overzicht, ook nadat de toast lang weg is (§7.8) */
+    const nasWeg = actueel && nasAchter(w);
+    const status = nasWeg ? 'Niet op NAS' : actueel ? 'PDF ✓' : w.pdfBewaardOp ? 'Gewijzigd' : 'Open';
+    const statusKlasse = nasWeg ? 'herzien' : actueel ? 'klaar' : w.pdfBewaardOp ? 'herzien' : '';
     li.innerHTML =
       thumb +
       `<div class="info">
@@ -2303,6 +2318,27 @@ function renderAfronden() {
     regel.textContent = `Dossier bewaard op ${datumUur(S.pdfBewaardOp)}` +
       (actueel ? '' : ' — nadien gewijzigd, bewaar opnieuw');
   }
+  /* NAS-stand (§7.8): blijft staan tot de zip er echt op staat */
+  const nasRegel = $('#nas-status');
+  const nasKnop = $('#btn-nas-opnieuw');
+  if (!nasIngesteld() || !S.pdfBewaardOp) {
+    nasRegel.hidden = true;
+    nasKnop.hidden = true;
+  } else if (nasActueel(S)) {
+    nasRegel.hidden = false;
+    nasRegel.classList.remove('herzien');
+    nasRegel.classList.add('grijs');
+    nasRegel.textContent = `Op de NAS gezet op ${datumUur(S.nasBewaardOp)}`;
+    nasKnop.hidden = true;
+  } else {
+    nasRegel.hidden = false;
+    nasRegel.classList.remove('grijs');
+    nasRegel.classList.add('herzien');
+    nasRegel.textContent = (S.nasBewaardOp ? 'GEWIJZIGD SINDS DE NAS-KOPIE' : 'NIET OP DE NAS')
+      + (nasLaatsteFout ? ` — ${nasLaatsteFout}` : '');
+    nasKnop.hidden = false;
+  }
+
   /* verwijderen kan altijd (§6); zonder bewaard dossier geldt het typ-slot */
   const del = $('#btn-verwijder-woning');
   del.disabled = false;
@@ -2375,6 +2411,20 @@ function nasKop(n) {
   return { Authorization: 'Basic ' + btoa(bin) };
 }
 
+/* elke NAS-oproep met een harde time-out: een NAS die niet antwoordt (verkeerd
+   ip of poort) mag de app nooit laten hangen (§7.8) */
+async function nasFetch(url, opts, ms) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ac.signal });
+  } catch (e) {
+    throw new Error(e && e.name === 'AbortError' ? 'geen antwoord (time-out)' : 'geen verbinding');
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 function nasFoutTekst(status) {
   if (status === 401 || status === 403) return 'aanmelding geweigerd';
   if (status === 404) return 'map niet gevonden';
@@ -2389,19 +2439,18 @@ async function nasMaakMap(n) {
   let pad = '';
   for (const deel of n.map.split('/').filter(Boolean)) {
     pad += '/' + encodeURIComponent(deel);
-    try { await fetch(basis + pad, { method: 'MKCOL', headers: nasKop(n) }); } catch (e) { /* stil */ }
+    try { await nasFetch(basis + pad, { method: 'MKCOL', headers: nasKop(n) }, 15000); } catch (e) { /* stil */ }
   }
 }
 
 async function nasVerstuur(n, naam, body, type) {
   const url = nasUrl(n, naam);
-  const put = () => fetch(url, { method: 'PUT', headers: { ...nasKop(n), 'Content-Type': type }, body });
-  let r;
-  try { r = await put(); } catch (e) { throw new Error('geen verbinding'); }
+  const put = () => nasFetch(url, { method: 'PUT', headers: { ...nasKop(n), 'Content-Type': type }, body }, 120000);
+  let r = await put();
   /* 409 = bovenliggende map bestaat nog niet */
   if (r.status === 409 && n.map) {
     await nasMaakMap(n);
-    try { r = await put(); } catch (e) { throw new Error('geen verbinding'); }
+    r = await put();
   }
   if (!r.ok) throw new Error(nasFoutTekst(r.status));
   return url;
@@ -2419,7 +2468,7 @@ async function nasTest() {
   toast('Verbinding testen…');
   try {
     const url = await nasVerstuur(n, 'epc-verbindingstest.txt', 'ok', 'text/plain');
-    try { await fetch(url, { method: 'DELETE', headers: nasKop(n) }); } catch (e) { /* rest blijft staan */ }
+    try { await nasFetch(url, { method: 'DELETE', headers: nasKop(n) }, 15000); } catch (e) { /* rest blijft staan */ }
     toast('Verbinding ok — schrijven lukt');
   } catch (e) {
     toast(`Geen verbinding (${e.message})`);
@@ -2441,14 +2490,11 @@ function nasRelatief(n, absoluut) {
 
 async function nasMappen(n, pad) {
   const url = nasUrl({ ...n, map: pad }, '');
-  let r;
-  try {
-    r = await fetch(url, {
-      method: 'PROPFIND',
-      headers: { ...nasKop(n), Depth: '1', 'Content-Type': 'application/xml' },
-      body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>'
-    });
-  } catch (e) { throw new Error('geen verbinding'); }
+  const r = await nasFetch(url, {
+    method: 'PROPFIND',
+    headers: { ...nasKop(n), Depth: '1', 'Content-Type': 'application/xml' },
+    body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>'
+  }, 15000);
   if (!r.ok) throw new Error(nasFoutTekst(r.status));
   const doc = new DOMParser().parseFromString(await r.text(), 'application/xml');
   const hier = nasRelatief(n, decodeURIComponent(new URL(url).pathname));
@@ -2462,7 +2508,8 @@ async function nasMappen(n, pad) {
   return [...new Set(mappen)].sort();
 }
 
-let nasPad = '';   /* map die je momenteel bekijkt, relatief aan de server */
+let nasPad = '';            /* map die je momenteel bekijkt, relatief aan de server */
+let nasLaatsteFout = '';    /* reden van de laatste mislukte upload, voor de melding */
 
 async function toonNasMappen(pad) {
   const n = nasInstellingen();
@@ -2596,40 +2643,46 @@ function bouwInWorker(woning, fotos, naam, extra) {
   });
 }
 
+/* de dossier-zip bouwen als File; gedeeld door "Bewaar dossier" en de
+   NAS-retry, zodat beide exact hetzelfde dossier versturen */
+async function bouwDossierBestand() {
+  /* het dossiernummer wordt pas bij de eerste bewaarpoging toegekend (§7.1):
+     zo volgt de nummering de volgorde van afgewerkte dossiers */
+  if (!S.nummer) {
+    S.nummer = volgendeIndex();
+    zetVolgendeIndex(S.nummer + 1);
+    zetTitel();
+    wijzig();
+  }
+  /* pdf ín de zip: nummervrij (adres); de zip zelf: met nummerprefix */
+  const pdfNaam = schoonAdres(S);
+  const zipNaam = zipBasisnaam(S) + '.zip';
+  const fotos = new Map();
+  for (const [id, rec] of DB.geladenFotos()) {
+    if (fotoVerborgen(id)) continue;
+    const buf = await rec.blob.arrayBuffer();
+    fotos.set(id, { bytes: new Uint8Array(buf), breedte: rec.breedte, hoogte: rec.hoogte, groep: rec.groep, volgorde: rec.volgorde });
+  }
+  /* extra bestanden gaan integraal mee in extra/ (§9.3) */
+  const extra = [];
+  for (const x of await DB.extraVanWoning(S.id)) {
+    extra.push({ naam: x.naam, bytes: new Uint8Array(await x.blob.arrayBuffer()) });
+  }
+  const blob = await bouwInWorker(S, fotos, pdfNaam, extra);
+  return new File([blob], zipNaam, { type: 'application/zip' });
+}
+
 async function bewaarPdf() {
   if (!S || pdfBezig) return;
   pdfBezig = true;
   toast('Dossier maken…');
   zetVoortgang(0);
   try {
-    /* het dossiernummer wordt pas bij de eerste bewaarpoging toegekend (§7.1):
-       zo volgt de nummering de volgorde van afgewerkte dossiers */
-    if (!S.nummer) {
-      S.nummer = volgendeIndex();
-      zetVolgendeIndex(S.nummer + 1);
-      zetTitel();
-      wijzig();
-    }
-    /* pdf ín de zip: nummervrij (adres); de zip zelf: met nummerprefix */
-    const pdfNaam = schoonAdres(S);
-    const zipNaam = zipBasisnaam(S) + '.zip';
-    const fotos = new Map();
-    for (const [id, rec] of DB.geladenFotos()) {
-      if (fotoVerborgen(id)) continue;
-      const buf = await rec.blob.arrayBuffer();
-      fotos.set(id, { bytes: new Uint8Array(buf), breedte: rec.breedte, hoogte: rec.hoogte, groep: rec.groep, volgorde: rec.volgorde });
-    }
-    /* extra bestanden gaan integraal mee in extra/ (§9.3) */
-    const extra = [];
-    for (const x of await DB.extraVanWoning(S.id)) {
-      extra.push({ naam: x.naam, bytes: new Uint8Array(await x.blob.arrayBuffer()) });
-    }
-    const blob = await bouwInWorker(S, fotos, pdfNaam, extra);
-    if (blob.size > 150 * 1024 * 1024 && !confirm('Groot dossier, delen kan mislukken. Toch doorgaan?')) {
+    const file = await bouwDossierBestand();
+    if (file.size > 150 * 1024 * 1024 && !confirm('Groot dossier, delen kan mislukken. Toch doorgaan?')) {
       toast('Niet bewaard');
       return;
     }
-    const file = new File([blob], zipNaam, { type: 'application/zip' });
     await deelOfDownload(file);
   } catch (e) {
     toast('Dossier maken mislukt' + (e && (e.name || e.message) ? ` (${e.name || e.message})` : ''));
@@ -2645,11 +2698,13 @@ async function deelOfDownload(file) {
   if (nasIngesteld()) {
     try {
       await nasUpload(file);
-      zetPdfBewaard();
-      toast('Dossier op de NAS bewaard');
+      zetPdfBewaard(true);
       return;
     } catch (e) {
-      toast(`NAS-upload mislukt (${e.message}) — via delen`);
+      /* de reden blijft op Afronden en in de lijst staan (§7.8): een toast
+         verdwijnt achter de deelkaart en zou gemist worden */
+      nasLaatsteFout = e.message;
+      toast(`NIET op de NAS (${e.message}) — via delen`);
     }
   }
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -2675,12 +2730,34 @@ async function deelOfDownload(file) {
   zetPdfBewaard();
 }
 
-function zetPdfBewaard() {
+function zetPdfBewaard(viaNas) {
   dirty = true;
-  bewaar(true);
+  bewaar(viaNas ? 'nas' : true);
   renderAfronden();
-  toast('Dossier bewaard');
+  toast(viaNas ? 'Dossier op de NAS bewaard' : 'Dossier bewaard');
 }
+
+/* enkel opnieuw naar de NAS (§7.8): de zip wordt vers gebouwd, want de woning
+   kan intussen gewijzigd zijn; hier géén terugval op de deelkaart */
+$('#btn-nas-opnieuw').addEventListener('click', async () => {
+  if (!S || pdfBezig) return;
+  pdfBezig = true;
+  toast('Naar de NAS sturen…');
+  zetVoortgang(0);
+  try {
+    const file = await bouwDossierBestand();
+    await nasUpload(file);
+    nasLaatsteFout = '';
+    zetPdfBewaard(true);
+  } catch (e) {
+    nasLaatsteFout = (e && e.message) || 'onbekende fout';
+    renderAfronden();
+    toast(`NIET op de NAS (${nasLaatsteFout})`);
+  } finally {
+    pdfBezig = false;
+    verbergVoortgang();
+  }
+});
 
 $('#btn-print').addEventListener('click', bewaarPdf);
 $('#btn-noodpdf').addEventListener('click', bewaarPdf);
@@ -2718,14 +2795,16 @@ function downloadBlob(naam, blob) {
 
 $('#btn-verwijder-woning').addEventListener('click', async () => {
   if (!S) return;
-  if (dossierActueel(S)) {
+  if (dossierActueel(S) && !nasAchter(S)) {
     if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?\nPDF bewaard op ${datumUur(S.pdfBewaardOp)}.`)) return;
   } else {
-    /* niets bewaard, of wijzigingen die niet in de export zitten: extra slot
+    /* niets bewaard, wijzigingen buiten de export, of niet op de NAS: extra slot
        tegen een ongelukje — letterlijk VERWIJDER typen (§6) */
-    const reden = S.pdfBewaardOp
-      ? `is na het bewaren nog gewijzigd (bewaard op ${datumUur(S.pdfBewaardOp)})`
-      : 'is nog NIET als dossier bewaard';
+    const reden = !S.pdfBewaardOp
+      ? 'is nog NIET als dossier bewaard'
+      : !dossierActueel(S)
+        ? `is na het bewaren nog gewijzigd (bewaard op ${datumUur(S.pdfBewaardOp)})`
+        : 'staat nog NIET op de NAS';
     const inv = prompt(`"${S.algemeen.adres || 'Zonder adres'}" ${reden}.\nTyp VERWIJDER om het toch definitief te verwijderen:`, '');
     if (inv === null) return;
     if (inv.trim().toUpperCase() !== 'VERWIJDER') { toast('Niet verwijderd'); return; }
