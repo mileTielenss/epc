@@ -1225,6 +1225,23 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   await page.click('#instellingen', { position: { x: 5, y: 5 } });   /* naast het paneel */
   await page.waitForSelector('#instellingen', { state: 'hidden' });
 
+  /* uploadvoortgang komt van de browser zelf; hier rechtstreeks aangeroepen
+     zodat beide takken deterministisch getest zijn */
+  assert.deepEqual(await page.evaluate(() => {
+    const uit = [];
+    let herstart = 0;
+    nasVoortgangEvent({ lengthComputable: true, loaded: 3, total: 4 }, v => uit.push(v), () => herstart++);
+    nasVoortgangEvent({ lengthComputable: false }, v => uit.push(v), () => herstart++);
+    nasVoortgangEvent({ lengthComputable: true, loaded: 1, total: 2 }, null, () => herstart++);
+    return [uit, herstart];
+  }), [[0.75], 3], 'voortgang enkel bij een meetbare lengte, timer altijd herstart');
+  assert.equal(await page.evaluate(() => {
+    zetVoortgang(0.42, 'Naar de NAS');
+    const t = document.querySelector('#pdf-voortgang-tekst').textContent;
+    verbergVoortgang();
+    return t;
+  }), 'Naar de NAS… 42%', 'balk toont fase en percentage');
+
   /* de overige statusteksten */
   assert.deepEqual(await page.evaluate(() => [404, 405, 507, 418].map(nasFoutTekst)),
     ['map niet gevonden', 'WebDAV staat uit', 'NAS vol', 'status 418'], 'foutteksten per status');

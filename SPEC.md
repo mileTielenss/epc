@@ -466,9 +466,18 @@ gebruikersnaam ingevuld zijn.
 - **Meldingen boven alles**: de toast heeft een hogere `z-index` dan het
   instellingenpaneel, de camera en de lightbox — anders verdwijnt bv. het
   resultaat van "Verbinding testen" onzichtbaar achter de overlay.
-- **Time-outs**: elke NAS-oproep heeft een harde limiet (upload 120 s, de rest
-  15 s) via `AbortController`. Een verkeerd ip of een dichte poort geeft dus
-  "geen antwoord (time-out)" in plaats van een app die blijft hangen.
+- **Uploadvoortgang**: de `PUT` gaat via `XMLHttpRequest` (enkel die kan
+  uploadvoortgang melden), zodat de balk op Afronden tijdens het versturen
+  meeloopt met "Naar de NAS… N%". In plaats van één harde limiet geldt hier een
+  **stilvaltimer**: 60 s zonder voortgang breekt af. Een trage upload mag dus
+  lang duren, een dode verbinding niet.
+- **Overschrijven**: een `PUT` op een bestaand pad **vervangt** het bestand.
+  Hetzelfde dossier opnieuw bewaren werkt de kopie op de NAS dus bij; wijzigt
+  het nummer of adres, dan komt er een nieuw bestand naast.
+- **Time-outs**: de overige NAS-oproepen (test, bladeren, mkcol, delete) hebben
+  een harde limiet van 15 s via `AbortController`. Een verkeerd ip of een
+  dichte poort geeft dus "geen antwoord (time-out)" in plaats van een app die
+  blijft hangen.
 - **"Verbinding testen"** schrijft echt: `PUT` van `epc-verbindingstest.txt`
   (met dezelfde `MKCOL`-stap) en daarna `DELETE`. Zo test hij aanmelding, CORS
   én schrijfrecht in één keer. Toast "Verbinding ok — schrijven lukt" of "Geen
@@ -566,7 +575,9 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    **Algemeen: eigen liggende pagina's, 2 foto's per pagina, paginavullend** (contain).
 7. **Voetregel** op elke pagina: "adres · pagina X/Y", 7 pt grijs, gecentreerd.
 ### 9.3 Bewaren: de dossier-zip
-1. Toast "Dossier maken…", worker start, voortgangsbalk.
+1. Toast "Dossier maken…", worker start, voortgangsbalk **met percentage en
+   fase**: "Dossier maken… N%" tijdens het zippen, "Naar de NAS… N%" tijdens
+   een upload (§7.8).
 2. In de worker, strikt **json-first**: het interne woningobject →
    `maakzip.woningExport(...)` → `woning.json` (de enige bron) →
    `maakpdf.bouwPdf(json.woning, fotosOpPad)` → PDF → de zip via `maakzip.bouwZip`

@@ -2478,9 +2478,35 @@ async function nasMaakMap(n) {
   }
 }
 
-async function nasVerstuur(n, naam, body, type) {
+/* PUT via XHR i.p.v. fetch: enkel XHR kan uploadvoortgang melden. In plaats
+   van één harde limiet een stilvaltimer — een trage upload mag lang duren,
+   een dode verbinding niet (§7.8). */
+function nasVoortgangEvent(e, onVoortgang, herstart) {
+  herstart();
+  if (e.lengthComputable && onVoortgang) onVoortgang(e.loaded / e.total);
+}
+
+function nasPut(n, url, body, type, onVoortgang) {
+  return new Promise((klaar, mis) => {
+    const x = new XMLHttpRequest();
+    let stil = null;
+    const herstart = () => { clearTimeout(stil); stil = setTimeout(() => x.abort(), 60000); };
+    const stop = () => clearTimeout(stil);
+    x.open('PUT', url, true);
+    Object.entries(nasKop(n)).forEach(([k, v]) => x.setRequestHeader(k, v));
+    x.setRequestHeader('Content-Type', type);
+    if (x.upload) x.upload.onprogress = e => nasVoortgangEvent(e, onVoortgang, herstart);
+    x.onload = () => { stop(); klaar({ ok: x.status >= 200 && x.status < 300, status: x.status }); };
+    x.onerror = () => { stop(); mis(new Error('geen verbinding [upload afgebroken]')); };
+    x.onabort = () => { stop(); mis(new Error('geen antwoord (time-out)')); };
+    herstart();
+    x.send(body);
+  });
+}
+
+async function nasVerstuur(n, naam, body, type, onVoortgang) {
   const url = nasUrl(n, naam);
-  const put = () => nasFetch(url, { method: 'PUT', headers: { ...nasKop(n), 'Content-Type': type }, body }, 120000);
+  const put = () => nasPut(n, url, body, type, onVoortgang);
   let r = await put();
   /* 409 = bovenliggende map bestaat nog niet */
   if (r.status === 409 && n.map) {
@@ -2491,8 +2517,8 @@ async function nasVerstuur(n, naam, body, type) {
   return url;
 }
 
-function nasUpload(file) {
-  return nasVerstuur(nasInstellingen(), file.name, file, 'application/zip');
+function nasUpload(file, onVoortgang) {
+  return nasVerstuur(nasInstellingen(), file.name, file, 'application/zip', onVoortgang);
 }
 
 /* verbindingstest: écht schrijven (auth, CORS en schrijfrecht in één keer),
@@ -2683,13 +2709,20 @@ function zipBasisnaam(w) {
   return naamPrefix(w) + schoonAdres(w);
 }
 
-function zetVoortgang(v) {
+/* balk mét percentage en wat er gebeurt: zippen en uploaden zijn elk een
+   eigen fase, want de upload duurt bij een groot dossier het langst (§9.3) */
+function zetVoortgang(v, fase) {
   const p = $('#pdf-voortgang');
+  const t = $('#pdf-voortgang-tekst');
+  const w = Math.max(0, Math.min(1, v || 0));
   p.hidden = false;
-  p.value = v;
+  p.value = w;
+  t.hidden = false;
+  t.textContent = `${fase || 'Dossier maken'}… ${Math.round(w * 100)}%`;
 }
 function verbergVoortgang() {
   $('#pdf-voortgang').hidden = true;
+  $('#pdf-voortgang-tekst').hidden = true;
 }
 
 function bouwInWorker(woning, fotos, naam, extra) {
@@ -2761,7 +2794,7 @@ async function deelOfDownload(file) {
      verder met de deelkaart zodat het dossier hoe dan ook bewaard raakt */
   if (nasIngesteld()) {
     try {
-      await nasUpload(file);
+      await nasUpload(file, v => zetVoortgang(v, 'Naar de NAS'));
       zetPdfBewaard(true);
       return;
     } catch (e) {
@@ -2810,7 +2843,7 @@ $('#btn-nas-opnieuw').addEventListener('click', async () => {
   zetVoortgang(0);
   try {
     const file = await bouwDossierBestand();
-    await nasUpload(file);
+    await nasUpload(file, v => zetVoortgang(v, 'Naar de NAS'));
     nasLaatsteFout = '';
     zetPdfBewaard(true);
   } catch (e) {
