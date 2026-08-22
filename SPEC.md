@@ -482,6 +482,20 @@ gebruikersnaam ingevuld zijn.
   (met dezelfde `MKCOL`-stap) en daarna `DELETE`. Zo test hij aanmelding, CORS
   én schrijfrecht in één keer. Toast "Verbinding ok — schrijven lukt" of "Geen
   verbinding (reden)".
+- **Beproefde opstelling** (UGREEN NAS, buiten de app om — hier genoteerd omdat
+  ze niet uit de app af te leiden is): UGOS heeft geen CORS-instelling en geen
+  reverse proxy, dus draait er een **nginx-container** die de CORS-headers
+  toevoegt en doorstuurt naar `https://<nas>:5006` (`proxy_ssl_verify off`,
+  `client_max_body_size 0`, en een `OPTIONS`-tak die 204 teruggeeft voor de
+  preflight). De app praat met die proxy op poort 5007. WebDAV op de NAS zelf
+  moet aan blijven staan — de proxy praat ermee.
+  Certificaat: een **eigen mini-CA met `nameConstraints` op het NAS-ip**
+  ondertekent een servercertificaat (`CA:FALSE`, `subjectAltName=IP:<nas>`,
+  ≤ 825 dagen); nginx serveert leaf + CA, en enkel de **CA** wordt op de iPhone
+  geïnstalleerd en aangezet bij Certificaatvertrouwensinstellingen. iOS toont
+  daar namelijk **alleen CA-certificaten**; een los servercertificaat kun je wel
+  installeren maar niet vertrouwen. De naambeperking zorgt dat die CA niets kan
+  ondertekenen buiten dat ene ip.
 - **Randvoorwaarden aan de NAS-kant** (buiten de app om): de NAS moet CORS
   toelaten voor `https://miletielenss.github.io` met de methodes `PUT`, `MKCOL`,
   `DELETE` en `PROPFIND`, de headers `Authorization` en `Depth`, en
