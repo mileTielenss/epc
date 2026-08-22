@@ -274,8 +274,33 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
 
   await page.waitForSelector('#pdf-bewaard:not([hidden])');
   check('grijze regel "Dossier bewaard op"', (await page.textContent('#pdf-bewaard')).startsWith('Dossier bewaard op'));
+  check('regel meldt (nog) geen wijziging', !(await page.textContent('#pdf-bewaard')).includes('nadien gewijzigd'));
   check('verwijderen nu mogelijk', !(await delKnop.isDisabled()) && (await delKnop.textContent()) === 'Woning verwijderen');
 
+  /* statuspill in de lijst: bewaard én actueel -> groen "PDF ✓" (§6) */
+  await page.click('#btn-terug');
+  await page.waitForSelector('#woninglijst li.woning');
+  check('statuspill "PDF ✓" na het bewaren', (await page.textContent('#woninglijst .status')) === 'PDF ✓');
+
+  /* wijziging ná het bewaren: het vinkje verdwijnt weer */
+  await page.click('#woninglijst li.woning .info');
+  await page.waitForSelector('#app:not([hidden])');
+  await page.click('#tab-algemeen details:nth-of-type(4) summary');   /* Opmerkingen */
+  await page.fill('#notities', 'nog een opmerking achteraf');
+  await page.locator('#notities').blur();
+  await page.waitForTimeout(700);
+  await page.click('#tabbar button[data-tab="afronden"]');
+  check('Afronden meldt "nadien gewijzigd"', (await page.textContent('#pdf-bewaard')).includes('nadien gewijzigd, bewaar opnieuw'));
+  await page.click('#btn-terug');
+  await page.waitForSelector('#woninglijst li.woning');
+  check('statuspill terug naar "Gewijzigd"', (await page.textContent('#woninglijst .status')) === 'Gewijzigd');
+  check('pill draagt de herzien-klasse', await page.locator('#woninglijst .status.herzien').count() === 1);
+  await page.click('#woninglijst li.woning .info');
+  await page.waitForSelector('#app:not([hidden])');
+  await page.click('#tabbar button[data-tab="afronden"]');
+
+  /* verwijderen met wijzigingen buiten de export: typ-slot (§6) */
+  promptAntwoord = 'VERWIJDER';
   await page.click('#btn-verwijder-woning');
   await page.waitForSelector('#view-lijst:not([hidden])');
   check('woning + foto\'s verwijderd', await page.locator('#woninglijst .leeg').count() === 1);

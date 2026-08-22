@@ -16,6 +16,12 @@ function vandaag() {
 }
 function nu() { return new Date().toISOString(); }
 
+/* "PDF ✓" geldt enkel zolang er ná het bewaren niets meer gewijzigd is (§6);
+   afgeleid uit de twee tijdstempels, geen extra veld */
+function dossierActueel(w) {
+  return !!w.pdfBewaardOp && !((w.gewijzigd || '') > w.pdfBewaardOp);
+}
+
 function num(s) {
   const v = parseFloat(String(s).trim().replace(',', '.'));
   return isFinite(v) && v > 0 ? v : 0;
@@ -322,11 +328,14 @@ function wijzig() {
   bewaarTimer = setTimeout(bewaar, 500);
 }
 
-async function bewaar() {
+async function bewaar(markeerBewaard) {
   if (!S || !dirty) return;
   clearTimeout(bewaarTimer);
   const stand = wijzigStand;
   S.gewijzigd = nu();
+  /* na een geslaagde export valt het bewaarmoment samen met de laatste
+     wijziging; elke latere wijziging maakt het dossier weer "Gewijzigd" (§6) */
+  if (markeerBewaard) S.pdfBewaardOp = S.gewijzigd;
   try {
     await DB.putWoning(S);
     if (stand === wijzigStand) dirty = false;
@@ -457,14 +466,16 @@ async function renderLijst() {
         }
       } catch (e) { /* geen thumb */ }
     }
-    const klaar = !!w.pdfBewaardOp;
+    const actueel = dossierActueel(w);
+    const status = actueel ? 'PDF ✓' : w.pdfBewaardOp ? 'Gewijzigd' : 'Open';
+    const statusKlasse = actueel ? 'klaar' : w.pdfBewaardOp ? 'herzien' : '';
     li.innerHTML =
       thumb +
       `<div class="info">
          <div class="r1">${esc(naamPrefix(w) + ((w.algemeen && w.algemeen.adres) || 'Zonder adres'))}</div>
          <div class="r3">${esc((w.algemeen && w.algemeen.datum) || '')}</div>
        </div>
-       <span class="status ${klaar ? 'klaar' : ''}">${klaar ? 'PDF ✓' : 'Open'}</span>`;
+       <span class="status ${statusKlasse}">${status}</span>`;
     ul.appendChild(li);
   }
 }
@@ -2282,10 +2293,16 @@ window.addEventListener('pagehide', () => { if (camStream) stopCamera(); });
 
 function renderAfronden() {
   renderChecks();
-  /* grijze regel + verwijderknop volgen pdfBewaardOp (§6) */
+  /* regel onder de knop volgt pdfBewaardOp én latere wijzigingen (§6) */
   const klaar = !!S.pdfBewaardOp;
-  $('#pdf-bewaard').hidden = !klaar;
-  if (klaar) $('#pdf-bewaard').textContent = `Dossier bewaard op ${datumUur(S.pdfBewaardOp)}`;
+  const actueel = dossierActueel(S);
+  const regel = $('#pdf-bewaard');
+  regel.hidden = !klaar;
+  regel.classList.toggle('herzien', klaar && !actueel);
+  if (klaar) {
+    regel.textContent = `Dossier bewaard op ${datumUur(S.pdfBewaardOp)}` +
+      (actueel ? '' : ' — nadien gewijzigd, bewaar opnieuw');
+  }
   /* verwijderen kan altijd (§6); zonder bewaard dossier geldt het typ-slot */
   const del = $('#btn-verwijder-woning');
   del.disabled = false;
@@ -2452,9 +2469,8 @@ async function deelOfDownload(file) {
 }
 
 function zetPdfBewaard() {
-  S.pdfBewaardOp = nu();
-  wijzig();
-  bewaar();
+  dirty = true;
+  bewaar(true);
   renderAfronden();
   toast('Dossier bewaard');
 }
@@ -2495,11 +2511,15 @@ function downloadBlob(naam, blob) {
 
 $('#btn-verwijder-woning').addEventListener('click', async () => {
   if (!S) return;
-  if (S.pdfBewaardOp) {
+  if (dossierActueel(S)) {
     if (!confirm(`"${S.algemeen.adres || 'Zonder adres'}" definitief verwijderen?\nPDF bewaard op ${datumUur(S.pdfBewaardOp)}.`)) return;
   } else {
-    /* nog niet bewaard: extra slot tegen een ongelukje — letterlijk VERWIJDER typen (§6) */
-    const inv = prompt(`"${S.algemeen.adres || 'Zonder adres'}" is nog NIET als dossier bewaard.\nTyp VERWIJDER om het toch definitief te verwijderen:`, '');
+    /* niets bewaard, of wijzigingen die niet in de export zitten: extra slot
+       tegen een ongelukje — letterlijk VERWIJDER typen (§6) */
+    const reden = S.pdfBewaardOp
+      ? `is na het bewaren nog gewijzigd (bewaard op ${datumUur(S.pdfBewaardOp)})`
+      : 'is nog NIET als dossier bewaard';
+    const inv = prompt(`"${S.algemeen.adres || 'Zonder adres'}" ${reden}.\nTyp VERWIJDER om het toch definitief te verwijderen:`, '');
     if (inv === null) return;
     if (inv.trim().toUpperCase() !== 'VERWIJDER') { toast('Niet verwijderd'); return; }
   }

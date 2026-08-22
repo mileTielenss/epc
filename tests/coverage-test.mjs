@@ -471,8 +471,12 @@ await scenario('hoofdflow', {
   await page.click('#woninglijst li.woning');
   await page.waitForSelector('#app:not([hidden])');
   await page.click('#tabbar button[data-tab="afronden"]');
+  /* hierboven is er ná het bewaren nog gewijzigd (§6): het dossier is niet meer
+     actueel, dus geldt het typ-slot met de "nadien gewijzigd"-reden */
+  assert.ok((await page.textContent('#pdf-bewaard')).includes('nadien gewijzigd'), 'regel meldt de wijziging na het bewaren');
   antwoord({ doe: 'dismiss' });
-  await page.click('#btn-verwijder-woning');    /* confirm geweigerd */
+  await page.click('#btn-verwijder-woning');    /* prompt geannuleerd */
+  antwoord({ doe: 'accept', tekst: 'VERWIJDER' });
   await page.click('#btn-verwijder-woning');
   await page.waitForSelector('#view-lijst:not([hidden])');
 

@@ -14,8 +14,8 @@ per soort (§7.1, §7.3, §7.4, §7.7).
   automatisaties (de json bevat geen beeldbytes, wel verwijzingen naar `fotos/`).
 - Diezelfde zip kan via "Importeer dossier" op de woningenlijst integraal terug
   ingeladen worden — ook jaren later (§9.4).
-- Na oplevering wordt de woning verwijderd. Mét bewaard dossier volstaat een
-  bevestiging; zonder bewaard dossier geldt een typ-slot (§6).
+- Na oplevering wordt de woning verwijderd. Bij een actueel bewaard dossier
+  volstaat een bevestiging; anders geldt een typ-slot (§6).
 - Invoer in de VEKA-software gebeurt manueel of via latere automatisatie op
   basis van `woning.json`; de PDF blijft het leesbare dossier.
 - Eén gebruiker: geen accounts, geen instellingen, geen hulpteksten, geen updateknop.
@@ -101,7 +101,8 @@ woning = {
   nummer: geheel getal | null, // dossiernummer (§7.1): null tot het eerste
                                // "Bewaar dossier"; app-zijde, niet in pdf/json
   gemaakt, gewijzigd,          // ISO
-  pdfBewaardOp: ISO | null,    // enige statusbron
+  pdfBewaardOp: ISO | null,    // enige statusbron; samen met `gewijzigd` bepaalt
+                               // hij of het dossier nog actueel is (§6)
   algemeen: { adres, datum (YYYY-MM-DD, default vandaag), notities,
               hoofdFotoId | null },   // moet een foto met groep 'gevels' zijn
   ruimtes: [ { id, naam,
@@ -170,11 +171,20 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
   echt faalt (`QuotaExceededError`).
 - **DB open faalt**: niets wissen. Rode balk + read-only geheugenmodus waarin enkel
   "Bewaar PDF" nog werkt.
-- **Verwijderen**: kan **altijd**, ook zonder bewaard dossier. Mét bewaard
-  dossier (`pdfBewaardOp` gezet): `confirm()` met datum en uur. **Zonder**:
+- **Actueel of gewijzigd**: `pdfBewaardOp` blijft de enige opgeslagen status,
+  maar "klaar" is een **afgeleide**: een dossier is actueel zolang
+  `gewijzigd <= pdfBewaardOp`. Bij een geslaagde export worden beide
+  tijdstempels in dezelfde write gelijkgezet, dus élke latere wijziging maakt
+  het dossier meteen weer "Gewijzigd" — het groene vinkje verdwijnt dan (§7.1)
+  en op Afronden staat "Dossier bewaard op … — nadien gewijzigd, bewaar
+  opnieuw" in het rood. Geen extra veld.
+- **Verwijderen**: kan **altijd**, ook zonder bewaard dossier. Bij een
+  **actueel** dossier: `confirm()` met datum en uur. Is er **niets bewaard of
+  zitten er wijzigingen buiten de export**:
   extra slot tegen ongelukken — een `prompt()` waarin letterlijk **VERWIJDER**
   getypt moet worden (hoofdletterongevoelig, gespaties getrimd); iets anders →
-  toast "Niet verwijderd", annuleren → niets. Wist woning + alle `fotos` én
+  toast "Niet verwijderd", annuleren → niets. De prompt zegt welke van de twee
+  redenen geldt. Wist woning + alle `fotos` én
   `extra`-bestanden met die `woningId` in één transactie.
 - `pdfBewaardOp` wordt enkel gezet nadat `share()` of de download **resolved** heeft.
   `AbortError` zet niets.
@@ -183,8 +193,9 @@ De app is het enige exemplaar van het bewijsmateriaal tot de PDF bestaat.
 - Titelbalk "EPC Plaatsbezoek". Gesorteerd op laatst gewijzigd.
 - Per rij: hoofdfoto-thumb, **`<nummer>. <adres>`** ("Zonder adres") — bij
   gemene delen **`<nummer>. GD <adres>`** (zelfde nummering, enkel het
-  GD-voorvoegsel) —, datum, statuspill afgeleid uit `pdfBewaardOp` (grijs
-  "Open" / groen "PDF ✓", **geen knop**).
+  GD-voorvoegsel) —, datum, statuspill met drie standen (**geen knop**): grijs
+  **"Open"** (nooit bewaard), groen **"PDF ✓"** (bewaard én actueel), rood
+  omrand **"Gewijzigd"** (bewaard, maar nadien aangepast — zie §6).
 - Twee aanmaakknoppen: **"+ Nieuwe woning"** en **"+ Gemene delen"** (zelfde
   flow en dezelfde nummerteller; `soort` ligt daarna vast).
 - Verwijderen kan niet vanuit de lijst, enkel op de tab Afronden.
@@ -377,7 +388,9 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   oppervlakte-aftrek van de gevels), (3) verlichting ingevuld (≥1 regel),
   (4) hoofdfoto gekozen.
 - **"💾 Bewaar dossier"** met voortgangsbalk uit de worker.
-- Grijze regel "Dossier bewaard op <datum en uur>" indien `pdfBewaardOp`.
+- Grijze regel "Dossier bewaard op <datum en uur>" indien `pdfBewaardOp`; is er
+  nadien nog gewijzigd, dan staat er rood " — nadien gewijzigd, bewaar opnieuw"
+  achter (§6).
 - "Woning sluiten" (navigeert terug, wijzigt niets).
 - "Woning verwijderen" (rood, altijd actief, gedrag volgens §6).
 ## 8. Foto-pijplijn

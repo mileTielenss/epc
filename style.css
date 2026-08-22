@@ -99,6 +99,9 @@ body{
   border:1.5px solid var(--line);background:var(--card);color:var(--mut);
 }
 .status.klaar{background:var(--acc);border-color:var(--acc);color:#fff}
+/* bewaard, maar nadien gewijzigd: geen groen vinkje meer (§6) */
+.status.herzien{background:#fff;border-color:var(--warn);color:var(--warn)}
+.totaal.herzien{color:var(--warn);font-weight:700}
 
 /* ---------- tabs / layout ---------- */
 .tab{display:none;padding:8px 10px calc(76px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto}
