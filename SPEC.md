@@ -308,11 +308,19 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   dan kader pvc → alu → hout; ten slotte aanmaakvolgorde. Identieke ramen
   (zelfde gevel, glas en kader) staan zo altijd naast elkaar. `#nr` =
   1-gebaseerde index in die volgorde.
-- De lijst toont enkel de elementen van de gekozen ruimte (net als de
-  toestellen); het `#nr` blijft het huisbrede volgnummer uit §7.4 (matcht de PDF).
-- Rij toont "#nr Element · Gevel · n×", "b × h m = x m² (totaal)", tags (beglazing ·
-  kader · rolluik). Totaalregel: elementen en m² **van deze ruimte** (aantallen
-  meegeteld).
+- De lijst toont **álle elementen van de woning, nieuwste bovenaan**
+  (aanmaakvolgorde, laatst ingegeven eerst): zo is het laatst ingegeven raam
+  altijd rij 1 en corrigeer je een vergissing meteen. Het `#nr` blijft het
+  huisbrede volgnummer uit de sorteervolgorde (matcht de PDF, die gegroepeerd
+  blijft).
+- Rij toont "#nr Element · Gevel · n× · Ruimte", "b × h m = x m² (totaal)",
+  tags (privatief · beglazing · kader · rolluik). Totaalregel: alle elementen
+  en m² van de woning (aantallen meegeteld).
+- **Bij het bewerken** verschijnt een extra cycle **"Ruimte"** die door de echte
+  ruimtes draait: zo verzet je een verkeerd geplaatst element (bv. van Hal naar
+  Slaapkamer). De ruimtebalk springt niet meer mee bij het bewerken en blijft
+  bepalen waar een níeuw element belandt; de Ruimte-cycle is verborgen buiten
+  het bewerken.
 - Onderaan de tab, buiten de secties: **"Opmerking bij deze ruimte"** (textarea).
 ### 7.5 Tab Foto's
 - **"📷 Start camera"** en **"🖼 Kies foto's"** (`multiple`, elk bestand door §8).

@@ -130,8 +130,19 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.locator('#hoogte').blur();
   await page.click('#btn-voegtoe');
   const eerste = await page.locator('#ramenlijst li .r1').first().textContent();
-  check('deur staat eerst met #1', eerste.includes('#1') && eerste.includes('Deur'));
+  check('laatst ingegeven element (deur) staat bovenaan met #1', eerste.includes('#1') && eerste.includes('Deur'));
+  check('rij toont zijn ruimte', eerste.includes('Living'));
   check('totaalregel', (await page.textContent('#ramen-totaal')).includes('2 elementen'));
+
+  /* element verzetten naar een andere ruimte (§7.4): bewerken -> Ruimte-cycle */
+  await page.click('#ramenlijst li:nth-child(2) .info');   /* het raam (ouder, rij 2) */
+  check('Ruimte-cycle zichtbaar bij bewerken', await page.locator('#cy-raamruimte').isVisible());
+  check('cycle start op de eigen ruimte', (await page.textContent('#cy-raamruimte .cv')) === 'Living');
+  await page.click('#cy-raamruimte');                      /* Living -> Keuken */
+  await page.click('#btn-voegtoe');                        /* Bewaar wijziging */
+  check('raam verhuisd naar Keuken', (await page.locator('#ramenlijst li').nth(1).textContent()).includes('Keuken'));
+  check('Ruimte-cycle terug verborgen', await page.locator('#cy-raamruimte').isHidden());
+  check('lijst blijft alle ruimtes tonen', await page.locator('#ramenlijst li').count() === 2);
 
   /* nieuwe ruimte met autonummering; ventilatie klapt open */
   await page.click('#ruimtechips button[data-v="__plus"]');

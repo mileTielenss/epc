@@ -1006,7 +1006,7 @@ let bewerkRaamId = null; /* id van het raam dat je aan het wijzigen bent, of nul
 let draft = null;
 
 function leegDraft() {
-  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', privatief: 'gemeen', fotoId: null, aantal: 1 };
+  return { element: 'raam', gevel: 'voor', beglazing: 'dubbel', kader: 'pvc', rolluik: 'nee', privatief: 'gemeen', ruimteId: null, fotoId: null, aantal: 1 };
 }
 draft = leegDraft();
 
@@ -1046,6 +1046,21 @@ $('#aantal').addEventListener('blur', () => zetAantal(Math.round(num($('#aantal'
 
 segInit('#seg-gevel', v => draft.gevel = v);
 
+/* bij het bewerken kan een element naar een andere ruimte verzet worden (§7.4):
+   de cycle draait door de echte ruimtes; bij een nieuw element geldt gewoon de
+   ruimtebalk en is de knop verborgen */
+function syncRaamRuimte() {
+  const b = $('#cy-raamruimte');
+  b.hidden = bewerkRaamId === null;
+  b.querySelector('.cv').textContent = ruimteNaam(draft.ruimteId) || '—';
+}
+$('#cy-raamruimte').addEventListener('click', () => {
+  if (!S || bewerkRaamId === null) return;
+  const ids = S.ruimtes.map(r => r.id);
+  draft.ruimteId = ids[(ids.indexOf(draft.ruimteId) + 1) % ids.length];
+  syncRaamRuimte();
+});
+
 function updateM2Live() {
   const b = num($('#breedte').value), h = num($('#hoogte').value);
   $('#m2live').textContent = (b && h) ? fmt(b * h) + ' m²' : '';
@@ -1077,7 +1092,7 @@ function gesorteerdeRamen() { return sorteerRamen(S.ramen); }
 $('#btn-voegtoe').addEventListener('click', () => {
   if (!S) return;
   const ruimte = huidigeRuimte();
-  if (!ruimte) { toast('Kies eerst een ruimte bovenaan'); return; }
+  if (bewerkRaamId === null && !ruimte) { toast('Kies eerst een ruimte bovenaan'); return; }
   const b = num($('#breedte').value), h = num($('#hoogte').value);
   if (!b || !h) { toast('Vul breedte en hoogte in (m)'); return; }
   const aantal = Math.max(1, Math.round(num($('#aantal').value)) || 1);
@@ -1085,7 +1100,7 @@ $('#btn-voegtoe').addEventListener('click', () => {
   const velden = {
     element: draft.element,
     gevel: draft.gevel,
-    ruimteId: ruimte.id,
+    ruimteId: bewerkRaamId !== null ? draft.ruimteId : ruimte.id,
     b, h,
     beglazing: priv || draft.element === 'deur' ? null : draft.beglazing,
     kader: priv ? null : draft.kader,
@@ -1126,11 +1141,11 @@ function startBewerkRaam(id) {
   draft.kader = r.kader || draft.kader;
   draft.rolluik = r.rolluik ? 'ja' : 'nee';
   draft.privatief = r.privatief ? 'privatief' : 'gemeen';
+  draft.ruimteId = r.ruimteId;
   draft.fotoId = r.fotoId || null;
   draft.aantal = raamAantal(r);
-  /* de ruimtebalk springt mee naar de ruimte van dit raam */
-  if (r.ruimteId && S.ruimtes.some(x => x.id === r.ruimteId)) ruimteSel = r.ruimteId;
-  renderRuimtebalk();
+  /* de ruimtebalk blijft staan: de lijst toont toch alle elementen (§7.4) en
+     de ruimte van dít element pas je aan met de Ruimte-cycle */
   syncRaamForm();
   $('#breedte').value = fmtM(r.b);
   $('#hoogte').value = fmtM(r.h);
@@ -1147,6 +1162,7 @@ function stopBewerkRaam() {
   bewerkRaamId = null;
   $('#btn-voegtoe').textContent = 'Voeg toe';
   $('#btn-annuleer-raam').hidden = true;
+  syncRaamRuimte();
 }
 
 $('#btn-annuleer-raam').addEventListener('click', () => {
@@ -1162,6 +1178,7 @@ $('#btn-annuleer-raam').addEventListener('click', () => {
 
 function syncRaamForm() {
   segSet('#seg-element', draft.element);
+  syncRaamRuimte();
   syncCyPrivatief();
   syncCyBeglazing();
   syncCyKader();
@@ -1182,10 +1199,12 @@ function ruimteNaam(id) {
 function renderRamen() {
   const ul = $('#ramenlijst');
   ul.innerHTML = '';
-  const hier = gesorteerdeRamen()
-    .map((r, i) => ({ r, nr: i + 1 }))
-    .filter(x => x.r.ruimteId === ruimteSel);
-  hier.forEach(({ r, nr }) => {
+  /* álle elementen, nieuwste bovenaan (§7.4): het laatst ingegeven raam is zo
+     altijd rij 1 — handig om een vergissing meteen te corrigeren. Het #nr
+     blijft het huisbrede volgnummer uit de sorteervolgorde (matcht de PDF). */
+  const nrVan = new Map(gesorteerdeRamen().map((r, i) => [r.id, i + 1]));
+  [...S.ramen].reverse().forEach(r => {
+    const nr = nrVan.get(r.id);
     const li = document.createElement('li');
     if (r.id === bewerkRaamId) li.className = 'bewerk';
     li.dataset.id = r.id;
@@ -1198,7 +1217,7 @@ function renderRamen() {
     const fotoUrl = r.fotoId && !fotoVerborgen(r.fotoId) ? DB.fotoUrl(r.fotoId) : null;
     li.innerHTML =
       `<div class="info">
-         <div class="r1">#${nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''}</div>
+         <div class="r1">#${nr} ${esc(ELEMENT_NAMEN[r.element] || r.element)} · ${esc(GEVEL_NAMEN[r.gevel] || r.gevel)}${n > 1 ? ` · ${n}×` : ''} · ${esc(ruimteNaam(r.ruimteId) || '—')}</div>
          <div class="r2">${fmtM(r.b)} × ${fmtM(r.h)} m = ${fmt(r.b * r.h)} m²${n > 1 ? ` (${fmt(r.b * r.h * n)} m² totaal)` : ''}</div>
          <div class="r3">${esc(tags.join(' · '))} · tik om te wijzigen</div>
        </div>` +
@@ -1206,12 +1225,11 @@ function renderRamen() {
       `<button type="button" class="del" data-id="${r.id}">×</button>`;
     ul.appendChild(li);
   });
-  const eigen = S.ramen.filter(r => r.ruimteId === ruimteSel);
-  const totM2 = eigen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
-  const totAantal = eigen.reduce((a, r) => a + raamAantal(r), 0);
-  $('#ramen-totaal').textContent = eigen.length
-    ? `Deze ruimte: ${totAantal} element${totAantal === 1 ? '' : 'en'} · ${fmt(totM2)} m²`
-    : 'Nog geen elementen in deze ruimte.';
+  const totM2 = S.ramen.reduce((a, r) => a + r.b * r.h * raamAantal(r), 0);
+  const totAantal = S.ramen.reduce((a, r) => a + raamAantal(r), 0);
+  $('#ramen-totaal').textContent = S.ramen.length
+    ? `Totaal: ${totAantal} element${totAantal === 1 ? '' : 'en'} · ${fmt(totM2)} m²`
+    : 'Nog geen elementen.';
 }
 
 $('#ramenlijst').addEventListener('click', e => {

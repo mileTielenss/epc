@@ -325,7 +325,12 @@ await scenario('hoofdflow', {
   await page.click('#ramenlijst li');
   await page.fill('#breedte', '2,5');
   await page.locator('#breedte').blur();
+  /* Ruimte-cycle (§7.4): zes ruimtes, zes klikken = volledige ronde terug naar Living */
+  assert.ok(await page.locator('#cy-raamruimte').isVisible(), 'Ruimte-cycle zichtbaar bij bewerken');
+  for (let i = 0; i < 6; i++) await page.click('#cy-raamruimte');
+  assert.equal(await page.textContent('#cy-raamruimte .cv'), 'Living', 'cycle draait rond door alle ruimtes');
   await page.click('#btn-voegtoe');             /* bewaar wijziging */
+  assert.ok(await page.locator('#cy-raamruimte').isHidden(), 'Ruimte-cycle verborgen na bewaren');
   /* deur erbij en weer weg (met foto-verwijdertak); beglazing-cycle is dan weg */
   await page.click('#seg-element button[data-v="deur"]');
   assert.ok(await page.locator('#cy-beglazing').isHidden(), 'beglazing-cycle weg bij deur');
