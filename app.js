@@ -2385,15 +2385,16 @@ const NAS_SLEUTEL = 'epc-nas';
 function nasInstellingen() {
   try {
     const j = JSON.parse(localStorage.getItem(NAS_SLEUTEL) || '{}');
-    return { server: j.server || '', gebruiker: j.gebruiker || '', wachtwoord: j.wachtwoord || '', map: j.map || '' };
-  } catch (e) { return { server: '', gebruiker: '', wachtwoord: '', map: '' }; }
+    return { aan: !!j.aan, server: j.server || '', gebruiker: j.gebruiker || '', wachtwoord: j.wachtwoord || '', map: j.map || '' };
+  } catch (e) { return { aan: false, server: '', gebruiker: '', wachtwoord: '', map: '' }; }
 }
 function zetNasInstellingen(n) {
   try { localStorage.setItem(NAS_SLEUTEL, JSON.stringify(n)); } catch (e) { /* geen storage */ }
 }
+/* de schakelaar beslist; server en gebruikersnaam moeten wel ingevuld zijn */
 function nasIngesteld() {
   const n = nasInstellingen();
-  return !!(n.server && n.gebruiker);
+  return !!(n.aan && n.server && n.gebruiker);
 }
 
 /* doel-url: server + map + bestandsnaam, elk padstuk apart ge-encodeerd */
@@ -2568,7 +2569,20 @@ const NAS_VELDEN = { server: '#nas-server', gebruiker: '#nas-gebruiker', wachtwo
 function syncNasForm() {
   const n = nasInstellingen();
   Object.entries(NAS_VELDEN).forEach(([k, sel]) => { $(sel).value = n[k]; });
+  $('#cy-nas-aan .cv').textContent = n.aan ? 'Aan' : 'Uit';
+  $('#nas-velden').hidden = !n.aan;
+  $('#nas-uit-tekst').hidden = n.aan;
 }
+
+/* schakelaar: uit = de gewone deelkaart, aan = upload via WebDAV (§7.8).
+   Eigen handler, want cycleInit werkt enkel met een open woning. */
+$('#cy-nas-aan').addEventListener('click', () => {
+  const n = nasInstellingen();
+  n.aan = !n.aan;
+  zetNasInstellingen(n);
+  syncNasForm();
+  if (!n.aan) $('#nas-blader').hidden = true;
+});
 Object.entries(NAS_VELDEN).forEach(([k, sel]) => {
   $(sel).addEventListener('input', () => {
     const n = nasInstellingen();

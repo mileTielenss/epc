@@ -409,7 +409,7 @@ textarea{resize:vertical}
   transform:translateX(-50%);
   background:#101418;color:#fff;
   padding:12px 20px;border-radius:12px;
-  font-size:.95rem;font-weight:600;z-index:20;
+  font-size:.95rem;font-weight:600;z-index:60;   /* boven paneel, camera en lightbox */
   max-width:86vw;text-align:center;
 }
 

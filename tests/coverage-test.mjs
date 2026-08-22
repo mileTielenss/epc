@@ -1126,6 +1126,13 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   await page.click('#btn-instellingen');
   await page.waitForSelector('#instellingen:not([hidden])');
 
+  /* schakelaar uit: geen velden, en de gewone flow blijft gelden (§7.8) */
+  assert.ok(await page.locator('#nas-velden').isHidden(), 'velden verborgen zolang de schakelaar uit staat');
+  assert.ok(!(await page.evaluate(() => nasIngesteld())), 'uit = geen NAS-upload');
+  await page.click('#cy-nas-aan');
+  await page.waitForSelector('#nas-velden:not([hidden])');
+  assert.equal(await page.textContent('#cy-nas-aan .cv'), 'Aan', 'schakelaar staat aan');
+
   /* zonder server: test én bladeren weigeren meteen */
   await page.click('#btn-nas-test');
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('minstens server'));
@@ -1138,7 +1145,7 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   await page.fill('#nas-wachtwoord', 'geh\u00e9im');          /* accent: UTF-8-veilige btoa */
   await page.fill('#nas-map', 'EPC/dossiers');
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('epc-nas'))),
-    { server: 'https://192.168.0.200/', gebruiker: 'mile', wachtwoord: 'geh\u00e9im', map: 'EPC/dossiers' },
+    { aan: true, server: 'https://192.168.0.200/', gebruiker: 'mile', wachtwoord: 'geh\u00e9im', map: 'EPC/dossiers' },
     'instellingen in localStorage');
 
   /* geslaagde test: PUT + DELETE */
@@ -1186,6 +1193,12 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Bladeren mislukt'));
   modus = 'ok';
   await page.evaluate(() => { const n = nasInstellingen(); n.map = 'EPC/dossiers'; zetNasInstellingen(n); syncNasForm(); });
+  /* schakelaar uit en weer aan: de velden volgen mee */
+  await page.click('#cy-nas-aan');
+  assert.ok(await page.locator('#nas-velden').isHidden(), 'velden weer verborgen');
+  await page.click('#cy-nas-aan');
+  await page.waitForSelector('#nas-velden:not([hidden])');
+
   /* paneel sluiten: eerst via de knop, later opnieuw openen */
   await page.click('#btn-instellingen-dicht');
   await page.waitForSelector('#instellingen', { state: 'hidden' });
@@ -1206,14 +1219,14 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
     localStorage.setItem = () => { throw new Error('x'); };
     try { zetNasInstellingen({ server: 'a' }); return nasInstellingen(); }
     finally { localStorage.getItem = g; localStorage.setItem = z; }
-  }), { server: '', gebruiker: '', wachtwoord: '', map: '' }, 'kapotte storage valt terug op leeg');
+  }), { aan: false, server: '', gebruiker: '', wachtwoord: '', map: '' }, 'kapotte storage valt terug op leeg');
   /* rommel in localStorage -> JSON.parse-catch */
   assert.equal(await page.evaluate(() => {
     localStorage.setItem('epc-nas', 'geen json');
     return nasInstellingen().server;
   }), '', 'onleesbare instellingen -> leeg');
   await page.evaluate(() => localStorage.setItem('epc-nas', JSON.stringify(
-    { server: 'https://192.168.0.200', gebruiker: 'mile', wachtwoord: 'x', map: 'EPC/dossiers' })));
+    { aan: true, server: 'https://192.168.0.200', gebruiker: 'mile', wachtwoord: 'x', map: 'EPC/dossiers' })));
 
   /* dossier bewaren gaat nu naar de NAS i.p.v. de deelkaart */
   modus = 'ok';

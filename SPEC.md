@@ -403,12 +403,17 @@ grijs) — verder niets. Het opent het **instellingenpaneel**, een overlay die
 van onderen over de lijst schuift met "Sluiten" rechtsboven; een tik naast het
 paneel sluit het ook. Dat is de enige plek met instellingen, zodat ze niet in
 de dagelijkse flow staan.
-In het paneel: **Server** (mét poort als de NAS die gebruikt, bv.
+Bovenaan het paneel staat één schakelaar **"Upload via WebDAV"** (Uit/Aan,
+`aan` in de instellingen). **Uit** (de standaard) toont enkel de regel "Uit:
+dossiers gaan via het deelmenu van iOS" — verder niets. **Aan** klapt de velden
+open: **Server** (mét poort als de NAS die gebruikt, bv.
 `https://192.168.0.200:5006`), **Gebruikersnaam**, **Wachtwoord**, **Map op de
-NAS** (met een 📁-knop, zie hieronder) en de knop **"Verbinding testen"**. Elke
-toetsaanslag bewaart in `localStorage['epc-nas']` (per toestel; het wachtwoord
-staat er in leesbare vorm, net als de dossierteller — bewuste keuze voor één
-gebruiker op één iPhone).
+NAS** (met een 📁-knop, zie hieronder) en de knop **"Verbinding testen"**, met
+één korte uitleg erboven. Elke toetsaanslag bewaart in
+`localStorage['epc-nas']` (per toestel; het wachtwoord staat er in leesbare
+vorm, net als de dossierteller — bewuste keuze voor één gebruiker op één
+iPhone). De upload gebeurt enkel als de schakelaar aan staat **én** server en
+gebruikersnaam ingevuld zijn.
 - **Map kiezen i.p.v. tikken**: de 📁-knop bladert met **`PROPFIND` Depth 1**
   door de NAS. De lijst toont enkel mappen (`DAV:collection`), met bovenaan
   "⬆ Een map omhoog" zodra je dieper zit; een tik gaat de map in. **"Kies deze
@@ -416,8 +421,9 @@ gebruiker op één iPhone).
   worden altijd relatief aan de server-url bewaard (een basispad in die url,
   bv. `/dav`, wordt er afgehaald). Mislukt het bladeren → toast "Bladeren
   mislukt (reden)". Het veld blijft ook gewoon met de hand invulbaar.
-- **Leeg = de gewone flow.** Zonder server óf zonder gebruikersnaam verandert er
-  niets: "Bewaar dossier" gaat naar de deelkaart zoals altijd (§9.3).
+- **Uit = de gewone flow.** Staat de schakelaar uit (of ontbreekt server of
+  gebruikersnaam), dan verandert er niets: "Bewaar dossier" gaat naar de
+  deelkaart zoals altijd (§9.3).
 - **Ingesteld**: de zip gaat met **WebDAV `PUT`** naar
   `<server>/<map>/<zipnaam>` met Basic-auth (UTF-8-veilig ge-encodeerd), elk
   padstuk apart url-ge-encodeerd. Antwoordt de server **409** (bovenliggende map
@@ -442,6 +448,9 @@ gebruiker op één iPhone).
     terugval); staat alles goed, dan staat er grijs "Op de NAS gezet op …";
   - **verwijderen** vraagt dan het typ-slot van §6 in plaats van een gewone
     bevestiging.
+- **Meldingen boven alles**: de toast heeft een hogere `z-index` dan het
+  instellingenpaneel, de camera en de lightbox — anders verdwijnt bv. het
+  resultaat van "Verbinding testen" onzichtbaar achter de overlay.
 - **Time-outs**: elke NAS-oproep heeft een harde limiet (upload 120 s, de rest
   15 s) via `AbortController`. Een verkeerd ip of een dichte poort geeft dus
   "geen antwoord (time-out)" in plaats van een app die blijft hangen.
