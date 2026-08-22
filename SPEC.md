@@ -454,7 +454,7 @@ gebruikersnaam ingevuld zijn.
 - **Diagnose bij "geen verbinding"**: die fout kan drie dingen betekenen, dus
   doet de app een **no-cors-probe** (`GET` op de server) om ze te scheiden.
   Slaagt die → "NAS antwoordt, maar blokkeert de app (CORS)"; faalt die →
-  "NAS niet bereikbaar (ip, poort of certificaat)". De **ruwe browsertekst**
+  "NAS niet bereikbaar — zit je op wifi of VPN? (anders: ip, poort of certificaat)". De **ruwe browsertekst**
   hangt er tussen rechte haken achter (vaak het enige echte spoor), de toast
   blijft dan 6 s staan, en de uitslag van "Verbinding testen" blijft in het
   paneel staan tot de volgende test. Onder "Verbinding testen"

@@ -2457,7 +2457,7 @@ async function nasDiagnose(n, fout) {
   const ruw = fout.slice('geen verbinding'.length).trim();
   return ((await nasBereikbaar(n))
     ? 'NAS antwoordt, maar blokkeert de app (CORS)'
-    : 'NAS niet bereikbaar (ip, poort of certificaat)') + (ruw ? ' ' + ruw : '');
+    : 'NAS niet bereikbaar — zit je op wifi of VPN? (anders: ip, poort of certificaat)') + (ruw ? ' ' + ruw : '');
 }
 
 function nasFoutTekst(status) {
