@@ -111,7 +111,7 @@ body{
 .lbl{display:block;font-size:.75rem;font-weight:700;margin-bottom:3px;color:var(--ink)}
 .hint{margin:2px 0 8px;font-size:.75rem;color:var(--mut)}
 
-input[type=text],input[type=number],input[type=date],textarea,select{
+input[type=text],input[type=password],input[type=number],input[type=date],textarea,select{
   width:100%;
   font-size:.95rem;
   padding:7px 9px;

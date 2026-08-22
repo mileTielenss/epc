@@ -18,7 +18,8 @@ per soort (§7.1, §7.3, §7.4, §7.7).
   volstaat een bevestiging; anders geldt een typ-slot (§6).
 - Invoer in de VEKA-software gebeurt manueel of via latere automatisatie op
   basis van `woning.json`; de PDF blijft het leesbare dossier.
-- Eén gebruiker: geen accounts, geen instellingen, geen hulpteksten, geen updateknop.
+- Eén gebruiker: geen accounts, geen hulpteksten. Eén optionele instelling: de
+  NAS-upload (§7.8); leeg = de app werkt precies zoals zonder.
 - Alles Nederlands: UI, commentaar, commits, spec.
 ### UI-principes
 - Minimum aan kliks. Elke sectie mag leeg blijven.
@@ -393,6 +394,36 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   achter (§6).
 - "Woning sluiten" (navigeert terug, wijzigt niets).
 - "Woning verwijderen" (rood, altijd actief, gedrag volgens §6).
+### 7.8 NAS-upload (optioneel, per toestel)
+Onderaan de woningenlijst staat het dichtgeklapte blok **"NAS-upload
+(optioneel)"** met vier velden — **Server** (bv. `https://192.168.0.200`),
+**Gebruikersnaam**, **Wachtwoord**, **Map op de NAS** — en de knop
+**"Verbinding testen"**. Elke toetsaanslag bewaart in
+`localStorage['epc-nas']` (per toestel; het wachtwoord staat er in leesbare
+vorm, net als de dossierteller — bewuste keuze voor één gebruiker op één
+iPhone).
+- **Leeg = de gewone flow.** Zonder server óf zonder gebruikersnaam verandert er
+  niets: "Bewaar dossier" gaat naar de deelkaart zoals altijd (§9.3).
+- **Ingesteld**: de zip gaat met **WebDAV `PUT`** naar
+  `<server>/<map>/<zipnaam>` met Basic-auth (UTF-8-veilig ge-encodeerd), elk
+  padstuk apart url-ge-encodeerd. Antwoordt de server **409** (bovenliggende map
+  bestaat niet), dan maakt de app de map met **`MKCOL`** aan en probeert
+  opnieuw. Gelukt → `pdfBewaardOp` wordt gezet en toast "Dossier op de NAS
+  bewaard".
+- **Mislukt de upload** (netwerk/CORS/certificaat → "geen verbinding", 401/403 →
+  "aanmelding geweigerd", 404 → "map niet gevonden", 405 → "WebDAV staat uit",
+  507 → "NAS vol", anders "status N"), dan toast de app de reden en **valt terug
+  op de deelkaart**. Een dossier gaat dus nooit verloren door een NAS die niet
+  antwoordt.
+- **"Verbinding testen"** schrijft echt: `PUT` van `epc-verbindingstest.txt`
+  (met dezelfde `MKCOL`-stap) en daarna `DELETE`. Zo test hij aanmelding, CORS
+  én schrijfrecht in één keer. Toast "Verbinding ok — schrijven lukt" of "Geen
+  verbinding (reden)".
+- **Randvoorwaarden aan de NAS-kant** (buiten de app om): de NAS moet CORS
+  toelaten voor `https://miletielenss.github.io` met de methodes `PUT`, `MKCOL`
+  en `DELETE`, de header `Authorization`, en `OPTIONS`-preflights beantwoorden;
+  en het https-certificaat van de NAS moet op de iPhone vertrouwd zijn. Zonder
+  die twee blokkeert de browser de upload en toont de app "geen verbinding".
 ## 8. Foto-pijplijn
 Alles wordt via canvas hergecodeerd naar JPEG en als Blob opgeslagen. Originele bytes
 worden nooit hergebruikt.
@@ -508,6 +539,9 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    zodat woningen en gemene delen in dezelfde map samen sorteren. Nummer en
    voorvoegsel staan enkel op de buitenverpakking. `File` met die naam →
    `navigator.share({files})`.
+3b. **NAS ingesteld (§7.8)**: de zip gaat eerst via WebDAV naar de NAS; gelukt →
+   `pdfBewaardOp` gezet, klaar. Mislukt → toast met de reden en verder met de
+   deelkaart hieronder.
 4. **`NotAllowedError`** (iOS eist een user gesture, de bouw zit ertussen): de Blob
    blijft in het geheugen, op de plaats van de knop verschijnt **"Deel dossier"**
    die `share()` rechtstreeks vanuit een tik aanroept.

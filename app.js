@@ -2337,6 +2337,110 @@ function renderChecks() {
   });
 }
 
+
+/* ============================== NAS-upload (§7.8) ==============================
+   Optioneel en per toestel: staat er een NAS ingesteld, dan gaat de dossier-zip
+   via WebDAV rechtstreeks naar de NAS in plaats van via de deelkaart. Server of
+   gebruikersnaam leeg -> de gewone flow. Mislukt de upload, dan valt de app
+   terug op delen/downloaden, zodat een dossier nooit verloren gaat. */
+
+const NAS_SLEUTEL = 'epc-nas';
+
+function nasInstellingen() {
+  try {
+    const j = JSON.parse(localStorage.getItem(NAS_SLEUTEL) || '{}');
+    return { server: j.server || '', gebruiker: j.gebruiker || '', wachtwoord: j.wachtwoord || '', map: j.map || '' };
+  } catch (e) { return { server: '', gebruiker: '', wachtwoord: '', map: '' }; }
+}
+function zetNasInstellingen(n) {
+  try { localStorage.setItem(NAS_SLEUTEL, JSON.stringify(n)); } catch (e) { /* geen storage */ }
+}
+function nasIngesteld() {
+  const n = nasInstellingen();
+  return !!(n.server && n.gebruiker);
+}
+
+/* doel-url: server + map + bestandsnaam, elk padstuk apart ge-encodeerd */
+function nasUrl(n, naam) {
+  const basis = n.server.replace(/\/+$/, '');
+  const pad = n.map.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  return basis + (pad ? '/' + pad : '') + (naam ? '/' + encodeURIComponent(naam) : '');
+}
+
+/* Basic-auth, UTF-8-veilig (btoa slikt geen accenten) */
+function nasKop(n) {
+  const bytes = new TextEncoder().encode(`${n.gebruiker}:${n.wachtwoord}`);
+  let bin = '';
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return { Authorization: 'Basic ' + btoa(bin) };
+}
+
+function nasFoutTekst(status) {
+  if (status === 401 || status === 403) return 'aanmelding geweigerd';
+  if (status === 404) return 'map niet gevonden';
+  if (status === 405) return 'WebDAV staat uit';
+  if (status === 507) return 'NAS vol';
+  return 'status ' + status;
+}
+
+/* de mapstructuur aanmaken; fouten negeren, de PUT erna geeft de echte reden */
+async function nasMaakMap(n) {
+  const basis = n.server.replace(/\/+$/, '');
+  let pad = '';
+  for (const deel of n.map.split('/').filter(Boolean)) {
+    pad += '/' + encodeURIComponent(deel);
+    try { await fetch(basis + pad, { method: 'MKCOL', headers: nasKop(n) }); } catch (e) { /* stil */ }
+  }
+}
+
+async function nasVerstuur(n, naam, body, type) {
+  const url = nasUrl(n, naam);
+  const put = () => fetch(url, { method: 'PUT', headers: { ...nasKop(n), 'Content-Type': type }, body });
+  let r;
+  try { r = await put(); } catch (e) { throw new Error('geen verbinding'); }
+  /* 409 = bovenliggende map bestaat nog niet */
+  if (r.status === 409 && n.map) {
+    await nasMaakMap(n);
+    try { r = await put(); } catch (e) { throw new Error('geen verbinding'); }
+  }
+  if (!r.ok) throw new Error(nasFoutTekst(r.status));
+  return url;
+}
+
+function nasUpload(file) {
+  return nasVerstuur(nasInstellingen(), file.name, file, 'application/zip');
+}
+
+/* verbindingstest: écht schrijven (auth, CORS en schrijfrecht in één keer),
+   daarna het testbestand weer opruimen */
+async function nasTest() {
+  const n = nasInstellingen();
+  if (!n.server || !n.gebruiker) { toast('Vul minstens server en gebruikersnaam in'); return; }
+  toast('Verbinding testen…');
+  try {
+    const url = await nasVerstuur(n, 'epc-verbindingstest.txt', 'ok', 'text/plain');
+    try { await fetch(url, { method: 'DELETE', headers: nasKop(n) }); } catch (e) { /* rest blijft staan */ }
+    toast('Verbinding ok — schrijven lukt');
+  } catch (e) {
+    toast(`Geen verbinding (${e.message})`);
+  }
+}
+
+const NAS_VELDEN = { server: '#nas-server', gebruiker: '#nas-gebruiker', wachtwoord: '#nas-wachtwoord', map: '#nas-map' };
+function syncNasForm() {
+  const n = nasInstellingen();
+  Object.entries(NAS_VELDEN).forEach(([k, sel]) => { $(sel).value = n[k]; });
+}
+Object.entries(NAS_VELDEN).forEach(([k, sel]) => {
+  $(sel).addEventListener('input', () => {
+    const n = nasInstellingen();
+    n[k] = $(sel).value.trim();
+    zetNasInstellingen(n);
+  });
+});
+$('#btn-nas-test').addEventListener('click', nasTest);
+syncNasForm();
+
 /* ---------- PDF bewaren (§9.3): worker met voortgang, dan share/download ---------- */
 
 let pdfBezig = false;
@@ -2445,6 +2549,18 @@ async function bewaarPdf() {
 }
 
 async function deelOfDownload(file) {
+  /* NAS ingesteld (§7.8): rechtstreeks uploaden; lukt dat niet, dan gewoon
+     verder met de deelkaart zodat het dossier hoe dan ook bewaard raakt */
+  if (nasIngesteld()) {
+    try {
+      await nasUpload(file);
+      zetPdfBewaard();
+      toast('Dossier op de NAS bewaard');
+      return;
+    } catch (e) {
+      toast(`NAS-upload mislukt (${e.message}) — via delen`);
+    }
+  }
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file] });

@@ -1092,6 +1092,107 @@ await scenario('versiefout-en-sw', {}, async (page, ctx) => {
   server.zetOverride('/sw.js', null);
 });
 
+
+/* ============ 8. NAS-upload (§7.8): instellingen, test, upload, terugval ============ */
+await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
+  let modus = 'ok';                 /* stuurt de nagebootste NAS aan */
+  const gezien = [];
+  await page.route('https://192.168.0.200/**', route => {
+    const m = route.request().method();
+    gezien.push(m + ' ' + new URL(route.request().url()).pathname);
+    if (modus === 'stuk') return route.abort();
+    if (modus === '401' && m === 'PUT') return route.fulfill({ status: 401, body: '' });
+    if (modus === '409' && m === 'PUT' && !gezien.includes('MKCOL /EPC')) return route.fulfill({ status: 409, body: '' });
+    if (modus === '409' && m === 'DELETE') return route.abort();   /* opruimen faalt: catch */
+    return route.fulfill({ status: m === 'PUT' ? 201 : 204, body: '' });
+  });
+
+  await page.goto(BASIS);
+  await page.waitForSelector('#btn-nieuwewoning');
+  await page.click('#sec-nas summary');
+
+  /* zonder server: de test weigert meteen */
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('minstens server'));
+
+  /* instellingen bewaren zichzelf per toetsaanslag */
+  await page.fill('#nas-server', 'https://192.168.0.200/');
+  await page.fill('#nas-gebruiker', 'mile');
+  await page.fill('#nas-wachtwoord', 'geh\u00e9im');          /* accent: UTF-8-veilige btoa */
+  await page.fill('#nas-map', 'EPC/dossiers');
+  assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('epc-nas'))),
+    { server: 'https://192.168.0.200/', gebruiker: 'mile', wachtwoord: 'geh\u00e9im', map: 'EPC/dossiers' },
+    'instellingen in localStorage');
+
+  /* geslaagde test: PUT + DELETE */
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Verbinding ok'));
+  assert.ok(gezien.some(g => g.startsWith('PUT /EPC/dossiers/epc-verbindingstest.txt')), 'testbestand in de ingestelde map');
+  assert.ok(gezien.includes('DELETE /EPC/dossiers/epc-verbindingstest.txt'), 'testbestand weer opgeruimd');
+
+  /* 409 -> MKCOL per padstuk -> opnieuw PUT; DELETE faalt stil */
+  modus = '409';
+  gezien.length = 0;
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Verbinding ok'));
+  assert.ok(gezien.includes('MKCOL /EPC') && gezien.includes('MKCOL /EPC/dossiers'), 'mapstructuur aangemaakt');
+
+  /* foutpaden: geweigerde aanmelding en een dode NAS */
+  modus = '401';
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('aanmelding geweigerd'));
+  modus = 'stuk';
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('geen verbinding'));
+
+  /* de overige statusteksten */
+  assert.deepEqual(await page.evaluate(() => [404, 405, 507, 418].map(nasFoutTekst)),
+    ['map niet gevonden', 'WebDAV staat uit', 'NAS vol', 'status 418'], 'foutteksten per status');
+  /* url zonder map */
+  assert.equal(await page.evaluate(() => nasUrl({ server: 'https://x/', map: '', gebruiker: '', wachtwoord: '' }, 'a b.zip')),
+    'https://x/a%20b.zip', 'url zonder map, naam ge-encodeerd');
+  /* kapotte localStorage: beide catch-takken */
+  assert.deepEqual(await page.evaluate(() => {
+    const g = localStorage.getItem.bind(localStorage), z = localStorage.setItem.bind(localStorage);
+    localStorage.getItem = () => { throw new Error('x'); };
+    localStorage.setItem = () => { throw new Error('x'); };
+    try { zetNasInstellingen({ server: 'a' }); return nasInstellingen(); }
+    finally { localStorage.getItem = g; localStorage.setItem = z; }
+  }), { server: '', gebruiker: '', wachtwoord: '', map: '' }, 'kapotte storage valt terug op leeg');
+  /* rommel in localStorage -> JSON.parse-catch */
+  assert.equal(await page.evaluate(() => {
+    localStorage.setItem('epc-nas', 'geen json');
+    return nasInstellingen().server;
+  }), '', 'onleesbare instellingen -> leeg');
+  await page.evaluate(() => localStorage.setItem('epc-nas', JSON.stringify(
+    { server: 'https://192.168.0.200', gebruiker: 'mile', wachtwoord: 'x', map: 'EPC/dossiers' })));
+
+  /* dossier bewaren gaat nu naar de NAS i.p.v. de deelkaart */
+  modus = 'ok';
+  gezien.length = 0;
+  await page.click('#btn-nieuwewoning');
+  await page.waitForSelector('#app:not([hidden])');
+  await page.fill('#adres', 'Nasstraat 1');
+  await page.locator('#adres').blur();
+  await page.click('#tabbar button[data-tab="afronden"]');
+  await page.click('#btn-print');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('op de NAS bewaard'));
+  assert.ok(gezien.some(g => g.startsWith('PUT /EPC/dossiers/1.%20Nasstraat%201.zip')), 'zip met zijn eigen naam op de NAS');
+  assert.ok(await page.evaluate(() => !!S.pdfBewaardOp), 'pdfBewaardOp gezet na een geslaagde upload');
+
+  /* NAS onbereikbaar: terugval op de gewone flow (hier: download) */
+  modus = 'stuk';
+  await page.click('#tabbar button[data-tab="algemeen"]');
+  await page.fill('#adres', 'Nasstraat 2');
+  await page.locator('#adres').blur();
+  await page.click('#tabbar button[data-tab="afronden"]');
+  const [dl] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30000 }),
+    page.click('#btn-print')
+  ]);
+  await dl.saveAs(join(HIER, 'uitvoer', 'nas-terugval.zip'));
+});
+
 await browser.close();
 server.close();
 console.log(`coverage-test: ${dumpNr} dekkingsdumps geschreven naar ${UIT}`);
