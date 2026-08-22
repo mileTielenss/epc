@@ -2426,6 +2426,24 @@ async function nasFetch(url, opts, ms) {
   }
 }
 
+/* "geen verbinding" kan drie dingen zijn: de NAS is onbereikbaar (ip/poort),
+   het certificaat wordt niet vertrouwd, of de NAS blokkeert de app (CORS).
+   Een no-cors-probe onderscheidt ze: die slaagt zodra tcp+tls werken, ook al
+   mag de app de inhoud niet lezen (§7.8). */
+async function nasBereikbaar(n) {
+  try {
+    await nasFetch(n.server, { method: 'GET', mode: 'no-cors' }, 10000);
+    return true;
+  } catch (e) { return false; }
+}
+
+async function nasDiagnose(n, fout) {
+  if (fout !== 'geen verbinding') return fout;
+  return (await nasBereikbaar(n))
+    ? 'NAS antwoordt, maar blokkeert de app (CORS)'
+    : 'NAS niet bereikbaar (ip, poort of certificaat)';
+}
+
 function nasFoutTekst(status) {
   if (status === 401 || status === 403) return 'aanmelding geweigerd';
   if (status === 404) return 'map niet gevonden';
@@ -2472,7 +2490,7 @@ async function nasTest() {
     try { await nasFetch(url, { method: 'DELETE', headers: nasKop(n) }, 15000); } catch (e) { /* rest blijft staan */ }
     toast('Verbinding ok — schrijven lukt');
   } catch (e) {
-    toast(`Geen verbinding (${e.message})`);
+    toast(await nasDiagnose(n, e.message));
   }
 }
 
@@ -2518,7 +2536,7 @@ async function toonNasMappen(pad) {
   toast('Mappen ophalen…');
   let mappen;
   try { mappen = await nasMappen(n, pad); }
-  catch (e) { toast(`Bladeren mislukt (${e.message})`); return; }
+  catch (e) { toast(`Bladeren mislukt — ${await nasDiagnose(n, e.message)}`); return; }
   nasPad = pad;
   $('#nas-blader').hidden = false;
   $('#nas-blader-pad').textContent = 'Huidige map: ' + (pad || '(hoofdmap)');
@@ -2717,8 +2735,8 @@ async function deelOfDownload(file) {
     } catch (e) {
       /* de reden blijft op Afronden en in de lijst staan (§7.8): een toast
          verdwijnt achter de deelkaart en zou gemist worden */
-      nasLaatsteFout = e.message;
-      toast(`NIET op de NAS (${e.message}) — via delen`);
+      nasLaatsteFout = await nasDiagnose(nasInstellingen(), e.message);
+      toast(`NIET op de NAS (${nasLaatsteFout}) — via delen`);
     }
   }
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -2764,7 +2782,7 @@ $('#btn-nas-opnieuw').addEventListener('click', async () => {
     nasLaatsteFout = '';
     zetPdfBewaard(true);
   } catch (e) {
-    nasLaatsteFout = (e && e.message) || 'onbekende fout';
+    nasLaatsteFout = await nasDiagnose(nasInstellingen(), (e && e.message) || 'onbekende fout');
     renderAfronden();
     toast(`NIET op de NAS (${nasLaatsteFout})`);
   } finally {

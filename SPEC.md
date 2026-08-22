@@ -448,6 +448,12 @@ gebruikersnaam ingevuld zijn.
     terugval); staat alles goed, dan staat er grijs "Op de NAS gezet op …";
   - **verwijderen** vraagt dan het typ-slot van §6 in plaats van een gewone
     bevestiging.
+- **Diagnose bij "geen verbinding"**: die fout kan drie dingen betekenen, dus
+  doet de app een **no-cors-probe** (`GET` op de server) om ze te scheiden.
+  Slaagt die → "NAS antwoordt, maar blokkeert de app (CORS)"; faalt die →
+  "NAS niet bereikbaar (ip, poort of certificaat)". Onder "Verbinding testen"
+  staat één hint met de manuele controle (server openen in Safari) en de exacte
+  CORS-eisen.
 - **Meldingen boven alles**: de toast heeft een hogere `z-index` dan het
   instellingenpaneel, de camera en de lightbox — anders verdwijnt bv. het
   resultaat van "Verbinding testen" onzichtbaar achter de overlay.

@@ -1101,6 +1101,8 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
     const m = route.request().method();
     gezien.push(m + ' ' + new URL(route.request().url()).pathname);
     if (modus === 'stuk') return route.abort();
+    /* NAS leeft, maar blokkeert alles buiten een gewone GET: CORS-diagnose */
+    if (modus === 'cors') return m === 'GET' ? route.fulfill({ status: 200, body: 'ok' }) : route.abort();
     if (modus === '401' && m === 'PUT') return route.fulfill({ status: 401, body: '' });
     if (modus === '409' && m === 'PUT' && !gezien.includes('MKCOL /EPC')) return route.fulfill({ status: 409, body: '' });
     if (modus === '409' && m === 'DELETE') return route.abort();   /* opruimen faalt: catch */
@@ -1167,7 +1169,13 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('aanmelding geweigerd'));
   modus = 'stuk';
   await page.click('#btn-nas-test');
-  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('geen verbinding'));
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('niet bereikbaar'));
+  /* zelfde fout, maar de NAS antwoordt wél op een gewone GET -> CORS */
+  modus = 'cors';
+  await page.click('#btn-nas-test');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('blokkeert de app (CORS)'));
+  await page.click('#btn-nas-bladeren');
+  await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Bladeren mislukt'));
 
   /* map kiezen door te bladeren (§7.8) */
   modus = 'ok';
@@ -1263,7 +1271,7 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   ]);
   await dl.saveAs(join(HIER, 'uitvoer', 'nas-terugval.zip'));
   await page.waitForFunction(() => document.querySelector('#nas-status').textContent.includes('GEWIJZIGD SINDS DE NAS-KOPIE'));
-  assert.ok((await page.textContent('#nas-status')).includes('geen verbinding'), 'reden staat erbij');
+  assert.ok((await page.textContent('#nas-status')).includes('niet bereikbaar'), 'reden staat erbij');
   assert.ok(await page.locator('#btn-nas-opnieuw').isVisible(), 'retry-knop verschijnt');
   await page.click('#btn-terug');
   await page.waitForSelector('#woninglijst li.woning');
