@@ -50,12 +50,12 @@ function datumUur(iso) {
 }
 
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, ms) {
   const t = $('#toast');
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms || 1800);
 }
 
 function flash(btn) {
@@ -2420,7 +2420,11 @@ async function nasFetch(url, opts, ms) {
   try {
     return await fetch(url, { ...opts, signal: ac.signal });
   } catch (e) {
-    throw new Error(e && e.name === 'AbortError' ? 'geen antwoord (time-out)' : 'geen verbinding');
+    if (e && e.name === 'AbortError') throw new Error('geen antwoord (time-out)');
+    /* de browsertekst is vaak het enige echte spoor (certificaat, CORS, lokaal
+       netwerk): bewaren en tonen i.p.v. platslaan (§7.8) */
+    const ruw = (e && (e.message || e.name)) || 'onbekend';
+    throw new Error('geen verbinding [' + ruw + ']');
   } finally {
     clearTimeout(t);
   }
@@ -2438,10 +2442,11 @@ async function nasBereikbaar(n) {
 }
 
 async function nasDiagnose(n, fout) {
-  if (fout !== 'geen verbinding') return fout;
-  return (await nasBereikbaar(n))
+  if (!fout.startsWith('geen verbinding')) return fout;
+  const ruw = fout.slice('geen verbinding'.length).trim();
+  return ((await nasBereikbaar(n))
     ? 'NAS antwoordt, maar blokkeert de app (CORS)'
-    : 'NAS niet bereikbaar (ip, poort of certificaat)';
+    : 'NAS niet bereikbaar (ip, poort of certificaat)') + (ruw ? ' ' + ruw : '');
 }
 
 function nasFoutTekst(status) {
@@ -2481,6 +2486,14 @@ function nasUpload(file) {
 
 /* verbindingstest: écht schrijven (auth, CORS en schrijfrecht in één keer),
    daarna het testbestand weer opruimen */
+function nasUitslag(tekst, gelukt) {
+  const el = $('#nas-uitslag');
+  el.hidden = false;
+  el.classList.toggle('herzien', !gelukt);
+  el.classList.toggle('grijs', !!gelukt);
+  el.textContent = tekst;
+}
+
 async function nasTest() {
   const n = nasInstellingen();
   if (!n.server || !n.gebruiker) { toast('Vul minstens server en gebruikersnaam in'); return; }
@@ -2488,9 +2501,13 @@ async function nasTest() {
   try {
     const url = await nasVerstuur(n, 'epc-verbindingstest.txt', 'ok', 'text/plain');
     try { await nasFetch(url, { method: 'DELETE', headers: nasKop(n) }, 15000); } catch (e) { /* rest blijft staan */ }
+    nasUitslag('Verbinding ok — schrijven lukt', true);
     toast('Verbinding ok — schrijven lukt');
   } catch (e) {
-    toast(await nasDiagnose(n, e.message));
+    /* de volledige reden blijft in het paneel staan om rustig te lezen */
+    const reden = await nasDiagnose(n, e.message);
+    nasUitslag(reden, false);
+    toast(reden, 6000);
   }
 }
 

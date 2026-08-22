@@ -1153,6 +1153,7 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   /* geslaagde test: PUT + DELETE */
   await page.click('#btn-nas-test');
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('Verbinding ok'));
+  assert.ok((await page.textContent('#nas-uitslag')).includes('Verbinding ok'), 'uitslag blijft in het paneel staan');
   assert.ok(gezien.some(g => g.startsWith('PUT /EPC/dossiers/epc-verbindingstest.txt')), 'testbestand in de ingestelde map');
   assert.ok(gezien.includes('DELETE /EPC/dossiers/epc-verbindingstest.txt'), 'testbestand weer opgeruimd');
 
@@ -1170,6 +1171,8 @@ await scenario('nas', { context: { serviceWorkers: 'block' } }, async page => {
   modus = 'stuk';
   await page.click('#btn-nas-test');
   await page.waitForFunction(() => (document.querySelector('#toast').textContent || '').includes('niet bereikbaar'));
+  assert.ok((await page.textContent('#nas-uitslag')).includes('niet bereikbaar'), 'foutuitslag blijft staan');
+  assert.ok(/\[.+\]/.test(await page.textContent('#nas-uitslag')), 'ruwe browserfout staat erbij');
   /* zelfde fout, maar de NAS antwoordt wél op een gewone GET -> CORS */
   modus = 'cors';
   await page.click('#btn-nas-test');
