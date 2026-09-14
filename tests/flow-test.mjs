@@ -114,6 +114,20 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   await page.click('#btn-vent');
   check('ventilatie cycle naar natuurlijk', (await page.textContent('#btn-vent .cv')) === 'natuurlijk');
 
+  /* verwarming in deze ruimte: airco vraagt twee unitfoto's (§7.4) */
+  await page.click('#sec-energie summary');
+  check('airco toont knop binnenunit', (await page.textContent('#btn-rvfoto')).includes('binnenunit'));
+  check('airco toont de buitenunitrij', await page.locator('#fld-rvfoto-buiten').isVisible());
+  await page.click('#cy-rvtype');
+  check('kachel toont de kenplaatknop', (await page.textContent('#btn-rvfoto')).includes('kenplaat'));
+  check('kachel zonder buitenunitrij', await page.locator('#fld-rvfoto-buiten').isHidden());
+  await page.click('#cy-rvtype');
+  await page.click('#cy-rvtype');
+  check('terug bij airco', (await page.textContent('#cy-rvtype .cv')) === 'Airco');
+  await page.click('#btn-rv-voegtoe');
+  check('airco in de lijst', await page.locator('#rvlijst li').count() === 1);
+  await page.click('#sec-energie summary');
+
   await page.click('#sec-ramen summary');
   await page.fill('#breedte', '2,4');
   await page.fill('#hoogte', '1,335');
@@ -232,8 +246,11 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
 
   /* afronden: checks + delete geblokkeerd + PDF via download */
   await page.click('#tabbar button[data-tab="afronden"]');
-  check('3 controlepunten', await page.locator('#checklijst li').count() === 3);
+  check('4 controlepunten (incl. de aircoregel)', await page.locator('#checklijst li').count() === 4);
   check('hoofdfoto-check ok', (await page.locator('#checklijst li').nth(2).textContent()).includes('✅'));
+  const aircoCheck = await page.locator('#checklijst li').nth(3).textContent();
+  check('aircocheck rood zonder unitfoto\'s', aircoCheck.includes('❌') && aircoCheck.includes('binnen- en buitenunit'));
+  check('aircocheck noemt de ruimte', aircoCheck.includes('Living'));
   const delKnop = page.locator('#btn-verwijder-woning');
   check('verwijderen kan ook vóór het bewaren', !(await delKnop.isDisabled()));
   promptAntwoord = 'fout woord';

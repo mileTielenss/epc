@@ -237,6 +237,7 @@ const DB = (() => {
         (w.ramen || []).forEach(r => { if (r.fotoId) verwezen.add(r.fotoId); });
         (((w.energie || {}).opwekkers) || []).forEach(o => {
           (o.fotoIds || []).forEach(id => verwezen.add(id));
+          if (o.fotoBuitenId) verwezen.add(o.fotoBuitenId);
           if (o.fotoKraanId) verwezen.add(o.fotoKraanId);
         });
         if (w.algemeen && w.algemeen.hoofdFotoId) verwezen.add(w.algemeen.hoofdFotoId);

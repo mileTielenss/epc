@@ -559,6 +559,9 @@
         (o.kenplaatFotos || []).forEach(pad => {
           if (fotoBytes(pad)) opwekFotos.push({ pad, cap: `${naam}, kenplaat` });
         });
+        /* airco: binnen- en buitenunit apart benoemd (§9.3.1) */
+        if (fotoBytes(o.binnenunitFoto)) opwekFotos.push({ pad: o.binnenunitFoto, cap: `${naam}, binnenunit` });
+        if (fotoBytes(o.buitenunitFoto)) opwekFotos.push({ pad: o.buitenunitFoto, cap: `${naam}, buitenunit` });
         if (fotoBytes(o.kranenFoto)) opwekFotos.push({ pad: o.kranenFoto, cap: `${naam}, radiatorkranen` });
       });
       fotoRaster(opwekFotos, 4, 82, true);

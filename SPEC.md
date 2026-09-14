@@ -133,7 +133,9 @@ woning = {
                    ruimteId | null,
                    functie: ['radiatoren'|'vloer'|'sww'],
                    beschrijving,
-                   fotoIds: [fotoId, ...],   // kenplaatfoto's, 0..n (§7.3)
+                   fotoIds: [fotoId, ...],   // kenplaatfoto's, 0..n (§7.3);
+                                             // bij airco: 0..1 = de binnenunit (§7.4)
+                   fotoBuitenId | null,      // enkel airco: de buitenunit (§7.4)
                    fotoKraanId } ],
     pvPanelen: [ { id, orientatie: 'plat'|'voor'|'achter'|'links'|'rechts'|'', wp } ],
     zonneboiler: 'nee'|'ja', zonneboilerM2,
@@ -291,9 +293,17 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   ander`. Bij "ander" een beschrijvingsveld onder de knop, met focus, geen popup.
 - **Verwarming in deze ruimte**: cycle Airco/Kachel/Andere (`ruimte-andere`);
   **Afmetingen ruimte (m)** b × d × h met live m³, opgeslagen op de ruimte (één keer
-  per ruimte; leeg = `afm: null`); beschrijving; 📷 Foto kenplaat (één foto; het
-  record gebruikt hetzelfde `fotoIds`-veld met 0 of 1 foto); "Voeg toestel toe".
-  Lijst toont enkel de toestellen van deze ruimte, met volume. Tik = bewerken.
+  per ruimte; leeg = `afm: null`); beschrijving; foto's (zie hieronder);
+  "Voeg toestel toe".
+  Lijst toont enkel de toestellen van deze ruimte, met volume en tot twee
+  thumbnails. Tik = bewerken.
+  - **Foto's hangen af van het toestel**: bij **kachel** en **andere** staat er
+    één knop "📷 Foto kenplaat" (het record gebruikt `fotoIds` met 0 of 1 foto).
+    Bij **airco** staan er twee knoppen naast elkaar, **"📷 Foto binnenunit"**
+    (bewaard in `fotoIds[0]`) en **"📷 Foto buitenunit"** (`fotoBuitenId`) —
+    voor een airco heb je beide nodig. De cycle wisselt de knoppen meteen om.
+    Zet je een airco met een buitenunitfoto om naar kachel/andere, dan
+    verdwijnt die foto bij het bewaren (hij hoort niet bij zo'n toestel).
   - Afmetingen zijn enkel nodig voor ruimtes met een eigen toestel: die vormen een
     aparte ruimtecluster die van het totale volume afgetrokken wordt. Ruimtes zonder
     eigen toestel horen bij de algemene cluster; het totale volume komt uit de
@@ -394,6 +404,9 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
   element), (2) privatieve ramen ingegeven (≥1 privatief element — de
   oppervlakte-aftrek van de gevels), (3) verlichting ingevuld (≥1 regel),
   (4) hoofdfoto gekozen.
+- **Extra regel zodra er een airco in het dossier staat** (in beide lijsten, als
+  laatste): "Airco's: foto binnen- en buitenunit", ❌ met de ruimtes die nog een
+  van beide missen. Staat er geen airco, dan valt de regel weg.
 - **"💾 Bewaar dossier"** met voortgangsbalk uit de worker.
 - Grijze regel "Dossier bewaard op <datum en uur>" indien `pdfBewaardOp`; is er
   nadien nog gewijzigd, dan staat er rood " — nadien gewijzigd, bewaar opnieuw"
@@ -570,7 +583,8 @@ Schrijft zelf een volledig PDF-document. Geen print-dialoog, geen library.
    bijschrift 6,5 pt "Element gevel – ruimte, afstandhouder/kenplaatje".
 3. **ENERGIE**: tabel #, Opwekker, Ruimte, Doet, Beschrijving (bij airco/kachel met
    "ruimte b × d × h m = x m³"). Daaronder kenplaat- en kranenfoto's, zelfde raster,
-   bijschrift "Type – ruimte, kenplaat/radiatorkranen". Daarna, als er
+   bijschrift "Type – ruimte, kenplaat/radiatorkranen"; bij een airco
+   "Airco – ruimte, binnenunit" en "…, buitenunit". Daarna, als er
    verlichting genoteerd is (gemene delen): tabel **Verlichting** met kolommen
    #, Lamptype, Aantal, W per lamp, Totaal W en een vette totaalregel
    "N lichtpunten · X W" (regels zonder wattage tellen niet mee in het
@@ -644,7 +658,9 @@ opgeslagen:
   eronder"; geen aparte fotogroepen-lijst. Beide zijn gereserveerde namen.
 - **De opwekkerfoto's staan enkel op de opwekker** (`kenplaatFotos` — een
   lijst, want een kenplaat kan uit meerdere plaatjes bestaan — en `kranenFoto`),
-  niet nog eens in een ruimte.
+  niet nog eens in een ruimte. Een **airco** heeft geen `kenplaatFotos` maar
+  `binnenunitFoto` en `buitenunitFoto` (elk één pad), zodat uit de json blijkt
+  welke unit op welke foto staat.
 - **Eén `hoofdfoto` op woningniveau** (pad naar een gevelfoto).
 - **Geen afgeleide waarden**: geen oppervlakte per element, geen totaalblok,
   geen volume bij afmetingen. De maten staan er (`breedteM`, `hoogteM`,
@@ -666,7 +682,8 @@ woning: {
       afmetingen?: { breedteM, diepteM, hoogteM },
       elementen?: [ { type, gevel, breedteM, hoogteM, aantal, beglazing?, kader, rolluik, foto? }
                     | { type, gevel, breedteM, hoogteM, aantal, privatief: true, foto? } ],
-      toestellen?: [ { type, beschrijving?, kenplaatFotos? } ],
+      toestellen?: [ { type, beschrijving?, kenplaatFotos? }          // kachel/andere
+                    | { type: "airco", beschrijving?, binnenunitFoto?, buitenunitFoto? } ],
       fotos?: [ … ] },
     { naam: "Algemeen", fotos: [ … ] }
   ],

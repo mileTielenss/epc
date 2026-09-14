@@ -282,6 +282,8 @@ function normaliseer(p) {
     beschrijving: o.beschrijving || '',
     fotoIds: (Array.isArray(o.fotoIds) ? o.fotoIds : [])
       .map((id, j) => fotoRef(id, `kenplaat ${j + 1} van opwekker ${i + 1}`)).filter(Boolean),
+    /* enkel een airco heeft een buitenunit; bij een ander toestel valt de foto weg */
+    fotoBuitenId: o.type === 'airco' ? fotoRef(o.fotoBuitenId, `buitenunitfoto van opwekker ${i + 1}`) : null,
     fotoKraanId: fotoRef(o.fotoKraanId, `kranenfoto van opwekker ${i + 1}`)
   }));
   if (!Array.isArray(w.energie.pvPanelen)) w.energie.pvPanelen = [];
@@ -675,10 +677,14 @@ async function importeerDossier(d, leden) {
         });
       }
       for (const t of (r.toestellen || [])) {
+        /* airco: binnenunit in fotoIds[0], buitenunit apart (§9.3.1) */
+        const binnen = t.type === 'airco' ? await schrijfFoto(t.binnenunitFoto, null) : null;
         opwekkers.push({
           id: DB.nieuwId(), type: t.type, ruimteId: rid, functie: [],
           beschrijving: t.beschrijving || '',
-          fotoIds: await schrijfKenplaten(t), fotoKraanId: null
+          fotoIds: t.type === 'airco' ? (binnen ? [binnen] : []) : await schrijfKenplaten(t),
+          fotoBuitenId: t.type === 'airco' ? await schrijfFoto(t.buitenunitFoto, null) : null,
+          fotoKraanId: null
         });
       }
     }
@@ -691,6 +697,7 @@ async function importeerDossier(d, leden) {
         functie: (o.functies || []).map(f => FUNCTIE_TERUG[f] || f).filter(f => FUNCTIES.includes(f)),
         beschrijving: o.beschrijving || '',
         fotoIds: await schrijfKenplaten(o),
+        fotoBuitenId: null,
         fotoKraanId: await schrijfFoto(o.kranenFoto, null)
       });
     }
@@ -1283,7 +1290,7 @@ $('#ramenlijst').addEventListener('click', e => {
 function isRuimteToestel(o) { return o.type === 'airco' || o.type === 'kachel' || o.type === 'ruimte-andere'; }
 
 function leegDraftOpwek() {
-  return { type: 'gas', functie: [], fotoIds: [], fotoKraanId: null };
+  return { type: 'gas', functie: [], fotoIds: [], fotoBuitenId: null, fotoKraanId: null };
 }
 let draftOpwek = leegDraftOpwek();
 let bewerkOpwekId = null;
@@ -1359,6 +1366,7 @@ $('#btn-opwek-voegtoe').addEventListener('click', () => {
     functie: [...draftOpwek.functie],
     beschrijving: $('#opw-beschrijving').value.trim(),
     fotoIds: [...draftOpwek.fotoIds],
+    fotoBuitenId: null,
     fotoKraanId: kraanId
   };
   if (bewerkOpwekId !== null) {
@@ -1387,6 +1395,7 @@ function startBewerkOpwek(id) {
     type: o.type in { gas: 1, stookolie: 1, andere: 1 } ? o.type : 'andere',
     functie: [...(o.functie || [])],
     fotoIds: [...(o.fotoIds || [])],
+    fotoBuitenId: null,
     fotoKraanId: o.fotoKraanId || null
   };
   syncOpwekForm();
@@ -1441,6 +1450,7 @@ function renderOpwekkers() {
 function verwijderOpwekker(o) {
   S.energie.opwekkers = S.energie.opwekkers.filter(x => x.id !== o.id);
   (o.fotoIds || []).forEach(id => DB.verwijderFoto(id).catch(() => { }));
+  if (o.fotoBuitenId) DB.verwijderFoto(o.fotoBuitenId).catch(() => { });
   if (o.fotoKraanId) DB.verwijderFoto(o.fotoKraanId).catch(() => { });
   wijzig();
 }
@@ -1609,12 +1619,16 @@ bind('#zb-m2', v => S.energie.zonneboilerM2 = v);
    airco's en kachels horen bij de gekozen ruimte; de afmetingen van de ruimte
    geef je maar één keer in (op de ruimte zelf), hoeveel toestellen er ook hangen */
 
-let draftRv = { type: 'airco', fotoId: null };
+function leegDraftRv(type) {
+  return { type: type || 'airco', fotoId: null, fotoBuitenId: null };
+}
+
+let draftRv = leegDraftRv();
 let bewerkRvId = null;
 
 const syncCyRvtype = cycleInit('#cy-rvtype', ['airco', 'kachel', 'ruimte-andere'],
   { airco: 'Airco', kachel: 'Kachel', 'ruimte-andere': 'Andere' },
-  () => draftRv.type, v => draftRv.type = v);
+  () => draftRv.type, v => { draftRv.type = v; toonRvFotoknoppen(); });
 
 /* afmetingen van de gekozen ruimte: rechtstreeks op de ruimte bewaard */
 function updateRuimteM3() {
@@ -1664,12 +1678,35 @@ $('#btn-rvfoto-del').addEventListener('click', () => {
   updateRvThumb();
   undoFoto(oud, () => { draftRv.fotoId = oud; updateRvThumb(); });
 });
+
+/* een airco heeft twee units die je allebei op beeld wil (§7.4) */
+$('#btn-rvfoto-buiten').addEventListener('click', () => neemFoto(fotoId => {
+  if (draftRv.fotoBuitenId) DB.verwijderFoto(draftRv.fotoBuitenId).catch(() => { });
+  draftRv.fotoBuitenId = fotoId;
+  updateRvThumb();
+}));
+$('#btn-rvfoto-buiten-del').addEventListener('click', () => {
+  const oud = draftRv.fotoBuitenId;
+  if (!oud) return;
+  draftRv.fotoBuitenId = null;
+  updateRvThumb();
+  undoFoto(oud, () => { draftRv.fotoBuitenId = oud; updateRvThumb(); });
+});
 function updateRvThumb() {
   zetFormThumb('#rvfoto-thumb', '#btn-rvfoto-del', draftRv.fotoId);
+  zetFormThumb('#rvfoto-buiten-thumb', '#btn-rvfoto-buiten-del', draftRv.fotoBuitenId);
+}
+
+/* bij airco: binnen- en buitenunit; bij kachel/andere gewoon de kenplaat */
+function toonRvFotoknoppen() {
+  const airco = draftRv.type === 'airco';
+  $('#btn-rvfoto').innerHTML = airco ? '&#128247; Foto binnenunit' : '&#128247; Foto kenplaat';
+  $('#fld-rvfoto-buiten').hidden = !airco;
 }
 
 function syncRvForm() {
   syncCyRvtype();
+  toonRvFotoknoppen();
   updateRvThumb();
 }
 
@@ -1677,12 +1714,19 @@ $('#btn-rv-voegtoe').addEventListener('click', () => {
   if (!S) return;
   const r = huidigeRuimte();
   if (!r) { toast('Kies eerst een ruimte bovenaan'); return; }
+  /* geen airco (meer) -> de buitenunitfoto hoort er niet bij en wordt gewist */
+  let buitenId = draftRv.fotoBuitenId;
+  if (draftRv.type !== 'airco' && buitenId) {
+    DB.verwijderFoto(buitenId).catch(() => { });
+    buitenId = null;
+  }
   const velden = {
     type: draftRv.type,
     ruimteId: r.id,
     functie: [],
     beschrijving: $('#rv-beschrijving').value.trim(),
     fotoIds: draftRv.fotoId ? [draftRv.fotoId] : [],
+    fotoBuitenId: buitenId,
     fotoKraanId: null
   };
   if (bewerkRvId !== null) {
@@ -1694,7 +1738,7 @@ $('#btn-rv-voegtoe').addEventListener('click', () => {
     S.energie.opwekkers.push({ id: DB.nieuwId(), ...velden });
     toast(`${OPWEK_NAMEN[draftRv.type]} toegevoegd in ${r.naam}`);
   }
-  draftRv = { type: draftRv.type, fotoId: null };
+  draftRv = leegDraftRv(draftRv.type);
   syncRvForm();
   $('#rv-beschrijving').value = '';
   renderRv();
@@ -1706,7 +1750,11 @@ function startBewerkRv(id) {
   const o = S.energie.opwekkers.find(x => x.id === id);
   if (!o) return;
   bewerkRvId = id;
-  draftRv = { type: ['kachel', 'ruimte-andere'].includes(o.type) ? o.type : 'airco', fotoId: (o.fotoIds || [])[0] || null };
+  draftRv = {
+    type: ['kachel', 'ruimte-andere'].includes(o.type) ? o.type : 'airco',
+    fotoId: (o.fotoIds || [])[0] || null,
+    fotoBuitenId: o.fotoBuitenId || null
+  };
   /* de ruimtebalk springt mee naar de ruimte van dit toestel */
   if (o.ruimteId && S.ruimtes.some(x => x.id === o.ruimteId)) ruimteSel = o.ruimteId;
   renderRuimtebalk();
@@ -1727,7 +1775,7 @@ function stopBewerkRv() {
 
 $('#btn-annuleer-rv').addEventListener('click', () => {
   stopBewerkRv();
-  draftRv = { type: 'airco', fotoId: null };
+  draftRv = leegDraftRv();
   syncRvForm();
   $('#rv-beschrijving').value = '';
   renderRv();
@@ -1746,13 +1794,15 @@ function renderRv() {
       const det = [o.beschrijving, r && r.afm ? afmTekst(r.afm) : ''].filter(Boolean);
       const fid = (o.fotoIds || [])[0];
       const foto = fid && !fotoVerborgen(fid) ? DB.fotoUrl(fid) : null;
+      const buiten = o.fotoBuitenId && !fotoVerborgen(o.fotoBuitenId) ? DB.fotoUrl(o.fotoBuitenId) : null;
       li.innerHTML =
         `<div class="info">
            <div class="r1">${esc(OPWEK_NAMEN[o.type] || o.type)}</div>
            <div class="r2">${esc(r ? r.naam : '-')}</div>
            <div class="r3">${det.length ? esc(det.join(' · ')) + ' · ' : ''}tik om te wijzigen</div>
          </div>` +
-        (foto ? `<img class="thumb" src="${foto}" alt="kenplaat">` : '') +
+        (foto ? `<img class="thumb" src="${foto}" alt="${o.type === 'airco' ? 'binnenunit' : 'kenplaat'}">` : '') +
+        (buiten ? `<img class="thumb" src="${buiten}" alt="buitenunit">` : '') +
         `<button type="button" class="del" data-id="${o.id}">×</button>`;
       ul.appendChild(li);
     });
@@ -2362,6 +2412,17 @@ function renderChecks() {
     { ok: S.energie.opwekkers.length > 0, tekst: 'Verwarming ingevuld', detail: 'nog geen opwekker of toestel' },
     { ok: !!S.algemeen.hoofdFotoId, tekst: 'Hoofdfoto gekozen', detail: 'ster op een gevelfoto' }
   ];
+  /* airco's hebben een foto van binnen- én buitenunit nodig (§7.4); staat er
+     geen airco in het dossier, dan hoort de regel er niet */
+  const aircos = S.energie.opwekkers.filter(o => o.type === 'airco');
+  if (aircos.length) {
+    const mist = aircos.filter(o => !(o.fotoIds || []).length || !o.fotoBuitenId)
+      .map(o => ruimteNaam(o.ruimteId) || '-');
+    items.push({
+      ok: !mist.length, tekst: "Airco's: foto binnen- en buitenunit",
+      detail: mist.join(', ')
+    });
+  }
   items.forEach(i => {
     const li = document.createElement('li');
     li.innerHTML =
@@ -2987,7 +3048,7 @@ function syncAlles() {
 
   /* verwarming per ruimte (tab Details) */
   stopBewerkRv();
-  draftRv = { type: 'airco', fotoId: null };
+  draftRv = leegDraftRv();
   syncRvForm();
   $('#rv-beschrijving').value = '';
 

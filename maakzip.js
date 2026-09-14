@@ -177,7 +177,12 @@
         const t = { type: x.type };
         if (x.beschrijving) t.beschrijving = x.beschrijving;
         const kfs = (x.fotoIds || []).map(bestand).filter(Boolean);
-        if (kfs.length) t.kenplaatFotos = kfs;
+        if (x.type === 'airco') {
+          /* een airco heeft twee units; de json zegt welke unit waar staat */
+          if (kfs[0]) t.binnenunitFoto = kfs[0];
+          const bf = bestand(x.fotoBuitenId);
+          if (bf) t.buitenunitFoto = bf;
+        } else if (kfs.length) t.kenplaatFotos = kfs;
         return t;
       });
       if (toestellen.length) o.toestellen = toestellen;

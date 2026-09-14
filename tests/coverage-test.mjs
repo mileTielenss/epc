@@ -281,11 +281,22 @@ await scenario('hoofdflow', {
   await page.waitForSelector('#rvfoto-thumb:not([hidden])');
   await page.click('#btn-rvfoto-del');
   await page.click('#btn-undo');
+  /* airco: de tweede knop voor de buitenunit (§7.4) — nemen, vervangen, weg, undo */
+  await page.click('#btn-rvfoto-buiten');
+  await page.setInputFiles('#fotoinput', FOTO);
+  await page.waitForSelector('#rvfoto-buiten-thumb:not([hidden])');
+  await page.click('#btn-rvfoto-buiten');       /* vervangt de vorige buitenfoto */
+  await page.setInputFiles('#fotoinput', FOTO);
+  await page.waitForTimeout(200);
+  await page.click('#btn-rvfoto-buiten-del');
+  await page.click('#btn-undo');
   await page.fill('#rv-beschrijving', 'Daikin split');
   await page.locator('#rv-beschrijving').blur();
   await page.click('#btn-rv-voegtoe');
+  assert.equal(await page.locator('#rvlijst li img.thumb').count(), 2, 'airco toont binnen- en buitenunit');
   await page.click('#rvlijst li');
-  await page.click('#cy-rvtype');
+  await page.click('#cy-rvtype');               /* airco -> kachel: buitenfoto vervalt */
+  await page.waitForSelector('#fld-rvfoto-buiten', { state: 'hidden' });
   await page.click('#btn-rv-voegtoe');          /* bewaar wijziging */
   await page.click('#rvlijst li');
   await page.click('#btn-annuleer-rv');
@@ -294,6 +305,18 @@ await scenario('hoofdflow', {
   antwoord({ doe: 'dismiss' });
   await page.click('#rvlijst li .del');
   await page.click('#rvlijst li .del');
+  /* laat één airco mét beide unitfoto's staan: die reist mee in de export en
+     komt verderop via de import terug (§9.3.1) */
+  await page.click('#cy-rvtype');               /* kachel -> andere */
+  await page.click('#cy-rvtype');               /* andere -> airco */
+  await page.waitForSelector('#fld-rvfoto-buiten:not([hidden])');
+  await page.click('#btn-rvfoto');
+  await page.setInputFiles('#fotoinput', FOTO);
+  await page.waitForSelector('#rvfoto-thumb:not([hidden])');
+  await page.click('#btn-rvfoto-buiten');
+  await page.setInputFiles('#fotoinput', FOTO);
+  await page.waitForSelector('#rvfoto-buiten-thumb:not([hidden])');
+  await page.click('#btn-rv-voegtoe');
 
   /* ramen & deuren */
   await page.click('#sec-ramen summary');
@@ -445,7 +468,22 @@ await scenario('hoofdflow', {
 
   /* afronden: eerst checks, dan PDF via download, dan lijst-lightbox, dan verwijderen */
   await page.click('#tabbar button[data-tab="afronden"]');
-  assert.equal(await page.locator('#checklijst li').count(), 3);
+  /* aircocheck (§7.7): de airco hierboven heeft beide foto's, dus groen */
+  assert.equal(await page.locator('#checklijst li').count(), 4, 'aircoregel erbij');
+  assert.ok((await page.textContent('#checklijst')).includes("✅ Airco's"), 'met beide foto\'s groen');
+  await page.evaluate(() => {
+    S.energie.opwekkers.push({
+      id: 'airco-check', type: 'airco', ruimteId: S.ruimtes[0].id,
+      functie: [], beschrijving: '', fotoIds: [], fotoBuitenId: null, fotoKraanId: null
+    });
+    renderChecks();
+  });
+  assert.ok((await page.textContent('#checklijst')).includes("❌ Airco's: foto binnen- en buitenunit"),
+    'airco zonder foto\'s is rood');
+  await page.evaluate(() => {
+    S.energie.opwekkers = S.energie.opwekkers.filter(x => x.id !== 'airco-check');
+    renderChecks();
+  });
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 30000 }),
     page.click('#btn-print')

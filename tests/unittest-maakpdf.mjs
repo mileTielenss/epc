@@ -112,7 +112,7 @@ const woning = {
   energie: {
     opwekkers: [
       { id: 'o1', type: 'gas', ruimteId: null, functie: ['radiatoren', 'sww'], beschrijving: 'Vaillant 2015', fotoIds: ['f-kenplaat', 'f-kenplaat2'], fotoKraanId: 'f-kraan' },
-      { id: 'o2', type: 'airco', ruimteId: r1, functie: [], beschrijving: 'Daikin split met een behoorlijk lange beschrijving die in de cel moet wrappen', fotoIds: [], fotoKraanId: null },
+      { id: 'o2', type: 'airco', ruimteId: r1, functie: [], beschrijving: 'Daikin split met een behoorlijk lange beschrijving die in de cel moet wrappen', fotoIds: ['f-binnen'], fotoBuitenId: 'f-buiten', fotoKraanId: null },
       { id: 'o3', type: 'kachel', ruimteId: r2, beschrijving: '', fotoIds: [], fotoKraanId: null }
     ],
     pvPanelen: [{ id: 'p1', orientatie: 'plat', wp: '4200' }, { id: 'p2', orientatie: 'voor', wp: '2000' }],
@@ -130,7 +130,9 @@ const fotos = new Map([
   ['f-raam', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
   ['f-kenplaat', { bytes: grijs, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
   ['f-kenplaat2', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
-  ['f-kraan', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }]
+  ['f-kraan', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
+  ['f-binnen', { bytes: grijs, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
+  ['f-buiten', { bytes: rgb, breedte: 640, hoogte: 480, groep: null, volgorde: 0 }]
 ]);
 
 const stappen = [];
@@ -151,6 +153,9 @@ assert.ok(tekst.includes('(2,40)') && tekst.includes('(1,34)') /* 1,335 correct 
 assert.ok(tekst.includes('(3,20)'), 'm² is de oppervlakte van één exemplaar');
 assert.ok(tekst.includes('(6,41)'), 'groepstotaal Ramen = aantal × m²');
 assert.ok(tekst.includes('(Deuren)') && tekst.includes('(Ramen)'), 'één tabel per type met subkopje');
+/* airco: binnen- en buitenunit met eigen bijschrift (§9.2) */
+assert.ok(tekst.includes('(Airco \x96 Living, binnenunit)'), 'bijschrift binnenunit');
+assert.ok(tekst.includes('(Airco \x96 Living, buitenunit)'), 'bijschrift buitenunit');
 assert.ok(tekst.includes('(Alle elementen samen)') && tekst.includes('(3 stuks · 8,51 m²)'), 'slotregel over alle types (6,41 + 2,10)');
 /* json-controle: genest, geen afgeleide waarden, geen ruis (§9.3.1) */
 const dw = dossier.woning;
@@ -168,9 +173,9 @@ assert.ok(!('beglazing' in keukenDeur), 'deur zonder beglazing-sleutel');
 assert.equal(dw.hoofdfoto, 'fotos/0001.jpg', 'hoofdfoto op woningniveau');
 assert.equal(dw.energie.opwekkers.length, 1, 'enkel de centrale opwekker in energie');
 assert.ok(!('ruimte' in dw.energie.opwekkers[0]), 'geen ruimte-string op de centrale opwekker');
-/* dedupe op pad: 10 records → 10 XObjects (f-gevel1 is hoofdfoto én gevelfoto = 1) */
+/* dedupe op pad: 12 records → 12 XObjects (f-gevel1 is hoofdfoto én gevelfoto = 1) */
 const nXobj = (tekst.match(/\/Subtype \/Image/g) || []).length;
-assert.equal(nXobj, 10, `10 unieke foto's -> 10 XObjects (kreeg ${nXobj})`);
+assert.equal(nXobj, 12, `12 unieke foto's -> 12 XObjects (kreeg ${nXobj})`);
 
 /* ---- kale woning: alle "leeg"-takken, geen fotomap, geen opties ---- */
 const kaal = { algemeen: {}, ruimtes: undefined, ramen: undefined, energie: undefined };
