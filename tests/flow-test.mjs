@@ -158,6 +158,24 @@ const check = (naam, cond) => { assert.ok(cond, naam); ok++; console.log('  ✓'
   check('Ruimte-cycle terug verborgen', await page.locator('#cy-raamruimte').isHidden());
   check('lijst blijft alle ruimtes tonen', await page.locator('#ramenlijst li').count() === 2);
 
+  /* glasbouwsteen: glas zonder profiel, dus de kader-cycle verdwijnt (§7.4) */
+  await page.click('#seg-element button[data-v="raam"]');
+  for (let i = 0; i < 6 && (await page.textContent('#cy-beglazing .cv')) !== 'Glasbouwsteen'; i++) {
+    await page.click('#cy-beglazing');
+  }
+  check('glasbouwsteen kiesbaar bij beglazing', (await page.textContent('#cy-beglazing .cv')) === 'Glasbouwsteen');
+  check('kader-cycle weg bij glasbouwsteen', await page.locator('#cy-kader').isHidden());
+  await page.fill('#breedte', '0,6');
+  await page.fill('#hoogte', '0,6');
+  await page.locator('#hoogte').blur();
+  await page.click('#btn-voegtoe');
+  const glasrij = await page.locator('#ramenlijst li .r3').first().textContent();
+  check('glasbouwsteen in de lijst zonder profiel', glasrij.includes('Glasbouwsteen') && glasrij.includes('Geen'));
+  await page.click('#cy-beglazing');                       /* terug naar enkel glas */
+  check('kader-cycle terug bij ander glas', await page.locator('#cy-kader').isVisible());
+  await page.click('#ramenlijst li .del');
+  check('glasbouwsteen weer weg', await page.locator('#ramenlijst li').count() === 2);
+
   /* nieuwe ruimte met autonummering; ventilatie klapt open */
   await page.click('#ruimtechips button[data-v="__plus"]');
   await page.click('#ruimtekeuze button[data-v="Slaapkamer"]');

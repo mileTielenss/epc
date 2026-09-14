@@ -51,7 +51,9 @@ const woning = {
     opwekkers: [
       { id: 'o', type: 'stookolie', ruimteId: null, functie: ['radiatoren'], beschrijving: 'ACV', fotoIds: ['fD', 'fE'], fotoKraanId: null },
       { id: 'a1', type: 'airco', ruimteId: 'r1', functie: [], beschrijving: 'Daikin', fotoIds: ['fF'], fotoBuitenId: 'fG', fotoKraanId: null },
-      { id: 'k1', type: 'kachel', ruimteId: 'r2', functie: [], beschrijving: 'Jotul', fotoIds: [], fotoBuitenId: null, fotoKraanId: null }
+      { id: 'k1', type: 'kachel', ruimteId: 'r2', functie: [], beschrijving: 'Jotul', fotoIds: [], fotoBuitenId: null, fotoKraanId: null },
+      /* ooit een airco geweest: de buitenunitfoto blijft bewaard (§7.4) */
+      { id: 'k2', type: 'ruimte-andere', ruimteId: 'r2', functie: [], beschrijving: 'was airco', fotoIds: [], fotoBuitenId: 'fH', fotoKraanId: null }
     ],
     pvPanelen: [{ id: 'p', orientatie: 'plat', wp: '4200' }],
     zonneboiler: 'ja', zonneboilerM2: '4,6'
@@ -64,12 +66,13 @@ const fotos = new Map([
   ['fD', { bytes: rgb.slice(0, 3000), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
   ['fE', { bytes: rgb.slice(0, 2000), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
   ['fF', { bytes: rgb.slice(0, 1800), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
-  ['fG', { bytes: rgb.slice(0, 1600), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }]
+  ['fG', { bytes: rgb.slice(0, 1600), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }],
+  ['fH', { bytes: rgb.slice(0, 1400), breedte: 640, hoogte: 480, groep: null, volgorde: 0 }]
 ]);
 const bestandVan = new Map([
   ['fA', 'fotos/0001.jpg'], ['fB', 'fotos/0002.jpg'], ['fC', 'fotos/0003.jpg'],
   ['fD', 'fotos/0004.jpg'], ['fE', 'fotos/0005.jpg'],
-  ['fF', 'fotos/0006.jpg'], ['fG', 'fotos/0007.jpg']
+  ['fF', 'fotos/0006.jpg'], ['fG', 'fotos/0007.jpg'], ['fH', 'fotos/0008.jpg']
 ]);
 const e = Z.woningExport(woning, globalThis.sorteerRamen, fotos, bestandVan).woning;
 assert.equal(e.adres, 'Exportstraat 3');
@@ -93,8 +96,10 @@ assert.deepEqual(e.energie.opwekkers[0].kenplaatFotos, ['fotos/0004.jpg', 'fotos
 assert.equal(living.toestellen[0].binnenunitFoto, 'fotos/0006.jpg', 'binnenunit van de airco');
 assert.equal(living.toestellen[0].buitenunitFoto, 'fotos/0007.jpg', 'buitenunit van de airco');
 assert.ok(!('kenplaatFotos' in living.toestellen[0]), 'airco gebruikt geen kenplaatFotos');
-assert.ok(!('binnenunitFoto' in keuken.toestellen[0]) && !('kenplaatFotos' in keuken.toestellen[0]),
-  'kachel zonder foto: geen fotosleutels');
+assert.ok(!('binnenunitFoto' in keuken.toestellen[0]) && !('kenplaatFotos' in keuken.toestellen[0])
+  && !('buitenunitFoto' in keuken.toestellen[0]), 'kachel zonder foto: geen fotosleutels');
+assert.equal(keuken.toestellen[1].buitenunitFoto, 'fotos/0008.jpg',
+  'buitenunitfoto overleeft een typewissel');
 assert.ok(!('ruimteEnDeuren' in e) && !('fotos' in e), 'geen platte lijsten meer');
 assert.equal(e.energie.zonneboiler.collectorM2, 4.6, 'komma-decimaal als getal');
 assert.equal(e.energie.zonnepanelen[0].orientatie, 'plat dak');

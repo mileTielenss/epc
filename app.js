@@ -153,8 +153,8 @@ const VENT_NAMEN = {
 };
 const ELEMENTEN = ['raam', 'deur', 'dakraam'];
 const GEVELS = ['voor', 'achter', 'links', 'rechts'];
-const BEGLAZINGEN = ['enkel', 'dubbel', 'hr-dubbel', 'drievoudig', 'paneel'];
-const KADERS = ['pvc', 'alu', 'hout'];
+const BEGLAZINGEN = ['enkel', 'dubbel', 'hr-dubbel', 'drievoudig', 'paneel', 'glasbouwsteen'];
+const KADERS = ['pvc', 'alu', 'hout', 'geen'];
 const LAMP_TYPES = ['led', 'tl', 'spaarlamp', 'halogeen', 'gloeilamp', 'andere'];
 const LAMP_NAMEN = { led: 'Led', tl: 'TL', spaarlamp: 'Spaarlamp', halogeen: 'Halogeen', gloeilamp: 'Gloeilamp', andere: 'Andere' };
 const OPWEK_TYPES = ['gas', 'stookolie', 'andere', 'airco', 'kachel', 'ruimte-andere'];
@@ -163,8 +163,8 @@ const PV_ORIENTATIES = ['plat', 'voor', 'achter', 'links', 'rechts', ''];
 
 const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam' };
 const GEVEL_NAMEN = { voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
-const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' };
-const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout' };
+const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel', glasbouwsteen: 'Glasbouwsteen' };
+const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', geen: 'Geen' };
 const OPWEK_NAMEN = { gas: 'Gas', stookolie: 'Stookolie', andere: 'Andere', airco: 'Airco', kachel: 'Kachel', 'ruimte-andere': 'Andere' };
 const FUNCTIE_NAMEN = { radiatoren: 'radiatoren', vloer: 'vloerverwarming', sww: 'warm water' };
 const PVOR_NAMEN = { '': '—', plat: 'Plat dak', voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
@@ -246,6 +246,13 @@ function normaliseer(p) {
     return null;
   };
 
+  function kaderVan(r, beglazing, i) {
+    if (beglazing === 'glasbouwsteen') {
+      if (r.kader && r.kader !== 'geen') fix.push(`element ${i + 1}: een glasbouwsteen heeft geen profiel, kader op "geen" gezet`);
+      return 'geen';
+    }
+    return enumOf(r.kader, KADERS, 'pvc', `kader van element ${i + 1}`);
+  }
   if (!Array.isArray(w.ramen)) w.ramen = [];
   w.ramen = w.ramen.map((r, i) => {
     const element = enumOf(r.element, ELEMENTEN, 'raam', `element ${i + 1}`);
@@ -265,8 +272,9 @@ function normaliseer(p) {
       b: num(r.b), h: num(r.h),
       aantal: Math.max(1, Math.round(num(r.aantal)) || 1),
       beglazing,
-      /* privatief (§7.4): enkel oppervlakte telt — geen kader of rolluik */
-      kader: privatief ? null : enumOf(r.kader, KADERS, 'pvc', `kader van element ${i + 1}`),
+      /* privatief (§7.4): enkel oppervlakte telt — geen kader of rolluik.
+         Een glasbouwsteen heeft per definitie geen profiel (§7.4). */
+      kader: privatief ? null : kaderVan(r, beglazing, i),
       rolluik: privatief ? false : !!r.rolluik,
       privatief,
       fotoId: fotoRef(r.fotoId, `foto van element ${i + 1}`)
@@ -282,8 +290,8 @@ function normaliseer(p) {
     beschrijving: o.beschrijving || '',
     fotoIds: (Array.isArray(o.fotoIds) ? o.fotoIds : [])
       .map((id, j) => fotoRef(id, `kenplaat ${j + 1} van opwekker ${i + 1}`)).filter(Boolean),
-    /* enkel een airco heeft een buitenunit; bij een ander toestel valt de foto weg */
-    fotoBuitenId: o.type === 'airco' ? fotoRef(o.fotoBuitenId, `buitenunitfoto van opwekker ${i + 1}`) : null,
+    /* blijft ook staan als het toestel ondertussen geen airco meer is (§7.4) */
+    fotoBuitenId: fotoRef(o.fotoBuitenId, `buitenunitfoto van opwekker ${i + 1}`),
     fotoKraanId: fotoRef(o.fotoKraanId, `kranenfoto van opwekker ${i + 1}`)
   }));
   if (!Array.isArray(w.energie.pvPanelen)) w.energie.pvPanelen = [];
@@ -683,7 +691,7 @@ async function importeerDossier(d, leden) {
           id: DB.nieuwId(), type: t.type, ruimteId: rid, functie: [],
           beschrijving: t.beschrijving || '',
           fotoIds: t.type === 'airco' ? (binnen ? [binnen] : []) : await schrijfKenplaten(t),
-          fotoBuitenId: t.type === 'airco' ? await schrijfFoto(t.buitenunitFoto, null) : null,
+          fotoBuitenId: await schrijfFoto(t.buitenunitFoto, null),
           fotoKraanId: null
         });
       }
@@ -1048,7 +1056,7 @@ segInit('#seg-element', v => { draft.element = v; updateRaamFotoLabel(); });
 const syncCyPrivatief = cycleInit('#cy-privatief', ['gemeen', 'privatief'], { gemeen: 'Gemeen', privatief: 'Privatief' },
   () => draft.privatief, v => { draft.privatief = v; updateRaamFotoLabel(); });
 const syncCyBeglazing = cycleInit('#cy-beglazing', BEGLAZINGEN, GLAS_NAMEN,
-  () => draft.beglazing, v => draft.beglazing = v);
+  () => draft.beglazing, v => { draft.beglazing = v; updateRaamFotoLabel(); });
 const syncCyKader = cycleInit('#cy-kader', KADERS, KADER_NAMEN,
   () => draft.kader, v => draft.kader = v);
 const syncCyRolluik = cycleInit('#cy-rolluik', ['nee', 'ja'], { nee: 'Nee', ja: 'Ja' },
@@ -1063,8 +1071,14 @@ function updateRaamFotoLabel() {
   const priv = isGD() && draft.privatief === 'privatief';
   $('#cy-privatief').hidden = !isGD();
   $('#cy-beglazing').hidden = priv || draft.element === 'deur';
-  $('#cy-kader').hidden = priv;
+  $('#cy-kader').hidden = priv || glasbouwsteen(priv);
   $('#cy-rolluik').hidden = priv;
+}
+
+/* een glasbouwsteen is glas zonder profiel: dan verdwijnt de kader-cycle en
+   staat het kader op "geen" (§7.4), net zoals een deur geen beglazing heeft */
+function glasbouwsteen(priv) {
+  return !priv && draft.element !== 'deur' && draft.beglazing === 'glasbouwsteen';
 }
 
 /* aantal-stepper */
@@ -1136,7 +1150,7 @@ $('#btn-voegtoe').addEventListener('click', () => {
     ruimteId: bewerkRaamId !== null ? draft.ruimteId : ruimte.id,
     b, h,
     beglazing: priv || draft.element === 'deur' ? null : draft.beglazing,
-    kader: priv ? null : draft.kader,
+    kader: priv ? null : (glasbouwsteen(priv) ? 'geen' : draft.kader),
     rolluik: !priv && draft.rolluik === 'ja',
     privatief: priv,
     aantal,
@@ -1695,13 +1709,16 @@ $('#btn-rvfoto-buiten-del').addEventListener('click', () => {
 function updateRvThumb() {
   zetFormThumb('#rvfoto-thumb', '#btn-rvfoto-del', draftRv.fotoId);
   zetFormThumb('#rvfoto-buiten-thumb', '#btn-rvfoto-buiten-del', draftRv.fotoBuitenId);
+  toonRvFotoknoppen();
 }
 
-/* bij airco: binnen- en buitenunit; bij kachel/andere gewoon de kenplaat */
+/* bij airco: binnen- en buitenunit; bij kachel/andere gewoon de kenplaat.
+   Een al genomen buitenunitfoto blijft zichtbaar, ook na een tik te veel op de
+   cycle — die foto haal je niet zomaar opnieuw (§7.4). */
 function toonRvFotoknoppen() {
   const airco = draftRv.type === 'airco';
   $('#btn-rvfoto').innerHTML = airco ? '&#128247; Foto binnenunit' : '&#128247; Foto kenplaat';
-  $('#fld-rvfoto-buiten').hidden = !airco;
+  $('#fld-rvfoto-buiten').hidden = !airco && !draftRv.fotoBuitenId;
 }
 
 function syncRvForm() {
@@ -1714,19 +1731,13 @@ $('#btn-rv-voegtoe').addEventListener('click', () => {
   if (!S) return;
   const r = huidigeRuimte();
   if (!r) { toast('Kies eerst een ruimte bovenaan'); return; }
-  /* geen airco (meer) -> de buitenunitfoto hoort er niet bij en wordt gewist */
-  let buitenId = draftRv.fotoBuitenId;
-  if (draftRv.type !== 'airco' && buitenId) {
-    DB.verwijderFoto(buitenId).catch(() => { });
-    buitenId = null;
-  }
   const velden = {
     type: draftRv.type,
     ruimteId: r.id,
     functie: [],
     beschrijving: $('#rv-beschrijving').value.trim(),
     fotoIds: draftRv.fotoId ? [draftRv.fotoId] : [],
-    fotoBuitenId: buitenId,
+    fotoBuitenId: draftRv.fotoBuitenId,
     fotoKraanId: null
   };
   if (bewerkRvId !== null) {

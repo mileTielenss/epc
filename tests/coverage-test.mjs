@@ -295,10 +295,16 @@ await scenario('hoofdflow', {
   await page.click('#btn-rv-voegtoe');
   assert.equal(await page.locator('#rvlijst li img.thumb').count(), 2, 'airco toont binnen- en buitenunit');
   await page.click('#rvlijst li');
-  await page.click('#cy-rvtype');               /* airco -> kachel: buitenfoto vervalt */
-  await page.waitForSelector('#fld-rvfoto-buiten', { state: 'hidden' });
+  await page.click('#cy-rvtype');               /* airco -> kachel: de foto blijft (§7.4) */
+  assert.ok(await page.locator('#fld-rvfoto-buiten').isVisible(), 'buitenunitfoto blijft staan na typewissel');
+  assert.ok((await page.textContent('#btn-rvfoto')).includes('kenplaat'), 'kachel toont de kenplaatknop');
   await page.click('#btn-rv-voegtoe');          /* bewaar wijziging */
+  assert.equal(await page.locator('#rvlijst li img.thumb').count(), 2, 'kachel houdt de buitenunitfoto');
   await page.click('#rvlijst li');
+  await page.click('#btn-rvfoto-buiten-del');   /* enkel de × haalt hem weg -> rij verdwijnt */
+  await page.waitForSelector('#fld-rvfoto-buiten', { state: 'hidden' });
+  await page.click('#btn-undo');
+  assert.ok(await page.locator('#fld-rvfoto-buiten').isVisible(), 'undo zet de buitenunitfoto terug');
   await page.click('#btn-annuleer-rv');
   await page.click('#cy-rvtype');
   await page.click('#btn-rv-voegtoe');          /* tweede toestel */
@@ -330,6 +336,19 @@ await scenario('hoofdflow', {
   await page.click('#cy-kader');
   await page.click('#cy-rolluik');
   await page.click('#btn-voegtoe');             /* zonder maten -> toast */
+  /* glasbouwsteen: kader-cycle verdwijnt, opgeslagen met kader "geen" (§7.4) */
+  for (let i = 0; i < 6 && (await page.textContent('#cy-beglazing .cv')) !== 'Glasbouwsteen'; i++) {
+    await page.click('#cy-beglazing');
+  }
+  assert.ok(await page.locator('#cy-kader').isHidden(), 'kader-cycle weg bij glasbouwsteen');
+  await page.fill('#breedte', '0,6');
+  await page.fill('#hoogte', '0,6');
+  await page.locator('#hoogte').blur();
+  await page.click('#btn-voegtoe');
+  assert.equal(await page.evaluate(() => S.ramen[S.ramen.length - 1].kader), 'geen', 'glasbouwsteen krijgt kader geen');
+  antwoord({ doe: 'accept' });
+  await page.click('#ramenlijst li .del');
+  await page.click('#cy-beglazing');            /* terug naar gewoon glas */
   await page.fill('#breedte', '2,4');
   await page.fill('#hoogte', '1,335');
   await page.locator('#hoogte').blur();
@@ -956,7 +975,9 @@ await scenario('dbfouten', {
         ruimtes: [{ naam: 'Naamloos zonder id', vent: 'straalventilator', afm: { b: 'x' } }],
         ramen: [
           { element: 'poort', gevel: 'boven', b: 1, h: 1, aantal: 0, beglazing: 'quadruple', kader: 'goud', fotoId: 'weg', ruimteId: 'weg' },
-          { element: 'deur', gevel: 'voor', b: 1, h: 2, aantal: 1, beglazing: 'dubbel', kader: 'hout', fotoId: null, ruimteId: null }
+          { element: 'deur', gevel: 'voor', b: 1, h: 2, aantal: 1, beglazing: 'dubbel', kader: 'hout', fotoId: null, ruimteId: null },
+          /* glasbouwsteen met een profiel: normaliseer zet het kader op "geen" (§7.4) */
+          { element: 'raam', gevel: 'voor', b: 0.6, h: 0.6, aantal: 2, beglazing: 'glasbouwsteen', kader: 'alu', fotoId: null, ruimteId: null }
         ],
         energie: { opwekkers: [{ type: 'kernfusie', ruimteId: 'weg', functie: ['radiatoren', 'niets'], fotoId: 'weg', fotoKraanId: 'weg' }], pvPanelen: [{ orientatie: 'onder', wp: 5 }], zonneboiler: 'misschien', zonneboilerM2: 7 },
         pdfBewaardOp: 12345, problemen: 'geen-array'
@@ -986,6 +1007,10 @@ await scenario('dbfouten', {
   await page.waitForSelector('#app:not([hidden])');
   const problemen = await page.evaluate(() => S.problemen.length);
   assert.ok(problemen >= 5, `normaliseer logde correcties (${problemen})`);
+  assert.ok((await page.evaluate(() => S.problemen.join(' | '))).includes('glasbouwsteen heeft geen profiel'),
+    'glasbouwsteen zonder profiel gemeld');
+  assert.equal(await page.evaluate(() => S.ramen.find(r => r.beglazing === 'glasbouwsteen').kader), 'geen',
+    'kader van een glasbouwsteen staat op geen');
   assert.ok((await page.textContent('#toast')).includes('hersteld'), 'toast N gegevens hersteld');
   await page.click('#btn-terug');
 

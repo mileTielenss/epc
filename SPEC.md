@@ -119,9 +119,10 @@ woning = {
              element: 'raam'|'deur'|'dakraam',
              gevel: 'voor'|'achter'|'links'|'rechts',
              b, h, aantal (>=1),
-             beglazing: 'enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel'
+             beglazing: 'enkel'|'dubbel'|'hr-dubbel'|'drievoudig'|'paneel'|'glasbouwsteen'
                         | null,   // deur: altijd null, enkel het profiel telt
-             kader: 'pvc'|'alu'|'hout', rolluik (bool),
+             kader: 'pvc'|'alu'|'hout'|'geen',   // glasbouwsteen: altijd 'geen'
+             rolluik (bool),
              privatief (bool),  // enkel bij gemene delen (§7.4): raam van een
                                 // privatief appartement — alleen oppervlakte
                                 // telt; beglazing=null, kader=null, rolluik=false
@@ -135,7 +136,9 @@ woning = {
                    beschrijving,
                    fotoIds: [fotoId, ...],   // kenplaatfoto's, 0..n (§7.3);
                                              // bij airco: 0..1 = de binnenunit (§7.4)
-                   fotoBuitenId | null,      // enkel airco: de buitenunit (§7.4)
+                   fotoBuitenId | null,      // de buitenunit (§7.4); in de praktijk
+                                             // enkel bij airco, maar blijft staan
+                                             // als het type nadien wisselt
                    fotoKraanId } ],
     pvPanelen: [ { id, orientatie: 'plat'|'voor'|'achter'|'links'|'rechts'|'', wp } ],
     zonneboiler: 'nee'|'ja', zonneboilerM2,
@@ -302,8 +305,14 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
     Bij **airco** staan er twee knoppen naast elkaar, **"📷 Foto binnenunit"**
     (bewaard in `fotoIds[0]`) en **"📷 Foto buitenunit"** (`fotoBuitenId`) —
     voor een airco heb je beide nodig. De cycle wisselt de knoppen meteen om.
-    Zet je een airco met een buitenunitfoto om naar kachel/andere, dan
-    verdwijnt die foto bij het bewaren (hij hoort niet bij zo'n toestel).
+  - **Een genomen buitenunitfoto gaat nooit vanzelf weg.** Een buitenunit staat
+    vaak onpraktisch, dus een verkeerde tik op de cycle mag je niet dwingen om
+    opnieuw naar buiten te gaan: zet je het toestel om naar kachel/andere, dan
+    **blijft de rij "Foto buitenunit" gewoon staan zolang er een foto in zit**
+    (met zijn thumbnail), en de foto blijft ook op het bewaarde toestel en in
+    de export. Enkel de × op de thumbnail (met undo-toast) of het verwijderen
+    van het toestel gooit hem weg. Is er géén buitenunitfoto, dan verdwijnt de
+    rij bij kachel/andere zoals verwacht.
   - Afmetingen zijn enkel nodig voor ruimtes met een eigen toestel: die vormen een
     aparte ruimtecluster die van het totale volume afgetrokken wordt. Ruimtes zonder
     eigen toestel horen bij de algemene cluster; het totale volume komt uit de
@@ -311,7 +320,8 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
 - **Ramen & deuren**: element-rij en gevel-rij zonder label; b × h met live m²
   (placeholders "breedte (m)"/"hoogte (m)"); "Aantal identieke" met inline −/1/+
   (min. 1); drie mini-cycles naast elkaar: Beglazing (Enkel/Dubbel/HR dubbel/
-  Drievoudig/Vol paneel), Kader (PVC/Alu/Hout), Rolluik (Nee/Ja); bij
+  Drievoudig/Vol paneel/Glasbouwsteen), Kader (PVC/Alu/Hout/Geen),
+  Rolluik (Nee/Ja); bij
   element=deur verdwijnt de beglazing-cycle — een deur heeft enkel een profiel
   (hout/alu/pvc), geen beglazingswaarde;
   **"📷 Foto afstandhouder"**, bij element=dakraam automatisch **"📷 Foto kenplaatje"**;
@@ -322,6 +332,13 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
     beglazingswaarde voor vaste panelen die als raam worden ingegeven (zo gaat
     het ook in de VEKA-software). Deuren hebben geen beglazingswaarde; een
     poort wordt als deur ingegeven.
+  - **Glasbouwstenen** zijn glas zónder profiel: kies je bij Beglazing
+    "Glasbouwsteen", dan **verdwijnt de kader-cycle** en wordt `kader: 'geen'`
+    bewaard — het spiegelbeeld van de deur, die enkel een profiel heeft. Kies je
+    daarna een ander glastype, dan staat de kader-cycle er weer met de vorige
+    keuze. "Geen" staat ook gewoon in de kader-cycle, voor het zeldzame geval
+    dat je het bij een ander glastype nodig hebt. `normaliseer()` zet het kader
+    van een glasbouwsteen alsnog op "geen" en meldt dat in `problemen[]` (§5.1).
   - **Privatief (enkel bij gemene delen)**: extra cycle "Deel: Gemeen/Privatief"
     in het formulier. Privatief = een raam/deur van een privatief appartement
     (inspectieprotocol: telt enkel mee als oppervlakte-aftrek van de gevel) —
@@ -332,8 +349,8 @@ Volgorde: **Ventilatie (open) → Verwarming in deze ruimte → Ramen & deuren.*
     gemene (§7.4-sortering krijgt privatief als eerste sleutel).
 - **Sorteervolgorde** (één functie, gebruikt door lijst, PDF en nummering):
   type deur → raam → dakraam; binnen elk type gevel voor → achter → links →
-  rechts; dan beglazing enkel → dubbel → HR dubbel → drievoudig → vol paneel;
-  dan kader pvc → alu → hout; ten slotte aanmaakvolgorde. Identieke ramen
+  rechts; dan beglazing enkel → dubbel → HR dubbel → drievoudig → vol paneel →
+  glasbouwsteen; dan kader pvc → alu → hout → geen; ten slotte aanmaakvolgorde. Identieke ramen
   (zelfde gevel, glas en kader) staan zo altijd naast elkaar. `#nr` =
   1-gebaseerde index in die volgorde.
 - De lijst toont **álle elementen van de woning, nieuwste bovenaan**
@@ -660,7 +677,9 @@ opgeslagen:
   lijst, want een kenplaat kan uit meerdere plaatjes bestaan — en `kranenFoto`),
   niet nog eens in een ruimte. Een **airco** heeft geen `kenplaatFotos` maar
   `binnenunitFoto` en `buitenunitFoto` (elk één pad), zodat uit de json blijkt
-  welke unit op welke foto staat.
+  welke unit op welke foto staat. `buitenunitFoto` verschijnt bij elk
+  ruimtetoestel dat er een heeft — ook als het ondertussen kachel/andere werd
+  (§7.4): een gemaakte foto raak je nooit kwijt door van type te wisselen.
 - **Eén `hoofdfoto` op woningniveau** (pad naar een gevelfoto).
 - **Geen afgeleide waarden**: geen oppervlakte per element, geen totaalblok,
   geen volume bij afmetingen. De maten staan er (`breedteM`, `hoogteM`,
@@ -682,7 +701,7 @@ woning: {
       afmetingen?: { breedteM, diepteM, hoogteM },
       elementen?: [ { type, gevel, breedteM, hoogteM, aantal, beglazing?, kader, rolluik, foto? }
                     | { type, gevel, breedteM, hoogteM, aantal, privatief: true, foto? } ],
-      toestellen?: [ { type, beschrijving?, kenplaatFotos? }          // kachel/andere
+      toestellen?: [ { type, beschrijving?, kenplaatFotos?, buitenunitFoto? }   // kachel/andere
                     | { type: "airco", beschrijving?, binnenunitFoto?, buitenunitFoto? } ],
       fotos?: [ … ] },
     { naam: "Algemeen", fotos: [ … ] }

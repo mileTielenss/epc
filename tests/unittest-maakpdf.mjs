@@ -107,7 +107,9 @@ const woning = {
   ramen: [
     { id: 'w1', ruimteId: r1, element: 'raam', gevel: 'achter', b: 2.4, h: 1.335, aantal: 2, beglazing: 'hr-dubbel', kader: 'pvc', rolluik: true, fotoId: 'f-raam' },
     { id: 'w2', ruimteId: r2, element: 'deur', gevel: 'voor', b: 1, h: 2.1, aantal: 1, beglazing: null, kader: 'hout', rolluik: false, fotoId: null },
-    { id: 'w3', ruimteId: null, element: 'dakraam', gevel: 'links', b: 0.78, h: 1.18, aantal: 1, beglazing: 'drievoudig', kader: 'alu', rolluik: false, fotoId: 'f-dood' }
+    { id: 'w3', ruimteId: null, element: 'dakraam', gevel: 'links', b: 0.78, h: 1.18, aantal: 1, beglazing: 'drievoudig', kader: 'alu', rolluik: false, fotoId: 'f-dood' },
+    /* glasbouwsteen: glas zonder profiel (§7.4) */
+    { id: 'w4', ruimteId: r2, element: 'raam', gevel: 'achter', b: 0.6, h: 0.6, aantal: 3, beglazing: 'glasbouwsteen', kader: 'geen', rolluik: false, fotoId: null }
   ],
   energie: {
     opwekkers: [
@@ -151,12 +153,15 @@ assert.ok(tekst.includes('(2,40)') && tekst.includes('(1,34)') /* 1,335 correct 
 /* m² per exemplaar (§9.2): raam 2,40 × 1,335 aantal 2 -> 3,20 per stuk;
    de groepstotalen tellen wél aantal × m² op, met een slotregel over alles */
 assert.ok(tekst.includes('(3,20)'), 'm² is de oppervlakte van één exemplaar');
-assert.ok(tekst.includes('(6,41)'), 'groepstotaal Ramen = aantal × m²');
+assert.ok(tekst.includes('(7,49)'), 'groepstotaal Ramen = aantal × m² (6,41 + 3 × 0,36)');
+/* glasbouwsteen: glas zonder profiel (§7.4) */
+assert.ok(tekst.includes('(Glasbouwsteen)'), 'glasbouwsteen als beglazing in de tabel');
+assert.ok(tekst.includes('(Geen)'), 'kader "geen" bij een glasbouwsteen');
 assert.ok(tekst.includes('(Deuren)') && tekst.includes('(Ramen)'), 'één tabel per type met subkopje');
 /* airco: binnen- en buitenunit met eigen bijschrift (§9.2) */
 assert.ok(tekst.includes('(Airco \x96 Living, binnenunit)'), 'bijschrift binnenunit');
 assert.ok(tekst.includes('(Airco \x96 Living, buitenunit)'), 'bijschrift buitenunit');
-assert.ok(tekst.includes('(Alle elementen samen)') && tekst.includes('(3 stuks · 8,51 m²)'), 'slotregel over alle types (6,41 + 2,10)');
+assert.ok(tekst.includes('(Alle elementen samen)') && tekst.includes('(6 stuks · 9,59 m²)'), 'slotregel over alle types (7,49 + 2,10)');
 /* json-controle: genest, geen afgeleide waarden, geen ruis (§9.3.1) */
 const dw = dossier.woning;
 assert.equal(dossier.formaat, 'epc-plaatsbezoek-dossier');

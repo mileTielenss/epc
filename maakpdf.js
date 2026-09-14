@@ -151,8 +151,8 @@
 
   const TYPE_ORDE = { deur: 0, raam: 1, dakraam: 2 };
   const GEVEL_ORDE = { voor: 0, achter: 1, links: 2, rechts: 3 };
-  const GLAS_ORDE = { enkel: 0, dubbel: 1, 'hr-dubbel': 2, drievoudig: 3, paneel: 4 };
-  const KADER_ORDE = { pvc: 0, alu: 1, hout: 2 };
+  const GLAS_ORDE = { enkel: 0, dubbel: 1, 'hr-dubbel': 2, drievoudig: 3, paneel: 4, glasbouwsteen: 5 };
+  const KADER_ORDE = { pvc: 0, alu: 1, hout: 2, geen: 3 };
 
   /* gemeen vóór privatief → type → gevel → beglazing → kader → aanmaakvolgorde;
      identiek aan sorteerElementen in bouwPdf (jsonvorm), hou beide in de pas */
@@ -179,8 +179,8 @@
 
   const ELEMENT_NAMEN = { raam: 'Raam', deur: 'Deur', dakraam: 'Dakraam' };
   const GEVEL_NAMEN = { voor: 'Voor', achter: 'Achter', links: 'Links', rechts: 'Rechts' };
-  const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel' };
-  const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout' };
+  const GLAS_NAMEN = { enkel: 'Enkel', dubbel: 'Dubbel', 'hr-dubbel': 'HR dubbel', drievoudig: 'Drievoudig', paneel: 'Vol paneel', glasbouwsteen: 'Glasbouwsteen' };
+  const KADER_NAMEN = { pvc: 'PVC', alu: 'Alu', hout: 'Hout', geen: 'Geen' };
   const OPWEK_NAMEN = { gas: 'Gas', stookolie: 'Stookolie', andere: 'Andere', airco: 'Airco', kachel: 'Kachel', 'ruimte-andere': 'Andere' };
   const VENT_NAMEN = { geen: 'geen', natuurlijk: 'natuurlijk', mechanisch: 'mechanisch', 'mechanisch-permanent': 'mechanisch permanent', ander: 'ander' };
 
